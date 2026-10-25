@@ -22,6 +22,12 @@ pub struct Row {
     pub output: String,
     /// Whether Jekyll wrote it.
     pub written: bool,
+    /// The dump of its body HTML, relative to `dump/`.
+    pub content: Option<String>,
+    /// The dump of its rendered excerpt.
+    pub excerpt: Option<String>,
+    /// The dump of its metadata.
+    pub meta: Option<String>,
 }
 
 /// A baseline's outputs and build.
@@ -32,6 +38,8 @@ pub struct Baseline {
     pub built_at: Timestamp,
     /// The site commit it was built from.
     pub commit: String,
+    /// For a build of uncommitted changes, `git diff --binary HEAD` as it was then.
+    pub diff: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -44,14 +52,16 @@ struct Record {
 struct SiteRecord {
     commit: String,
     dirty: bool,
+    #[serde(default)]
+    diff: Option<String>,
 }
 
 /// Loads the baseline in `dir`.
 ///
 /// # Errors
 ///
-/// Fails when the baseline has no dump, cannot be read, or was built from a dirty tree, whose
-/// routes Folia cannot reproduce from the same files.
+/// Fails when the baseline has no dump, cannot be read, or was built from a dirty tree without
+/// recording its changes (`site.diff`), so that Folia cannot be shown the same files.
 pub fn load(dir: &Path) -> Result<Baseline, String> {
     let read = |name: &str| {
         std::fs::read_to_string(dir.join(name))
@@ -59,12 +69,16 @@ pub fn load(dir: &Path) -> Result<Baseline, String> {
     };
     let record: Record =
         serde_json::from_str(&read("BASELINE.json")?).map_err(|e| format!("BASELINE.json: {e}"))?;
-    if record.site.dirty {
-        return Err(format!(
-            "{} was built from a dirty tree; route parity needs a clean commit",
-            dir.display()
-        ));
-    }
+    let diff = match (&record.site.diff, record.site.dirty) {
+        (Some(name), true) => Some(read(name)?),
+        (None, true) => {
+            return Err(format!(
+                "{} was built from a dirty tree without recording its changes; rebuild it",
+                dir.display()
+            ));
+        }
+        (_, false) => None,
+    };
     let rows = read("dump/manifest.jsonl")?
         .lines()
         .enumerate()
@@ -80,5 +94,6 @@ pub fn load(dir: &Path) -> Result<Baseline, String> {
         rows,
         built_at,
         commit: record.site.commit,
+        diff,
     })
 }

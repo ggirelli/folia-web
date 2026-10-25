@@ -5,9 +5,11 @@
 //!
 //! ```sh
 //! cargo run -p parity -- routes --site ../filopoe --baseline ../folia-baselines/BASELINE-A --config parity/filopoe.toml
+//! cargo run -p parity -- markdown --site ../filopoe --baseline ../folia-baselines/BASELINE-A
 //! ```
 
 mod baseline;
+mod markdown;
 mod routes;
 
 use std::path::PathBuf;
@@ -36,21 +38,58 @@ enum Command {
         #[arg(long)]
         config: PathBuf,
     },
+    /// Compare Folia's Markdown HTML and excerpts with kramdown's (spike 1)
+    Markdown {
+        /// The Jekyll site
+        #[arg(long)]
+        site: PathBuf,
+        /// A baseline made by scripts/baseline.sh from the same commit
+        #[arg(long)]
+        baseline: PathBuf,
+        /// The deviation ledger
+        #[arg(long, default_value = "parity/deviations.toml")]
+        ledger: PathBuf,
+        /// Only this source, such as `pages/profile.md`
+        #[arg(long)]
+        doc: Option<String>,
+        /// Write the full report here
+        #[arg(long)]
+        report: Option<PathBuf>,
+        /// Write both sides' HTML of each differing document below this directory
+        #[arg(long)]
+        dump: Option<PathBuf>,
+    },
 }
 
 fn main() -> ExitCode {
-    match Cli::parse().command {
+    let result = match Cli::parse().command {
         Command::Routes {
             site,
             baseline,
             config,
-        } => match routes::run(&site, &baseline, &config) {
-            Ok(true) => ExitCode::SUCCESS,
-            Ok(false) => ExitCode::FAILURE,
-            Err(error) => {
-                eprintln!("{error}");
-                ExitCode::from(2)
-            }
-        },
+        } => routes::run(&site, &baseline, &config),
+        Command::Markdown {
+            site,
+            baseline,
+            ledger,
+            doc,
+            report,
+            dump,
+        } => markdown::run(&markdown::Options {
+            site: &site,
+            baseline: &baseline,
+            ledger: &ledger,
+            only: doc.as_deref(),
+            report: report.as_deref(),
+            dump: dump.as_deref(),
+        }),
+    };
+    match result {
+        Ok(true) => ExitCode::SUCCESS,
+        Ok(false) => ExitCode::FAILURE,
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::from(2)
+        }
     }
 }

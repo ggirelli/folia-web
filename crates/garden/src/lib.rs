@@ -10,6 +10,12 @@
 //!
 //! An `index.md` keeps `index` in its URL (`/dg/coding/index`), and is written to
 //! `dg/coding/index.html`, where the host also serves it as `/dg/coding/`.
+//!
+//! Wiki-links between notes are resolved by [`WikiLinks`].
+
+mod wiki_links;
+
+pub use wiki_links::WikiLinks;
 
 use folia_core::content::{Diagnostic, Route, SiteClock, SourceDoc};
 use folia_core::publish::PlannedOutput;

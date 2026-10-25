@@ -31,10 +31,10 @@ type Generated = (String, String);
 /// # Errors
 ///
 /// Fails when the baseline or configuration cannot be read, or the site checkout is not the
-/// clean commit the baseline was built from.
+/// commit the baseline was built from (`check_checkout`).
 pub fn run(site_dir: &Path, baseline_dir: &Path, config_path: &Path) -> Result<bool, String> {
     let baseline = baseline::load(baseline_dir)?;
-    check_checkout(site_dir, &baseline.commit)?;
+    check_checkout(site_dir, &baseline.commit, baseline.diff.as_deref())?;
     let config = Config::load(config_path).map_err(|e| e.to_string())?;
     println!(
         "Route parity: {} at {}, built {}.",
@@ -305,8 +305,9 @@ fn report(title: &str, jekyll_count: usize, detail: &str, differing: &[String]) 
     false
 }
 
-/// The site checkout must be the clean commit the baseline was built from.
-fn check_checkout(site_dir: &Path, commit: &str) -> Result<(), String> {
+/// The site checkout must be the commit the baseline was built from, with no changes, or with
+/// exactly the uncommitted changes it was built with (`diff`) and no untracked files.
+pub fn check_checkout(site_dir: &Path, commit: &str, diff: Option<&str>) -> Result<(), String> {
     let git = |args: &[&str]| {
         Command::new("git")
             .arg("-C")
@@ -314,9 +315,9 @@ fn check_checkout(site_dir: &Path, commit: &str) -> Result<(), String> {
             .args(args)
             .output()
             .map_err(|e| format!("cannot run git: {e}"))
-            .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+            .map(|out| String::from_utf8_lossy(&out.stdout).into_owned())
     };
-    let head = git(&["rev-parse", "HEAD"])?;
+    let head = git(&["rev-parse", "HEAD"])?.trim().to_owned();
     if head != commit {
         return Err(format!(
             "{} is at {}, but the baseline was built from {}",
@@ -325,12 +326,30 @@ fn check_checkout(site_dir: &Path, commit: &str) -> Result<(), String> {
             short(commit)
         ));
     }
-    if !git(&["status", "--porcelain"])?.is_empty() {
-        return Err(format!("{} has uncommitted changes", site_dir.display()));
+    let status = git(&["status", "--porcelain"])?;
+    match diff {
+        None if !status.trim().is_empty() => {
+            Err(format!("{} has uncommitted changes", site_dir.display()))
+        }
+        Some(_) if status.lines().any(|line| line.starts_with("??")) => Err(format!(
+            "{} has untracked files, which the baseline's diff cannot vouch for",
+            site_dir.display()
+        )),
+        Some(diff) if git(&["diff", "--binary", "HEAD"])? != diff => Err(format!(
+            "{}'s uncommitted changes are not the ones the baseline was built with",
+            site_dir.display()
+        )),
+        Some(_) => {
+            eprintln!(
+                "Note: the baseline was built from uncommitted changes, which {} still has.",
+                site_dir.display()
+            );
+            Ok(())
+        }
+        None => Ok(()),
     }
-    Ok(())
 }
 
-fn short(commit: &str) -> &str {
+pub fn short(commit: &str) -> &str {
     &commit[..commit.len().min(8)]
 }

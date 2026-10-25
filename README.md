@@ -22,13 +22,15 @@ alternative to Jekyll, Hugo, or Zola, although the code is public.
 
 ## Status
 
-Validation spikes. There is no generator yet. The repository holds the
-parity harness, which records production builds of the Jekyll site, and
-the first Rust code: Folia's discovery and routes, which reproduce every
-output path of the site (spike 2).
+Validation spikes, done; the first vertical slice is next. There is no
+generator yet. The repository holds the parity harness, which records
+production builds of the Jekyll site, and the first Rust code: Folia's
+discovery and routes, which reproduce every output path of the site
+(spike 2), and its Markdown renderer, which reproduces the body HTML of
+every Markdown document of the site (spike 1).
 
 - [Parity baselines](docs/baseline.md): how to build and compare them.
 - [Development](docs/development.md): how the repository is organized.
-- [Plans](docs/planning/): the architecture proposal; `plan.v4.md` is current.
+- [Plans](docs/planning/): the architecture proposal; `plan.v5.md` is current.
 
 Contributions follow [CONTRIBUTING.md](CONTRIBUTING.md).

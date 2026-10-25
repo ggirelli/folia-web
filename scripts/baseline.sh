@@ -7,6 +7,8 @@
 #   site/           the production build (JEKYLL_ENV=production)
 #   dump/           the folia_dump.rb dumps (absent with --no-dump)
 #   BASELINE.json   site and submodule commits, tool versions, flags
+#   site.diff       with --allow-dirty on a dirty tree: `git diff --binary HEAD`,
+#                   which the parity tools check the working tree against
 #   build.log       Jekyll's output
 #
 # --no-dump builds without loading the plugin at all, to check that loading
@@ -46,6 +48,9 @@ fi
 
 mkdir -p "$out/site"
 out=$(cd "$out" && pwd)
+if [[ -n $status_before ]]; then
+  git -C "$site" diff --binary HEAD >"$out/site.diff"
+fi
 
 # --- Record what is being built --------------------------------------------
 
@@ -64,6 +69,7 @@ record() {
           "commit" => sh("git", "rev-parse", "HEAD"),
           "dirty" => !ENV["STATUS"].empty?,
           "status" => ENV["STATUS"].lines.map(&:chomp),
+          "diff" => ENV["STATUS"].empty? ? nil : "site.diff",
           "submodules" => sh("git", "submodule", "status", "--recursive").lines.map(&:strip),
           "submodules_declared" => declared,
           "gemfile_lock_sha256" => sha256(File.join(site, "Gemfile.lock")),

@@ -133,12 +133,16 @@ def full_month_day_year(value):
 
 renderings = (iso, month_day_year, full_month_day_year)
 
+# What a baseline records about its build, rather than the build itself; only a build of
+# uncommitted changes has a site.diff.
+RECORDS = {"BASELINE.json", "site.diff"}
+
 
 def files(root):
     return sorted(
         str(p.relative_to(root))
         for p in root.rglob("*")
-        if p.is_file() and p.name != "BASELINE.json"
+        if p.is_file() and str(p.relative_to(root)) not in RECORDS
     )
 
 

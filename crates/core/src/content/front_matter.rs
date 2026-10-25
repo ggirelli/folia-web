@@ -39,6 +39,9 @@ pub fn has_front_matter(bytes: &[u8]) -> bool {
 
 /// Splits text into its front matter YAML and its body. Returns `None` when the text does not
 /// open with a front matter block closed by a `---` or `...` line.
+///
+/// As in Jekyll (`^(---|\.\.\.)\s*$\n?`), the body starts after the blank lines that follow
+/// the closing line; the first line with content keeps its indentation.
 #[must_use]
 pub fn split_front_matter(text: &str) -> Option<(&str, &str)> {
     let first_end = text.find('\n')?;
@@ -50,7 +53,12 @@ pub fn split_front_matter(text: &str) -> Option<(&str, &str)> {
         let end = text[start..].find('\n').map_or(text.len(), |i| start + i);
         let line = text[start..end].trim_end();
         if line == "---" || line == "..." {
-            let body = (end + 1).min(text.len());
+            let after = &text[start + 3..];
+            let blank = after.len() - after.trim_start().len();
+            let body = match after[..blank].rfind('\n') {
+                Some(i) if blank < after.len() => start + 3 + i + 1,
+                _ => start + 3 + blank,
+            };
             return Some((&text[first_end + 1..start], &text[body..]));
         }
         if end == text.len() {
@@ -201,6 +209,10 @@ mod tests {
         );
         assert_eq!(split_front_matter("---\na: 1\n...\n"), Some(("a: 1\n", "")));
         assert_eq!(split_front_matter("---\n---\nbody"), Some(("", "body")));
+        assert_eq!(
+            split_front_matter("---\na: 1\n---  \n\n \n  body\n"),
+            Some(("a: 1\n", "  body\n"))
+        );
         assert_eq!(split_front_matter("---\na: 1\n"), None);
         assert_eq!(split_front_matter("body"), None);
     }

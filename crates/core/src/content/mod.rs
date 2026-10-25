@@ -1,9 +1,10 @@
 //! What the author wrote and how it maps to the site: source documents, front matter, routes,
-//! slugs and dates. It knows nothing of feeds, search or listings.
+//! slugs, dates and Markdown. It knows nothing of feeds, search or listings.
 
 mod date;
 mod diagnostic;
 mod front_matter;
+pub mod markdown;
 mod route;
 mod slug;
 mod source;

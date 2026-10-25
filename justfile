@@ -132,6 +132,16 @@ check-date-shift before after:
 routes label:
     cargo run --quiet --locked -p parity -- routes --site {{site}} --baseline {{baselines}}/{{label}} --config parity/filopoe.toml
 
+# Check Folia's Markdown against a baseline of the reference site (spike 1)
+[group('parity')]
+markdown label *flags:
+    cargo run --quiet --locked -p parity -- markdown --site {{site}} --baseline {{baselines}}/{{label}} {{flags}}
+
+# Check the Markdown check fails on a baseline changed once per gate (spike 1)
+[group('parity')]
+markdown-negative label:
+    scripts/markdown-negative.sh {{site}} {{baselines}}/{{label}} "$(mktemp -d)/negative"
+
 # Serve the docs with live reload
 [group('docs')]
 docs:

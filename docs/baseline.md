@@ -22,7 +22,8 @@ just baseline SITE-MAIN
 This runs `scripts/baseline.sh ../filopoe ../folia-baselines/SITE-MAIN`, which:
 
 1. refuses to build a site with uncommitted changes, unless `--allow-dirty` is given
-   (`just baseline my-label --allow-dirty`);
+   (`just baseline my-label --allow-dirty`); then it saves them as `site.diff`
+   (`git diff --binary HEAD`);
 2. refuses to overwrite an existing baseline;
 3. records the site and Folia commits, the tool versions and the build flags in `BASELINE.json`;
 4. builds the site with `JEKYLL_ENV=production bundle exec jekyll build --disable-disk-cache`,
@@ -46,6 +47,7 @@ The baseline directory holds:
 touching the file), or `mtime` (no commit touches it). Jekyll uses front matter only for documents;
 for pages the git date always wins (plan v3, §2.6).
 | `BASELINE.json` | what was built, and with what |
+| `site.diff` | for a build of uncommitted changes, those changes |
 | `build.log` | Jekyll's output |
 
 Each manifest row has these fields:
@@ -144,8 +146,37 @@ configuration in `parity/filopoe.toml`, and compares the plan with the baseline'
 4. the redirect stubs.
 
 Folia itself refuses a plan where two outputs share a URL or an output file. The tool refuses a
-site checkout that is not the clean commit the baseline was built from, and uses the baseline's
+site checkout that is not the commit the baseline was built from (with exactly the changes in
+its `site.diff`, if it has one, and no untracked files), and uses the baseline's
 build time to decide what was future-dated.
+
+## Checking Markdown (spike 1)
+
+```sh
+just markdown BASELINE-B --report spike1.txt              # every Markdown document of the site
+just markdown BASELINE-B --doc pages/profile.md --dump out  # one document, both sides' HTML
+just markdown-negative BASELINE-B                         # the check fails when it should
+```
+
+`BASELINE-B` is `filopoe` at `SITE-COMMIT-B`, the D-002 source fix committed on top of `SITE-COMMIT-A`.
+
+The parity tool renders each Markdown document of the reference site (and each document's
+excerpt) with Folia, and compares it with the HTML kramdown made in the baseline's dump. Both
+sides are parsed with html5ever and normalized: whitespace collapsed outside `pre` and dropped
+where blocks meet, entities decoded, attributes and classes sorted, and code blocks compared by
+text. The gates are those of plan v5, §10: heading IDs, link targets and attributes, text,
+structure, the excerpt values templates show (computed with the same Liquid filters), and code
+text, with the agreement of token classes with Rouge's reported per language.
+
+A failure counts as explained only when an entry of `parity/deviations.toml` names the source
+and the gate (`markdown_gates`), and passes the entry's own check (`markdown_check`) if it has
+one: D-003's `resolved excerpt` requires that the note's excerpt has wiki-links, that Jekyll's
+excerpt differs from Jekyll's body, and that Folia's excerpt values equal those of Jekyll's body.
+Explained by an accepted entry, it passes; by a proposed one, it is reported as pending and the
+check still fails; a withdrawn entry explains nothing. An entry that lists a source showing no
+difference it explains also fails the check, so entries stay as narrow as the evidence.
+`--dump DIR` writes `<source>.kramdown.html`
+and `<source>.folia.html` for each document or excerpt that differs.
 
 ## Reproducing from a clean checkout
 
@@ -179,15 +210,28 @@ just check-d001 SITE-MAIN deliquified
 unset FOLIA_SITE
 ```
 
-**The rebaseline and spike 2** use `SITE-COMMIT-A`, the commit that applied the rewrite. Until it is
-published to the site's repository it exists only in the local checkout, and these steps need it:
+**The rebaseline and spike 2** use `SITE-COMMIT-A`, the commit that applied the rewrite, and **spike
+1** uses `SITE-COMMIT-B`, which adds the D-002 source fix on top of it. Until they are published to
+the site's repository they exist only in the local checkout, and these steps need them:
 
 ```sh
 git -C ../filopoe checkout SITE-COMMIT-A
 just baseline-verify BASELINE-A
 just check-date-shift deliquified BASELINE-A     # the rebaseline moved only dates
 just routes BASELINE-A                           # spike 2
+just markdown BASELINE-A                         # before the D-002 fix: fails on D-002
+
+git -C ../filopoe checkout SITE-COMMIT-B
+just baseline-verify BASELINE-B
+just check-date-shift BASELINE-A BASELINE-B         # the fix moved one date and nothing else
+just markdown BASELINE-B                         # spike 1
+just markdown-negative BASELINE-B
+just routes BASELINE-B
 ```
+
+The D-002 fix was first verified uncommitted, as `BASELINE-A-d002`: on `SITE-COMMIT-A`, apply the change,
+then `just baseline BASELINE-A-d002 --allow-dirty` and `just compare BASELINE-A BASELINE-A-d002`. `parity`
+accepts that baseline only for a checkout with exactly its recorded changes (`site.diff`).
 
 Baselines of the same commit from different checkouts can differ in page order and static-file
 dates (see the reproducibility limits above); route parity does not depend on either.

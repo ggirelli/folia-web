@@ -20,7 +20,9 @@ or Zola, although the code is public.
 
 ## Status
 
-Folia is in its validation spikes ([plan v4, §10](planning/plan.v4.md#10-validation-spikes)). There
-is no generator yet. What exists is the parity harness, which records production builds of the
-Jekyll site with Jekyll's own intermediate results, and Folia's discovery and routes, which
-reproduce every output path of the site. See [parity baselines](baseline.md).
+Folia has finished its validation spikes ([plan v5, §10](planning/plan.v5.md#10-validation-spikes));
+the first vertical slice is next. There is no generator yet. What exists is the parity harness,
+which records production builds of the Jekyll site with Jekyll's own intermediate results,
+Folia's discovery and routes, which reproduce every output path of the site, and its Markdown
+renderer, which reproduces the body HTML of every Markdown document. See
+[parity baselines](baseline.md).
