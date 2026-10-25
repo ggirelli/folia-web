@@ -8,6 +8,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+clap.workspace = true
 folia-blog.workspace = true
 folia-core.workspace = true
 folia-garden.workspace = true
@@ -15,7 +16,9 @@ folia-micro.workspace = true
 folia-pages.workspace = true
 globset.workspace = true
 jiff.workspace = true
+minijinja = { version = "3.0.3", default-features = false, features = ["builtins", "debug", "multi_template", "serde"] }
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 

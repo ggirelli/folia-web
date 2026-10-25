@@ -261,6 +261,7 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 name = "folia"
 version = "0.0.0"
 dependencies = [
+ "clap",
  "folia-blog",
  "folia-core",
  "folia-garden",
@@ -268,7 +269,9 @@ dependencies = [
  "folia-pages",
  "globset",
  "jiff",
+ "minijinja",
  "serde",
+ "serde_json",
  "thiserror",
  "toml",
 ]
@@ -288,6 +291,7 @@ dependencies = [
  "jiff",
  "pulldown-cmark",
  "regex",
+ "serde_json",
  "syntect",
  "thiserror",
  "two-face",
@@ -313,6 +317,7 @@ name = "folia-pages"
 version = "0.0.0"
 dependencies = [
  "folia-core",
+ "serde_json",
 ]
 
 [[package]]
@@ -487,6 +492,15 @@ name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
+
+[[package]]
+name = "minijinja"
+version = "3.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90086695417a271bc96e6cb50618555614ca48fa3bb0d9aa96e3468b0f84431e"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "miniz_oxide"

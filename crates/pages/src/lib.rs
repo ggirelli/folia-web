@@ -11,9 +11,24 @@
 //! | an HTML page named `index` | its directory (`/dir/`) |
 //! | another HTML page | `/dir/name`, without extension |
 //! | any other page | `/dir/name.ext` (`/assets/css/main.css`) |
+//!
+//! Templates (plan v6, §6.4): a page's `layout` names its template, `layout: page` being
+//! `page.html`. The template shows the page as `page`:
+//!
+//! | Key | Value |
+//! |-|-|
+//! | `url` | the page's URL (`/about`) |
+//! | `title` | its front matter `title` |
+//! | `layout` | its front matter `layout` |
+//! | `modified` | its last commit's time in the site's time zone (`2026-01-04T13:36:24+01:00`), or none |
+//!
+//! So far [`build`] builds what the first vertical slice needs (plan v6, §12.2 step 1): Markdown
+//! pages with a layout and a title. Anything else it reports as not supported yet.
 
-use folia_core::content::{Diagnostic, Route, SourceDoc};
-use folia_core::publish::PlannedOutput;
+use folia_core::content::markdown::to_html;
+use folia_core::content::{Diagnostic, LastCommits, Route, SiteClock, SourceDoc};
+use folia_core::publish::{EntrySummary, ModeOutput, PageSpec, PlannedOutput};
+use serde_json::json;
 
 /// Source extensions that a converter renders as HTML.
 const MARKDOWN_EXTENSIONS: [&str; 5] = [".markdown", ".mkdown", ".mkdn", ".mkd", ".md"];
@@ -38,6 +53,83 @@ pub fn routes(docs: &[SourceDoc]) -> Result<Vec<PlannedOutput>, Vec<Diagnostic>>
     } else {
         Err(problems)
     }
+}
+
+/// Builds the published pages among `docs`: each one's entry, with its body as HTML, and the
+/// page its layout renders. A page's `modified` time is its last commit's (`commits`), shown in
+/// the time zone of `clock`.
+///
+/// # Errors
+///
+/// Returns every problem found: what [`routes`] reports, a page that is not Markdown or has no
+/// layout or title, and a front matter `last_modified_at`, which Jekyll ignores on pages and
+/// Folia does not read yet.
+pub fn build(
+    docs: &[SourceDoc],
+    commits: &LastCommits,
+    clock: &SiteClock,
+) -> Result<ModeOutput, Vec<Diagnostic>> {
+    let mut output = ModeOutput::default();
+    let mut problems = Vec::new();
+    for doc in docs.iter().filter(|doc| doc.front.published()) {
+        match build_page(doc, commits, clock) {
+            Ok((entry, page)) => {
+                output.entries.push(entry);
+                output.pages.push(page);
+            }
+            Err(problem) => problems.push(problem),
+        }
+    }
+    if problems.is_empty() {
+        Ok(output)
+    } else {
+        Err(problems)
+    }
+}
+
+fn build_page(
+    doc: &SourceDoc,
+    commits: &LastCommits,
+    clock: &SiteClock,
+) -> Result<(EntrySummary, PageSpec), Diagnostic> {
+    let problem = |message: &dyn std::fmt::Display| Diagnostic::in_doc(&doc.id, message);
+    let planned = page_output(doc)?;
+    if !MARKDOWN_EXTENSIONS.contains(&doc.id.extension().to_lowercase().as_str()) {
+        return Err(problem(&"only Markdown pages are built yet"));
+    }
+    let required = |key: &str| {
+        doc.front
+            .string(key)
+            .map_err(|e| problem(&e))?
+            .ok_or_else(|| problem(&format!("a page without a {key} is not built yet")))
+    };
+    let layout = required("layout")?;
+    let title = required("title")?;
+    if doc.front.get("last_modified_at").is_some() {
+        return Err(problem(
+            &"last_modified_at is not read on pages yet; the last commit dates them",
+        ));
+    }
+    let modified = commits.get(&doc.id).map(|time| clock.xmlschema(time));
+
+    let page = PageSpec {
+        route: planned.route.clone(),
+        template: format!("{layout}.html"),
+        source: Some(doc.id.clone()),
+        context: json!({
+            "url": planned.route.url(),
+            "title": title,
+            "layout": layout,
+            "modified": modified,
+        }),
+    };
+    let entry = EntrySummary {
+        doc: doc.id.clone(),
+        route: planned.route,
+        body_html: to_html(&doc.body, None),
+        redirect_from: planned.redirect_from,
+    };
+    Ok((entry, page))
 }
 
 fn page_output(doc: &SourceDoc) -> Result<PlannedOutput, Diagnostic> {
@@ -103,6 +195,86 @@ mod tests {
             front: FrontMatter::parse(front).unwrap(),
             body: String::new(),
         }
+    }
+
+    fn clock() -> SiteClock {
+        SiteClock::new("Europe/Stockholm", "2026-10-25T09:00:00Z".parse().unwrap()).unwrap()
+    }
+
+    fn about() -> SourceDoc {
+        SourceDoc {
+            body: "### Other things\n".into(),
+            ..page(
+                "pages/profile.md",
+                "layout: page\ntitle: About me\npermalink: /about\nredirect_from:\n  - /blog/about",
+            )
+        }
+    }
+
+    #[test]
+    fn a_page_is_built_with_the_template_its_layout_names() {
+        let output = build(&[about()], &LastCommits::default(), &clock()).unwrap();
+        let [entry] = &output.entries[..] else {
+            panic!("one entry")
+        };
+        let [page] = &output.pages[..] else {
+            panic!("one page")
+        };
+        assert_eq!(entry.route.url(), "/about");
+        assert_eq!(
+            entry.body_html,
+            "<h3 id=\"other-things\">Other things</h3>\n"
+        );
+        assert_eq!(entry.redirect_from, [Route::html("/blog/about").unwrap()]);
+        assert_eq!(page.template, "page.html");
+        assert_eq!(page.source, Some(DocId::new("pages/profile.md")));
+        assert_eq!(
+            page.context,
+            json!({"url": "/about", "title": "About me", "layout": "page", "modified": null})
+        );
+    }
+
+    #[test]
+    fn a_page_is_modified_at_its_last_commit_in_the_site_time_zone() {
+        let commits: LastCommits = [(
+            DocId::new("pages/profile.md"),
+            "2026-01-04T12:36:24Z".parse().unwrap(),
+        )]
+        .into_iter()
+        .collect();
+        let output = build(&[about()], &commits, &clock()).unwrap();
+        assert_eq!(
+            output.pages[0].context["modified"],
+            "2026-01-04T13:36:24+01:00"
+        );
+    }
+
+    #[test]
+    fn a_page_without_a_layout_or_title_or_markdown_is_not_built_yet() {
+        let problems = build(
+            &[
+                page("pages/a.md", "title: A"),
+                page("pages/b.md", "layout: page"),
+                page("blog/c.html", "layout: page\ntitle: C"),
+                page(
+                    "pages/d.md",
+                    "layout: page\ntitle: D\nlast_modified_at: 2026-01-01",
+                ),
+            ],
+            &LastCommits::default(),
+            &clock(),
+        )
+        .unwrap_err();
+        let messages: Vec<_> = problems.iter().map(ToString::to_string).collect();
+        assert_eq!(
+            messages,
+            [
+                "pages/a.md: a page without a layout is not built yet",
+                "pages/b.md: a page without a title is not built yet",
+                "blog/c.html: only Markdown pages are built yet",
+                "pages/d.md: last_modified_at is not read on pages yet; the last commit dates them",
+            ]
+        );
     }
 
     fn route(doc: SourceDoc) -> (String, String) {

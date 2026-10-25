@@ -1,4 +1,5 @@
-//! HTML fragments parsed with html5ever and normalized as plan v5, §10 (spike 1) prescribes:
+//! HTML fragments, and whole pages, parsed with html5ever and normalized as plan v5, §10 (spike 1)
+//! prescribes:
 //!
 //! - whitespace is collapsed outside `pre`, and dropped where blocks meet;
 //! - entities are decoded (the parser does it);
@@ -92,6 +93,13 @@ fn find_element(handle: &Handle, wanted: &str) -> Option<Handle> {
         .borrow()
         .iter()
         .find_map(|child| find_element(child, wanted))
+}
+
+/// The normalized `html` element of a whole page, head and body.
+pub fn normalize_document(html: &str) -> Vec<Node> {
+    let dom = parse_document(RcDom::default(), ParseOpts::default()).one(html);
+    let root = find_element(&dom.document, "html").expect("a parsed page has an html element");
+    tidy(convert(&root).into_iter().collect(), true)
 }
 
 /// The normalized nodes of `html`.
@@ -390,7 +398,8 @@ fn gather(nodes: &[Node], out: &mut String) {
     }
 }
 
-fn walk(nodes: &[Node], visit: &mut impl FnMut(&Node)) {
+/// Calls `visit` on every node, depth first, in document order.
+pub fn walk(nodes: &[Node], visit: &mut impl FnMut(&Node)) {
     for node in nodes {
         visit(node);
         if let Node::Element { children, .. } = node {

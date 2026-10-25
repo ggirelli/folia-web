@@ -133,3 +133,35 @@ fn an_undated_post_is_reported() {
     assert_eq!(problems.len(), 1);
     assert!(problems[0].message.contains("start with its date"));
 }
+
+#[test]
+fn categories_are_counted_in_the_order_posts_first_use_them() {
+    let counts = category_counts(
+        &[
+            post(
+                "_posts/2014/2014-01-08-b.md",
+                "categories: [journal, cinema]",
+            ),
+            post(
+                "_posts/2013/2013-08-07-a.md",
+                "categories: [science, cinema]",
+            ),
+            post("_posts/2013/2013-08-07-0.md", "categories: [journal]"),
+            post("_posts/2030/2030-01-01-future.md", "categories: [later]"),
+            post(
+                "_posts/2014/2014-02-01-c.md",
+                "categories: [noise]\npublished: false",
+            ),
+        ],
+        &clock(),
+    )
+    .unwrap();
+    assert_eq!(
+        counts,
+        [
+            ("journal".to_owned(), 2),
+            ("science".to_owned(), 1),
+            ("cinema".to_owned(), 2),
+        ]
+    );
+}

@@ -137,10 +137,25 @@ routes label:
 markdown label *flags:
     cargo run --quiet --locked -p parity -- markdown --site {{site}} --baseline {{baselines}}/{{label}} {{flags}}
 
+# Check the pages Folia builds against a baseline of the reference site (vertical slice)
+[group('parity')]
+pages label:
+    cargo run --quiet --locked -p parity -- pages --site {{site}} --baseline {{baselines}}/{{label}} --config parity/filopoe.toml
+
+# Check the page check fails on a baseline changed where it looks (vertical slice)
+[group('parity')]
+pages-negative label:
+    scripts/pages-negative.sh {{site}} {{baselines}}/{{label}} "$(mktemp -d)/negative"
+
 # Check the Markdown check fails on a baseline changed once per gate (spike 1)
 [group('parity')]
 markdown-negative label:
     scripts/markdown-negative.sh {{site}} {{baselines}}/{{label}} "$(mktemp -d)/negative"
+
+# Build the reference site with Folia into a directory outside it
+[group('site')]
+build dest:
+    cargo run --quiet --locked -p folia -- build --site {{site}} --config parity/filopoe.toml --dest {{dest}}
 
 # Serve the docs with live reload
 [group('docs')]

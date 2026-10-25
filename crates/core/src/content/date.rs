@@ -46,6 +46,22 @@ impl SiteClock {
         moment.as_second() > self.now.as_second()
     }
 
+    /// The year of the build, in the site's time zone.
+    #[must_use]
+    pub fn year(&self) -> i16 {
+        self.now.to_zoned(self.zone.clone()).year()
+    }
+
+    /// A moment in the site's time zone, as Jekyll's `date_to_xmlschema` writes it
+    /// (`2026-01-04T13:36:24+01:00`).
+    #[must_use]
+    pub fn xmlschema(&self, moment: Timestamp) -> String {
+        moment
+            .to_zoned(self.zone.clone())
+            .strftime("%Y-%m-%dT%H:%M:%S%:z")
+            .to_string()
+    }
+
     /// Midnight at the start of a date, in the site's time zone.
     ///
     /// # Errors
@@ -157,6 +173,26 @@ mod tests {
             "2026-01-30T23:00:00Z".parse().unwrap()
         );
         assert!(clock.parse("April 8").is_err());
+    }
+
+    #[test]
+    fn moments_are_written_in_the_site_time_zone() {
+        let clock = clock();
+        assert_eq!(
+            clock.xmlschema("2026-01-04T12:36:24Z".parse().unwrap()),
+            "2026-01-04T13:36:24+01:00"
+        );
+        assert_eq!(
+            clock.xmlschema("2026-07-01T00:00:00Z".parse().unwrap()),
+            "2026-07-01T02:00:00+02:00"
+        );
+    }
+
+    #[test]
+    fn the_build_year_is_local_to_the_site() {
+        let new_year = SiteClock::new("Europe/Stockholm", "2026-12-31T23:30:00Z".parse().unwrap());
+        assert_eq!(new_year.unwrap().year(), 2027);
+        assert_eq!(clock().year(), 2026);
     }
 
     #[test]

@@ -9,8 +9,6 @@ publish.workspace = true
 
 [dependencies]
 folia-core.workspace = true
-
-[dev-dependencies]
 jiff.workspace = true
 
 [lints]

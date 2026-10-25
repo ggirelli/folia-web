@@ -148,7 +148,8 @@ configuration in `parity/filopoe.toml`, and compares the plan with the baseline'
 Folia itself refuses a plan where two outputs share a URL or an output file. The tool refuses a
 site checkout that is not the commit the baseline was built from (with exactly the changes in
 its `site.diff`, if it has one, and no untracked files), and uses the baseline's
-build time to decide what was future-dated.
+build time to decide what was future-dated. Changes below `_folia/`, Folia's own templates and
+configuration in the site, do not count: neither Jekyll nor Folia's discovery reads them.
 
 ## Checking Markdown (spike 1)
 
@@ -177,6 +178,28 @@ check still fails; a withdrawn entry explains nothing. An entry that lists a sou
 difference it explains also fails the check, so entries stay as narrow as the evidence.
 `--dump DIR` writes `<source>.kramdown.html`
 and `<source>.folia.html` for each document or excerpt that differs.
+
+## Checking pages (vertical slice)
+
+```sh
+just pages BASELINE-B            # build with Folia and compare what it writes
+just pages-negative BASELINE-B   # the check fails when it should
+just build ../folia-out       # just build, into a directory outside the site
+```
+
+The parity tool builds the site with `folia::build`, as of the baseline's build time and with the
+templates in the site's `_folia/templates`, into a temporary directory, and compares every file
+it writes with the one Jekyll wrote at the same path (plan v6, §9.2):
+
+1. each page and redirect stub has Jekyll's URL and output file;
+2. each page has Jekyll's fingerprint: title, canonical link, description and Open Graph values;
+   headings in order; `a href`, `img src` and `link href`/`script src` multisets; and the text of
+   its `div.main-content` and of its body, whitespace collapsed;
+3. each page's `div.main-content` is equal after the Markdown check's normalization;
+4. redirect stubs and static files are byte-identical.
+
+So far Folia builds `/about`, its stub and the static files (step 1 of the slice); the outputs
+it does not build yet are counted, not compared.
 
 ## Reproducing from a clean checkout
 
@@ -227,7 +250,12 @@ just check-date-shift BASELINE-A BASELINE-B         # the fix moved one date and
 just markdown BASELINE-B                         # spike 1
 just markdown-negative BASELINE-B
 just routes BASELINE-B
+just pages BASELINE-B                            # the vertical slice, with ../filopoe/_folia
+just pages-negative BASELINE-B
 ```
+
+The slice's templates are in `filopoe/_folia/templates`, uncommitted in the local checkout until
+they are reviewed.
 
 The D-002 fix was first verified uncommitted, as `BASELINE-A-d002`: on `SITE-COMMIT-A`, apply the change,
 then `just baseline BASELINE-A-d002 --allow-dirty` and `just compare BASELINE-A BASELINE-A-d002`. `parity`

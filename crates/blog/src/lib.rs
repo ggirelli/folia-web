@@ -9,12 +9,16 @@
 //! | a category archive | `/blog/category/:name/` (`:name` slugified) |
 //! | the blog feed | `/blog/feed.xml` |
 //! | a tag feed | `/blog/tag/:tag.xml`, for tags of letters, digits and `_` only |
+//!
+//! [`category_counts`] gives the categories with their number of posts, which every page's
+//! category menu shows.
 
 use folia_core::content::{
     Diagnostic, DocId, FrontMatterError, Route, SiteClock, SlugMode, SourceDoc, dated_file_name,
     slugify,
 };
 use folia_core::publish::PlannedOutput;
+use jiff::civil::Date;
 
 /// Posts per listing page.
 const PER_PAGE: usize = 9;
@@ -25,6 +29,7 @@ pub const LISTING_TEMPLATE: &str = "blog/index.html";
 /// A published post, with what the generated outputs need to know about it.
 struct Post {
     id: DocId,
+    date: Date,
     route: Route,
     redirect_from: Vec<Route>,
     categories: Vec<String>,
@@ -43,19 +48,7 @@ pub fn routes(
     docs: &[SourceDoc],
     clock: &SiteClock,
 ) -> Result<Vec<PlannedOutput>, Vec<Diagnostic>> {
-    let mut posts = Vec::new();
-    let mut problems = Vec::new();
-    for doc in docs {
-        match read_post(doc, clock) {
-            Ok(Some(post)) => posts.push(post),
-            Ok(None) => {}
-            Err(problem) => problems.push(problem),
-        }
-    }
-    if !problems.is_empty() {
-        return Err(problems);
-    }
-
+    let posts = read_posts(docs, clock)?;
     let mut outputs: Vec<PlannedOutput> = posts.iter().map(post_output).collect();
     outputs.extend(listing_pages(&posts));
     outputs.extend(category_archives(&posts));
@@ -65,6 +58,46 @@ pub fn routes(
     ));
     outputs.extend(tag_feeds(&posts));
     Ok(outputs)
+}
+
+/// Each category of the published posts, with how many posts it has, in Jekyll's order: by
+/// first appearance, reading the posts by date, then by source path.
+///
+/// # Errors
+///
+/// Returns every problem [`routes`] would.
+pub fn category_counts(
+    docs: &[SourceDoc],
+    clock: &SiteClock,
+) -> Result<Vec<(String, usize)>, Vec<Diagnostic>> {
+    let mut posts = read_posts(docs, clock)?;
+    posts.sort_by(|a, b| (a.date, &a.id).cmp(&(b.date, &b.id)));
+    let mut counts: Vec<(String, usize)> = Vec::new();
+    for category in posts.iter().flat_map(|post| &post.categories) {
+        match counts.iter_mut().find(|(name, _)| name == category) {
+            Some((_, count)) => *count += 1,
+            None => counts.push((category.clone(), 1)),
+        }
+    }
+    Ok(counts)
+}
+
+/// The published posts among `docs`.
+fn read_posts(docs: &[SourceDoc], clock: &SiteClock) -> Result<Vec<Post>, Vec<Diagnostic>> {
+    let mut posts = Vec::new();
+    let mut problems = Vec::new();
+    for doc in docs {
+        match read_post(doc, clock) {
+            Ok(Some(post)) => posts.push(post),
+            Ok(None) => {}
+            Err(problem) => problems.push(problem),
+        }
+    }
+    if problems.is_empty() {
+        Ok(posts)
+    } else {
+        Err(problems)
+    }
 }
 
 /// Reads a post, or `None` when it is not published at this build.
@@ -103,6 +136,7 @@ fn read_post(doc: &SourceDoc, clock: &SiteClock) -> Result<Option<Post>, Diagnos
     };
     Ok(Some(Post {
         id: doc.id.clone(),
+        date,
         route,
         redirect_from: doc.redirect_from()?,
         categories: categories(doc).map_err(front)?,

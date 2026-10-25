@@ -20,9 +20,12 @@ or Zola, although the code is public.
 
 ## Status
 
-Folia has finished its validation spikes ([plan v5, §10](planning/plan.v5.md#10-validation-spikes));
-the first vertical slice is next. There is no generator yet. What exists is the parity harness,
-which records production builds of the Jekyll site with Jekyll's own intermediate results,
-Folia's discovery and routes, which reproduce every output path of the site, and its Markdown
-renderer, which reproduces the body HTML of every Markdown document. See
+Folia has finished its validation spikes ([plan v6, §10](planning/plan.v6.md#10-validation-spikes))
+and is building its first vertical slice ([§12.2](planning/plan.v6.md#122-vertical-slice)). Its
+first step, under review, builds one page, `/about`, through the whole pipeline: `folia build`
+renders it with MiniJinja templates kept in the site, writes its redirect stub, and copies the
+static files, and the result matches Jekyll's. A post and two garden notes come next. Besides
+that, the parity harness records production builds of the Jekyll site with Jekyll's own
+intermediate results; Folia's discovery and routes reproduce every output path of the site, and
+its Markdown renderer the body HTML of every Markdown document. See
 [parity baselines](baseline.md).

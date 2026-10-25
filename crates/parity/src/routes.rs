@@ -305,8 +305,14 @@ fn report(title: &str, jekyll_count: usize, detail: &str, differing: &[String]) 
     false
 }
 
+/// Folia's own directory in the site (plan v6, §14 Q5): its templates and configuration. Neither
+/// Jekyll nor Folia's discovery reads it as part of the site, so changes there do not change a
+/// baseline, and the checkout check leaves them out.
+const FOLIA_DIR: &str = "_folia";
+
 /// The site checkout must be the commit the baseline was built from, with no changes, or with
-/// exactly the uncommitted changes it was built with (`diff`) and no untracked files.
+/// exactly the uncommitted changes it was built with (`diff`) and no untracked files. Changes
+/// below `_folia/` do not count.
 pub fn check_checkout(site_dir: &Path, commit: &str, diff: Option<&str>) -> Result<(), String> {
     let git = |args: &[&str]| {
         Command::new("git")
@@ -326,7 +332,8 @@ pub fn check_checkout(site_dir: &Path, commit: &str, diff: Option<&str>) -> Resu
             short(commit)
         ));
     }
-    let status = git(&["status", "--porcelain"])?;
+    let outside_folia = format!(":(exclude){FOLIA_DIR}");
+    let status = git(&["status", "--porcelain", "--", ".", &outside_folia])?;
     match diff {
         None if !status.trim().is_empty() => {
             Err(format!("{} has uncommitted changes", site_dir.display()))
@@ -335,10 +342,12 @@ pub fn check_checkout(site_dir: &Path, commit: &str, diff: Option<&str>) -> Resu
             "{} has untracked files, which the baseline's diff cannot vouch for",
             site_dir.display()
         )),
-        Some(diff) if git(&["diff", "--binary", "HEAD"])? != diff => Err(format!(
-            "{}'s uncommitted changes are not the ones the baseline was built with",
-            site_dir.display()
-        )),
+        Some(diff) if git(&["diff", "--binary", "HEAD", "--", ".", &outside_folia])? != diff => {
+            Err(format!(
+                "{}'s uncommitted changes are not the ones the baseline was built with",
+                site_dir.display()
+            ))
+        }
         Some(_) => {
             eprintln!(
                 "Note: the baseline was built from uncommitted changes, which {} still has.",
@@ -352,4 +361,92 @@ pub fn check_checkout(site_dir: &Path, commit: &str, diff: Option<&str>) -> Resu
 
 pub fn short(commit: &str) -> &str {
     &commit[..commit.len().min(8)]
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+
+    /// A throwaway site repository with one commit, removed when dropped.
+    struct Repo(PathBuf);
+
+    impl Repo {
+        fn new(test: &str) -> Self {
+            let root =
+                std::env::temp_dir().join(format!("parity-checkout-{}-{test}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(&root).unwrap();
+            let repo = Self(root);
+            repo.write("about.md", "About");
+            repo.git(&["init", "--quiet"]);
+            repo.git(&["add", "."]);
+            repo.git(&["commit", "--quiet", "-m", "site"]);
+            repo
+        }
+
+        fn write(&self, path: &str, text: &str) {
+            let path = self.0.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+
+        fn git(&self, args: &[&str]) -> String {
+            let out = Command::new("git")
+                .arg("-C")
+                .arg(&self.0)
+                .args([
+                    "-c",
+                    "user.name=Folia",
+                    "-c",
+                    "user.email=folia@example.com",
+                ])
+                .args(args)
+                .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                .env("GIT_CONFIG_NOSYSTEM", "1")
+                .output()
+                .unwrap();
+            assert!(out.status.success(), "git {args:?}");
+            String::from_utf8(out.stdout).unwrap()
+        }
+
+        fn check(&self) -> Result<(), String> {
+            let head = self.git(&["rev-parse", "HEAD"]);
+            check_checkout(&self.0, head.trim(), None)
+        }
+    }
+
+    impl Drop for Repo {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn changes_below_folia_do_not_count() {
+        let repo = Repo::new("folia");
+        repo.write("_folia/templates/page.html", "{{ content }}");
+        assert_eq!(repo.check(), Ok(()));
+    }
+
+    #[test]
+    fn any_other_change_still_counts() {
+        let repo = Repo::new("other");
+        repo.write("_folia/templates/page.html", "");
+        repo.write("_foliage/x.md", "");
+        assert!(
+            repo.check()
+                .unwrap_err()
+                .ends_with("has uncommitted changes")
+        );
+
+        let repo = Repo::new("tracked");
+        repo.write("about.md", "Edited");
+        assert!(
+            repo.check()
+                .unwrap_err()
+                .ends_with("has uncommitted changes")
+        );
+    }
 }

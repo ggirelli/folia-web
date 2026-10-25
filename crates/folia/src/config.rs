@@ -18,8 +18,19 @@ pub struct Config {
     /// within one path segment. A pattern that matches a directory excludes all of it.
     #[serde(default)]
     pub exclude: Vec<String>,
+    /// The directory of the site's templates, relative to the site root.
+    #[serde(default = "default_templates_dir")]
+    pub templates_dir: String,
     /// The directory each mode's documents live in.
     pub roots: Roots,
+    /// Who the site is: what templates show, and the URL redirect stubs point to.
+    pub site: Identity,
+}
+
+/// Where templates live unless the configuration says otherwise: in the site, next to the
+/// configuration, in a directory Jekyll ignores (plan v6, §14 Q5).
+fn default_templates_dir() -> String {
+    "_folia/templates".to_owned()
 }
 
 /// The source directory of each mode with a root; every other file with front matter is a page.
@@ -32,6 +43,18 @@ pub struct Roots {
     pub micro: String,
     /// Garden notes, such as `_digital_garden`.
     pub garden: String,
+}
+
+/// The site's identity.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Identity {
+    /// The URL the site is published at, without a trailing `/` (`https://ggirelli.info`).
+    pub url: String,
+    /// Its name (`Filopoetica`).
+    pub title: String,
+    /// Its tagline.
+    pub description: String,
 }
 
 /// Why the configuration cannot be loaded.
@@ -65,11 +88,13 @@ mod tests {
     #[test]
     fn a_configuration_parses() {
         let config: Config = toml::from_str(
-            "time-zone = \"Europe/Stockholm\"\nexclude = [\"vendor\"]\n[roots]\nblog = \"_posts\"\nmicro = \"_micro\"\ngarden = \"_digital_garden\"\n",
+            "time-zone = \"Europe/Stockholm\"\nexclude = [\"vendor\"]\n[roots]\nblog = \"_posts\"\nmicro = \"_micro\"\ngarden = \"_digital_garden\"\n[site]\nurl = \"https://example.com\"\ntitle = \"Example\"\ndescription = \"A site.\"\n",
         )
         .unwrap();
         assert_eq!(config.roots.garden, "_digital_garden");
         assert_eq!(config.include, Vec::<String>::new());
+        assert_eq!(config.templates_dir, "_folia/templates");
+        assert_eq!(config.site.url, "https://example.com");
     }
 
     #[test]

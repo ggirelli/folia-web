@@ -6,10 +6,12 @@
 //! ```sh
 //! cargo run -p parity -- routes --site ../filopoe --baseline ../folia-baselines/BASELINE-A --config parity/filopoe.toml
 //! cargo run -p parity -- markdown --site ../filopoe --baseline ../folia-baselines/BASELINE-A
+//! cargo run -p parity -- pages --site ../filopoe --baseline ../folia-baselines/BASELINE-B --config parity/filopoe.toml
 //! ```
 
 mod baseline;
 mod markdown;
+mod pages;
 mod routes;
 
 use std::path::PathBuf;
@@ -59,6 +61,18 @@ enum Command {
         #[arg(long)]
         dump: Option<PathBuf>,
     },
+    /// Build the site with Folia and compare what it writes with Jekyll's files (vertical slice)
+    Pages {
+        /// The Jekyll site
+        #[arg(long)]
+        site: PathBuf,
+        /// A baseline made by scripts/baseline.sh from the same commit
+        #[arg(long)]
+        baseline: PathBuf,
+        /// Folia's configuration for the site
+        #[arg(long)]
+        config: PathBuf,
+    },
 }
 
 fn main() -> ExitCode {
@@ -83,6 +97,11 @@ fn main() -> ExitCode {
             report: report.as_deref(),
             dump: dump.as_deref(),
         }),
+        Command::Pages {
+            site,
+            baseline,
+            config,
+        } => pages::run(&site, &baseline, &config),
     };
     match result {
         Ok(true) => ExitCode::SUCCESS,

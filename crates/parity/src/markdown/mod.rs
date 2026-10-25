@@ -14,7 +14,7 @@
 //! A failure is excused only by an accepted entry of the deviation ledger (`ledger`); one a
 //! proposed entry explains is reported as pending.
 
-mod dom;
+pub mod dom;
 mod ledger;
 mod liquid;
 mod report;

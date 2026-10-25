@@ -36,6 +36,12 @@ fn config(exclude: &[&str]) -> Config {
             micro: "_micro".into(),
             garden: "_digital_garden".into(),
         },
+        templates_dir: "_folia/templates".into(),
+        site: crate::config::Identity {
+            url: "https://example.com".into(),
+            title: "Example".into(),
+            description: "A site.".into(),
+        },
     }
 }
 

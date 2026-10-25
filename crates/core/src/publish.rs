@@ -1,7 +1,9 @@
-//! The contracts a mode hands to the site builder (plan v3, §6.2).
+//! The contracts a mode hands to the site builder (plan v6, §6.2).
 //!
-//! So far only what route parity needs (spike 2): the outputs a mode plans, and where each one
-//! comes from. Body HTML, feeds and template data join it later.
+//! - [`PlannedOutput`]: the outputs a mode plans, and where each one comes from (spike 2).
+//! - [`ModeOutput`]: what a mode builds, so far with only what the first vertical slice's page
+//!   uses (plan v6, §12.2 step 1): its entries and their pages. Feeds and artifacts join it with
+//!   the steps that need them.
 
 use crate::content::{DocId, Route};
 
@@ -41,4 +43,40 @@ impl PlannedOutput {
             redirect_from: Vec::new(),
         }
     }
+}
+
+/// What a mode builds from its documents.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ModeOutput {
+    /// One per published document, with its prepared body.
+    pub entries: Vec<EntrySummary>,
+    /// The pages to render: the entries' own pages, and pages generated from them.
+    pub pages: Vec<PageSpec>,
+}
+
+/// A published document, as the site builder sees it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EntrySummary {
+    /// The document.
+    pub doc: DocId,
+    /// Where its page is published.
+    pub route: Route,
+    /// Its body as HTML, with links resolved.
+    pub body_html: String,
+    /// Old URLs that redirect to its page.
+    pub redirect_from: Vec<Route>,
+}
+
+/// A page to render with a template.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PageSpec {
+    /// Where it is published.
+    pub route: Route,
+    /// The template, a path relative to the site's template directory (`page.html`).
+    pub template: String,
+    /// The entry whose page this is, whose body the template shows as `content`; `None` for a
+    /// generated page.
+    pub source: Option<DocId>,
+    /// What the template shows of the page, as `page`.
+    pub context: serde_json::Value,
 }

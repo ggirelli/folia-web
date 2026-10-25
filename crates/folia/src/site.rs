@@ -25,6 +25,8 @@ use crate::discover::{Discovery, discover};
 pub struct Site {
     /// What discovery found.
     pub discovery: Discovery,
+    /// The documents, as read, by mode.
+    pub documents: BTreeMap<Mode, Vec<SourceDoc>>,
     /// Every output, by output path.
     pub routes: RouteTable,
 }
@@ -79,7 +81,11 @@ pub fn plan(root: &Path, config: &Config, now: Timestamp) -> Result<Site, Vec<Di
         return Err(problems);
     }
     let routes = assemble(planned, &discovery.statics)?;
-    Ok(Site { discovery, routes })
+    Ok(Site {
+        discovery,
+        documents: docs,
+        routes,
+    })
 }
 
 /// Adds what only the whole site can plan to the modes' outputs, and checks the result.
@@ -133,6 +139,26 @@ pub fn assemble(
     }
     planned.sort_by_key(|output| output.route.output_path());
     Ok(RouteTable { outputs: planned })
+}
+
+/// The page `jekyll-redirect-from` writes at an old URL, sending readers to `to`, an absolute
+/// URL: a canonical link, a script and a meta refresh. The URL is written as given, unescaped, as
+/// the plugin does.
+#[must_use]
+pub fn redirect_stub(to: &str) -> String {
+    format!(
+        "<!DOCTYPE html>\n\
+         <html lang=\"en-US\">\n  \
+         <meta charset=\"utf-8\">\n  \
+         <title>Redirecting&hellip;</title>\n  \
+         <link rel=\"canonical\" href=\"{to}\">\n  \
+         <script>location=\"{to}\"</script>\n  \
+         <meta http-equiv=\"refresh\" content=\"0; url={to}\">\n  \
+         <meta name=\"robots\" content=\"noindex\">\n  \
+         <h1>Redirecting&hellip;</h1>\n  \
+         <a href=\"{to}\">Click here if you are not redirected.</a>\n\
+         </html>\n"
+    )
 }
 
 /// Files the site gets unless one of its own files takes the URL, and what generates them.
@@ -245,6 +271,14 @@ mod tests {
             .find(|o| o.generator == Some("redirect stub"))
             .unwrap();
         assert_eq!(stub.route.output_path(), "blog/about.html");
+    }
+
+    #[test]
+    fn a_redirect_stub_is_written_as_the_plugin_writes_it() {
+        assert_eq!(
+            redirect_stub("https://ggirelli.info/about"),
+            "<!DOCTYPE html>\n<html lang=\"en-US\">\n  <meta charset=\"utf-8\">\n  <title>Redirecting&hellip;</title>\n  <link rel=\"canonical\" href=\"https://ggirelli.info/about\">\n  <script>location=\"https://ggirelli.info/about\"</script>\n  <meta http-equiv=\"refresh\" content=\"0; url=https://ggirelli.info/about\">\n  <meta name=\"robots\" content=\"noindex\">\n  <h1>Redirecting&hellip;</h1>\n  <a href=\"https://ggirelli.info/about\">Click here if you are not redirected.</a>\n</html>\n"
+        );
     }
 
     #[test]
