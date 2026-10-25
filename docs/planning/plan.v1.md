@@ -162,7 +162,7 @@ boundaries buy nothing. A crate boundary is worth having where it
 are peers and do not depend on each other. Everything else can be a
 module until it hurts.
 
-```
+```text
 folia-core      model, front matter, Markdown, routes, diagnostics,
                 ModeOutput types, git dates. No mode logic.
    ▲    ▲    ▲    ▲

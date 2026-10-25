@@ -1,6 +1,6 @@
-# Folia --- Project Plan (v2)
+# Folia --- Project Plan (v3)
 
-**Status:** Planning draft, revision 2 (supersedes `plan.v1.md`)\
+**Status:** Planning draft, revision 3 (supersedes `plan.v2.md`)\
 **Project type:** Personal, in-house static-site publishing engine\
 **Implementation language:** Rust\
 **Primary reference site:** `ggirelli.info`, Jekyll source in the
@@ -15,15 +15,18 @@ Markers used in this document:
 - **[SPIKE]**: to be settled by a small throwaway experiment.
 - **[LATER]**: deliberately deferred; safe to postpone.
 
-Changes since v1:
+Changes since v2 (from the results of spikes 0 and 3):
 
-- §5 splits `folia-core` into a content model and publishing contracts,
-  as two modules of one crate.
-- Templates are runtime files identified by `String` names (§6.4).
-- Feed `<updated>` is derived from entry modification times (§7.3).
-- New §6.5 sets out stage contracts.
-- §10 defines spikes 0–3 precisely, and §12 sequences them.
-- §2 adds facts verified while defining the spikes.
+- §2.6 records how Jekyll resolves `last_modified_at` today, verified in
+  the plugin's source and on a scratch clone: front matter wins for
+  documents, git wins for pages, and an uncommitted file gets its mtime.
+- §2.6 records that the garden submodule is declared but absent, and
+  §2.1, §7.3, §10 and the later risks drop the submodule assumptions.
+- §2.6 records the output that depends on the checkout (page order,
+  static-file `lastmod`).
+- §7.3 states the timestamp rule against those facts.
+- §10 marks spikes 0 and 3 done, with their results; D-001 is defined
+  precisely, and the ledger holds it as proposed.
 
 ## 1. Purpose
 
@@ -42,7 +45,7 @@ Inventory of `filopoe` (Jekyll 4, kramdown GFM, Rouge), taken
 | ------ | -------------------------------------------- | ---: | --------------------------------------- | ------------------------------------ |
 | blog   | `_posts/YYYY/YYYY-MM-DD-slug.md`             |   79 | `/blog/:year/:month/:day/:title`        | `blog/2021/08/08/webmentions.html`   |
 | micro  | `_micro/{notes,likes,bookmarks,rsvps}/*.md`  |   39 | `/micro/:name`, `/likes/:name`, …       | `bookmarks/2025-06-16-malleable-software.html` (underscores slugified) |
-| garden | `_digital_garden/**.md` (+ git submodule)     |   54 | `/dg/:path`                             | `dg/tracking/chat_control.html` (underscores kept) |
+| garden | `_digital_garden/**.md` (submodule absent, §2.6) |   54 | `/dg/:path`                             | `dg/tracking/chat_control.html` (underscores kept) |
 | pages  | `pages/*.md`, `me/*`, `blog/*.html`, root     |  ~25 | explicit `permalink`                    | `about.html`, `index.html`           |
 
 - URLs are extensionless; files are `*.html`. Directory-style outputs
@@ -63,8 +66,8 @@ Inventory of `filopoe` (Jekyll 4, kramdown GFM, Rouge), taken
   detect the kind with `item.layout == "bookmark"`.
 - Micro and post dates come from filenames. Garden notes have an
   optional `date` (29/54), and "Last updated" comes from
-  `jekyll-last-modified-at`, which reads git history, including the
-  `_digital_garden/submodule` submodule.
+  `jekyll-last-modified-at`, which reads git history (§2.6 has the exact
+  rules).
 - Front matter has three kinds of keys. Each mode has semantic keys, such
   as `categories`, `tags`, `featured`, `rating`, `trip`, `bookmark`,
   `like`, `rsvp`, `event`, and `redirect_from`. Presentation knobs
@@ -187,6 +190,51 @@ Inventory of `filopoe` (Jekyll 4, kramdown GFM, Rouge), taken
   content of a post about running Jekyll. They are content, not build
   artifacts.
 
+Verified by the spike 0 harness and during spike 3:
+
+- **The garden submodule is absent.** `.gitmodules` declares
+  `_digital_garden/submodule`, but commit `SITE-MAIN` has no gitlink for
+  it and the directory does not exist. All 54 garden notes are ordinary
+  tracked files. Folia implements no submodule-specific behavior; revisit
+  only if a checkout with the submodule present appears. [LATER]
+- **How Jekyll resolves `last_modified_at` today.** Read in
+  `jekyll-last-modified-at` (pinned git revision `PLUGIN-REV`) and Jekyll
+  4.4.1, and checked on a scratch clone of `filopoe`:
+  - The plugin sets `data["last_modified_at"]` to a lazy `Determinator`
+    in a `post_init` hook, for posts, pages and collection documents.
+  - **Documents** (posts, micro, garden): `post_init` runs in
+    `Document#initialize`, before `Document#read` deep-merges the front
+    matter into `data`. **Front matter wins.** The 4 posts that set it
+    show their front matter value.
+  - **Pages:** `Page#initialize` reads the front matter first and fires
+    `post_init` last, so the plugin overwrites it. **Git wins; front
+    matter is ignored.** On the scratch clone, a page with
+    `last_modified_at: 2001-02-03` got its commit date. No page sets it
+    today, so no output shows this.
+  - The `Determinator` resolves to the commit time of
+    `git log -n 1 --format=%ct -- <path>`, run against the repository's
+    `.git`, so it reads committed history only: uncommitted edits to a
+    tracked file keep its commit date (checked on the clone). The time is
+    shown in the site's `timezone` (Europe/Stockholm).
+  - **When no commit touches the file** (untracked, or staged but never
+    committed), it falls back to the file's **mtime**. That depends on the
+    checkout, not the commit, so the harness rejects any baseline that
+    contains one (`parity/check_dump.rb`).
+  - The two Sass pages share their `data` with their source-map pages,
+    whose `Determinator` points at a `.css.map` file that never exists.
+    Jekyll never reads that value; the dump records it as unresolved.
+- **Output that depends on the checkout.** Two builds of one checkout
+  are identical, but a fresh clone of the same commit differs in two
+  ways:
+  - Jekyll reads directories in filesystem order (`Dir.entries`), so the
+    order of pages differs between clones. In `SITE-MAIN`, `/` and `/blog/`
+    swap places in `sitemap.xml` and in the Lunr index. The parity tool
+    must compare both as sets (§9).
+  - `jekyll-sitemap` dates static files (one PDF) by their mtime.
+- **Garden excerpts keep raw wiki-links.** Jekyll extracts excerpts while
+  reading, before the wiki-link generator runs, so 18 garden excerpts
+  contain unresolved `[[…]]`. This feeds gate G5 of spike 1.
+
 ## 3. Design principles
 
 The v0 principles stand, with these refinements:
@@ -215,7 +263,7 @@ boundaries buy nothing. A crate boundary is worth having where it
 are peers and do not depend on each other. Everything else can be a
 module until it hurts.
 
-```
+```text
 folia-core      content::  source docs, ids, front matter, common meta,
                            routes, Markdown, git dates, diagnostics
                 publish::  contracts modes hand to the builder
@@ -529,15 +577,22 @@ outside code) enforces this.
 - **Entry `modified`**, resolved by the mode from `content` data, uses
   the first available of:
   1. front matter `last_modified_at` (4 posts set it today);
-  2. the git date of the last commit touching the source file, read from
-     the submodule's own history for submodule files;
+  2. the date of the last commit reachable from `HEAD` that touches the
+     source file;
   3. `published`.
 
-  This matches `jekyll-last-modified-at` (front matter wins, otherwise
-  git); spike 0 should confirm the precedence from the dumped metadata.
+  Against Jekyll today (§2.6):
+  - **Documents:** identical (front matter, then git).
+  - **Pages:** Jekyll ignores front matter and uses git. No page sets
+    the key, so no output differs. Folia applies one rule to every mode
+    [OPEN, recommended]; if a page ever sets the key, the difference
+    becomes a ledger entry.
+  - **Uncommitted files:** Jekyll uses the file's mtime; Folia uses
+    `published`, and never reads mtimes. Parity cannot show this, because
+    baselines never contain mtime dates (§2.6).
+
   Git dates come from committed history (`HEAD`), never from the working
-  tree or mtimes. A dirty tree therefore builds the same as its commit,
-  and an untracked new file falls back to `published`.
+  tree, so a dirty tree builds the same dates as its commit.
 - **Entry `<updated>`** = `modified`. **Entry `<published>`** =
   `published`. Both match Jekyll today.
 - **Feed `<updated>`** = the maximum `modified` over the entries
@@ -606,9 +661,10 @@ array with the same `{id,url,title,body}` schema.
      plus body similarity.
 3. **Markdown golden tests:** snippets with expected HTML taken from the
    baseline (`insta` snapshots).
-4. **Deviation ledger:** a `parity/deviations.toml` lists each
+4. **Deviation ledger:** `parity/deviations.toml` lists each
    intentional difference with a rationale. The tool suppresses only
-   those.
+   those. D-001 (spike 3) is its first entry, proposed until Q1 is
+   approved.
 5. **Visual checks:** screenshot a handful of pages at two viewports and
    review them manually. [LATER]
 
@@ -626,6 +682,9 @@ Conventions used below:
 - Deviations are recorded in `parity/deviations.toml` as `D-NNN` (§9.4).
 
 ### Spike 0: baseline harness (prerequisite)
+
+**Status: done** (2026-10-25). All three checks pass; see the results at
+the end of this section and [parity baselines](../baseline.md).
 
 - **Behavior:** a reproducible production Jekyll build that also dumps
   Jekyll's own intermediate results. This avoids reverse-engineering
@@ -645,13 +704,15 @@ Conventions used below:
     a `post_convert` hook.
   - `excerpt/<source>.html`: the rendered excerpt.
   - `meta/<source>.json`: title, date, `last_modified_at`, categories,
-    and tags.
+    and tags. `last_modified_at` is recorded with its origin
+    (`front_matter`, `git` or `mtime`) and the raw front matter value, so
+    §2.6 can be checked from the dumps.
 - **Command:**
   `scripts/baseline.sh [--allow-dirty] $FILOPOE $BL/<label>`. The
   script:
   - refuses to run on a dirty tree unless `--allow-dirty` is given;
-  - records the `filopoe` commit, submodule commits, and Jekyll and Ruby
-    versions in `BASELINE.json`;
+  - records the `filopoe` commit, the declared and present submodules,
+    and Jekyll and Ruby versions in `BASELINE.json`;
   - runs `JEKYLL_ENV=production bundle exec jekyll build --destination
     $BL/<label>/site --disable-disk-cache`.
 
@@ -663,8 +724,21 @@ Conventions used below:
   2. The site built with the plugin is identical to one built without
      it.
   3. The manifest accounts for all 1,077 output files.
+- **Results:**
+  - All three pass (`just baseline-verify SITE-MAIN`). Two runs give
+    byte-identical dumps, and sites that differ only in the 52 feed-level
+    `<updated>` values. A build without the plugin, and one with the
+    plugin loaded but `FOLIA_DUMP` unset, give the same site.
+  - Every build is also checked to leave `filopoe`'s working tree as it
+    was, and to contain no mtime-derived date.
+  - Generated pages are told apart by class: only plain `Jekyll::Page`
+    instances and documents count as read from a file. A stale, ignored
+    `assets/json/notes_graph.json` in the working tree had made the graph
+    page look sourced.
 
 ### Spike 3: Liquid removal (run first after spike 0; Jekyll-only, no Rust)
+
+**Status: done; the change in `filopoe` is uncommitted, pending Q1.**
 
 - **Behavior:** every Liquid construct in the 15 content files (§2.2) is
   replaced by its literal production expansion. Jekyll's per-document
@@ -675,7 +749,7 @@ Conventions used below:
 | `{% assign v = "…" %}` + `{{v}}` | 100 / ~200 | inline the literal | none |
 | `{{ site.baseurl }}`, `"…" \| prepend: site.baseurl` | ~36 | literal path (baseurl is empty in production) | none |
 | `{{ site.url }}`, `site.paths.home`, `site.webmentions.*`, `{{ page.url }}` | 5 | literal production value | none |
-| `{% highlight lang %}…{% endhighlight %}` | 11 in `_posts/2020/2020-01-26-sample-code.md`, `_posts/2021/2021-08-17-sample-speed.md` | fenced code block | **D-001:** wrapper markup changes from `figure.highlight > pre > code[data-lang]` to `div.language-x.highlighter-rouge > div.highlight > pre.highlight > code`; text identical; visual check needed |
+| `{% highlight lang %}…{% endhighlight %}` | 11 in `_posts/2020/2020-01-26-sample-code.md`, `_posts/2021/2021-08-17-sample-speed.md` | fenced code block, language lowercased (Rouge's tag, as Jekyll labels it) | **D-001:** wrapper markup changes from `figure.highlight > pre > code[data-lang]` to `div.language-x.highlighter-rouge > div.highlight > pre.highlight > code`, and the code gains one trailing newline (kramdown keeps it in every fenced block; all 40 existing ones have it). Language, code text and Rouge tokens are otherwise identical; visual check needed |
 | `{% include digital-garden/notes_graph.html %}` | 1 | the include's 22 lines of HTML, verbatim (`link_classes` is empty) | none |
 
 - **Tool:** `parity/codemods/deliquify.py`, a stdlib-only one-off run
@@ -684,27 +758,51 @@ Conventions used below:
     `{{` makes it fail with the file and line.
   - Production values are an explicit table in the script.
   - It is idempotent. `--check` prints a diff; `--write` applies it.
+  - A run of `assign`-only lines renders as empty lines, so it becomes
+    exactly one blank line (none if one is already adjacent).
+  - The include is expanded byte for byte, including its trailing
+    newline, which leaves one double blank line in
+    `_digital_garden/home.md`.
 - **Commands:**
+
   ```sh
-  scripts/baseline.sh $FILOPOE $BL/SITE-MAIN
-  python3 -I parity/codemods/deliquify.py --write $FILOPOE
-  scripts/baseline.sh --allow-dirty $FILOPOE $BL/deliquified
-  scripts/compare-builds.sh $BL/SITE-MAIN $BL/deliquified parity/spike3-expected.txt
+  just baseline-verify SITE-MAIN       # clean baseline, with the spike 0 checks
+  just deliquify check               # review the diff
+  just deliquify write
+  just baseline deliquified --allow-dirty
+  just compare SITE-MAIN deliquified parity/spike3-expected.txt
+  just check-d001 SITE-MAIN deliquified
   ```
+
   The "after" build runs on the uncommitted tree on purpose. Git dates
   then stay unchanged, because `jekyll-last-modified-at` reads committed
-  history; the spike verifies this. Otherwise the 15 files' dates would
-  move and pollute the comparison.
+  history (§2.6). Otherwise the 15 files' dates would move and pollute
+  the comparison.
+- **Timestamp protection:** the comparison never normalizes dates. Meta
+  dumps (each date and its origin), `sitemap.xml` `lastmod` values and
+  feed entry `<updated>` values are compared byte for byte. Any build
+  containing an mtime-derived date fails outright. The codemod rewrites
+  files in place (same inode), so directory order is unchanged, and
+  touches no static file.
 - **Success:**
   - No Liquid remains: `grep -rE '\{%|\{\{'` over content returns
     nothing.
   - Every per-document dump is byte-identical, except the 2 D-001
     files. For those, the code text and all text outside code is equal.
   - Every site file is identical after normalization, except files
-    listed in `spike3-expected.txt`, each traced to D-001. Expected
-    entries are the two post pages, and possibly the Lunr index if
-    whitespace around code differs.
+    listed in `spike3-expected.txt`, each traced to D-001.
   - Any difference that is not explained fails the spike.
+- **Results:** all pass.
+  - No Liquid remains in any tracked Markdown file, and a second
+    `--check` finds nothing to do.
+  - The dumps differ in 4 files: the content and excerpt of the two
+    D-001 posts. All 201 meta files and the manifest are byte-identical.
+  - The site differs in 5 files: the two post pages, and the tag feeds
+    `R.xml`, `plot.xml` and `python.xml`, which carry the posts' full
+    content. The Lunr index, archives and pagination are unchanged.
+  - `parity/codemods/check_d001.py` shows each of the 9 differs by D-001
+    only: 11 converted blocks, and all other text and the other posts'
+    fenced blocks byte-identical.
 - **Afterwards:** with your approval (§14 Q1), commit the change in
   `filopoe`, add D-001 to the ledger, and re-baseline at the new commit.
   That baseline is the reference for spikes 1 and 2. Add the content
@@ -742,7 +840,6 @@ Conventions used below:
 | `_micro/bookmarks/2025-06-16-sample_bookmark_entry.md` | `/bookmarks/2025-06-16-internet-resiliency-club` | `_` slugified |
 | `_digital_garden/watch/topic_note.md` | `/dg/tracking/chat_control` | `_` kept |
 | `_digital_garden/topic/index.md` | `/dg/coding/index` | `dg/coding/index.html` |
-| `_digital_garden/submodule/**` | (submodule) | as Jekyll |
 | `profile/index.html` (`permalink: /`) | `/` | `index.html` |
 | `pages/rss.xml` (`permalink: /feed.xml`) | `/feed.xml` | `feed.xml` |
 | `blog/index.html` + pagination | `/blog/`, `/blog/page2/` … | `blog/index.html`, `blog/page2/index.html` |
@@ -840,7 +937,13 @@ Conventions used below:
       generate CSS for the chosen highlighter and visually check those
       pages.
 - **Commands:**
-  - `cargo run -p parity -- markdown --site $FILOPOE --baseline $BL/<commit> [--parser pulldown|comrak] [--doc PATH] [--report spike1.md]`
+  - Run the comparison:
+
+    ```sh
+    cargo run -p parity -- markdown --site $FILOPOE --baseline $BL/<commit> \
+      [--parser pulldown|comrak] [--doc PATH] [--report spike1.md]
+    ```
+
   - `cargo run -p parity -- extract-fixtures` copies small real
     snippets and their kramdown output into
     `crates/folia-core/tests/fixtures/markdown/<feature>/`.
@@ -858,13 +961,13 @@ Conventions used below:
 
 ### Later risks (unchanged; after spikes 0–3)
 
-4. **Template engine.** Port `default`/`post` (with a computed TOC) to
-   MiniJinja and render one post. Run the `parity` fingerprint on it.
-5. **Sass.** Compile `main.scss` and `dg_styles.scss` with `grass`.
-   The fallback is shelling out to `dart-sass`.
-6. **Git dates.** Compute `modified` (§7.3) from a single `git log`
-   pass, including the submodule. Compare it with `meta/*.json`
-   `last_modified_at` from spike 0.
+- **4. Template engine.** Port `default`/`post` (with a computed TOC) to
+  MiniJinja and render one post. Run the `parity` fingerprint on it.
+- **5. Sass.** Compile `main.scss` and `dg_styles.scss` with `grass`.
+  The fallback is shelling out to `dart-sass`.
+- **6. Git dates.** Compute `modified` (§7.3) from a single `git log`
+  pass. Compare it with `meta/*.json` `last_modified_at` and its origin
+  from spike 0.
 
 Syntax highlighting, v1's separate risk 5, is now gate G6 of spike 1.
 
@@ -945,7 +1048,8 @@ Unchanged from v0. In addition:
 1. **Remove Liquid from Markdown** via a one-off codemod in `filopoe`,
    verified with Jekyll (§7.2, spike 3)? This includes committing the
    change in `filopoe` and accepting D-001 (the `{% highlight %}`
-   wrapper markup in 2 posts). *Recommended: yes.*
+   wrapper markup and a trailing code newline in 2 posts). *Spike 3
+   passed; the change awaits approval before it is committed.*
 2. **IAL policy:** support the used subset in Folia Markdown, or codemod
    it to HTML (§5.3)? *Recommended: support the subset; confirm after
    spike 1.*

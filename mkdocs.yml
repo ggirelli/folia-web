@@ -1,0 +1,70 @@
+site_name: Folia
+site_description: The static-site generator behind ggirelli.info.
+repo_url: https://github.com/ggirelli/folia
+repo_name: ggirelli/folia
+edit_uri: edit/main/docs/
+copyright: Free software under the MIT license.
+
+theme:
+  name: material
+  logo: assets/folia-logo.png
+  favicon: assets/folia-logo.png
+  palette:
+    - scheme: slate
+      primary: green
+      accent: light green
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+    - scheme: default
+      primary: green
+      accent: light green
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.footer
+    - navigation.top
+    - content.code.copy
+    - content.action.edit
+    - search.highlight
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+
+exclude_docs: |
+  requirements.txt
+
+nav:
+  - Home: index.md
+  - Parity baselines: baseline.md
+  - Development:
+      - Development: development.md
+      - How it is made: how-it-is-made.md
+  - Planning:
+      - Plans: planning/index.md
+      - Plan v4 (current): planning/plan.v4.md
+      - Plan v3: planning/plan.v3.md
+      - Plan v2: planning/plan.v2.md
+      - Plan v1: planning/plan.v1.md
+      - Plan v0: planning/plan.v0.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - mdx_truly_sane_lists
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
