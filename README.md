@@ -1,8 +1,6 @@
-<p align="center">
-  <img src="assets/brand/folia-banner.png" alt="Folia: a publishing engine for your digital garden" />
-</p>
-
-# Folia
+<h1 align="center">
+  <img src="assets/brand/folia-banner.png" alt="Folia: a publishing engine for your digital garden">
+</h1>
 
 Folia is the Rust static-site generator behind [ggirelli.info](https://ggirelli.info),
 written to replace Jekyll. It publishes four kinds of content:
@@ -16,7 +14,21 @@ written to replace Jekyll. It publishes four kinds of content:
 Folia is built for one website. It is not meant as a general-purpose
 alternative to Jekyll, Hugo, or Zola, although the code is public.
 
+> [!IMPORTANT]
+>
+> - **Fully vibe coded:** an AI assistant (Claude) writes all of its code, tests, scripts and docs.
+>   Read the [disclaimer](DISCLAIMER.md) before relying on it.
+> - **Free and open source** under the [MIT license](LICENSE), provided as is, **without warranty**.
+
 ## Status
 
-Planning. There is no code yet. The current architecture proposal is in
-[`planning/plan.v2.md`](planning/plan.v2.md).
+Validation spikes. There is no generator yet. The repository holds the
+parity harness, which records production builds of the Jekyll site, and
+the first Rust code: Folia's discovery and routes, which reproduce every
+output path of the site (spike 2).
+
+- [Parity baselines](docs/baseline.md): how to build and compare them.
+- [Development](docs/development.md): how the repository is organized.
+- [Plans](docs/planning/): the architecture proposal; `plan.v4.md` is current.
+
+Contributions follow [CONTRIBUTING.md](CONTRIBUTING.md).
