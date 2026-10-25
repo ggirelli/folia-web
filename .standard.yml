@@ -1,0 +1,2 @@
+# StandardRB (`just lint-rb`). The parity plugin runs inside the Jekyll site's Ruby.
+ruby_version: 3.3

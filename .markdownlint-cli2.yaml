@@ -1,0 +1,17 @@
+# markdownlint configuration (`just lint-md`). Prose wraps at 100 columns; tables and code
+# blocks may run longer.
+config:
+  default: true
+  MD013:
+    line_length: 100
+    tables: false
+    code_blocks: false
+  MD033:
+    allowed_elements: [h1, img, p]
+  # MkDocs admonitions (`!!! note`) indent their body, which reads as an indented code block.
+  MD046: false
+ignores:
+  - site/**
+  - target/**
+  - node_modules/**
+  - vendor/**

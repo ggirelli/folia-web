@@ -1,0 +1,14 @@
+/target
+
+# Built documentation site.
+/site
+
+# MkDocs plugin caches.
+/.cache
+
+# Ruff cache.
+/.ruff_cache
+
+# Ruby tools, installed by `just lint-rb`.
+/vendor
+/.bundle

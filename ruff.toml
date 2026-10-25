@@ -1,0 +1,8 @@
+# Ruff (`just lint-py`, `just fmt-py`): the formatter and linter for the parity tools' Python.
+line-length = 100
+target-version = "py312"
+
+[lint]
+# Pyflakes and pycodestyle (the defaults), plus import order, bugbear, pyupgrade and
+# simplifications.
+extend-select = ["I", "B", "UP", "SIM"]
