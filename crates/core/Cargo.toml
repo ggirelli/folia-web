@@ -1,0 +1,17 @@
+[package]
+name = "folia-core"
+description = "Folia's content model and the contracts modes hand to the site builder"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+jiff.workspace = true
+regex.workspace = true
+thiserror.workspace = true
+yaml-rust2.workspace = true
+
+[lints]
+workspace = true

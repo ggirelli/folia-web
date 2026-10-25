@@ -1,0 +1,17 @@
+[package]
+name = "folia-blog"
+description = "Folia's blog mode: articles, archives, pagination and feeds"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+folia-core.workspace = true
+
+[dev-dependencies]
+jiff.workspace = true
+
+[lints]
+workspace = true
