@@ -305,14 +305,18 @@ fn report(title: &str, jekyll_count: usize, detail: &str, differing: &[String]) 
     false
 }
 
-/// Folia's own directory in the site (plan v6, §14 Q5): its templates and configuration. Neither
-/// Jekyll nor Folia's discovery reads it as part of the site, so changes there do not change a
-/// baseline, and the checkout check leaves them out.
-const FOLIA_DIR: &str = "_folia";
+/// Paths in the site that are Folia's, and that neither Jekyll nor Folia's discovery reads as
+/// part of the site, so changes there do not change a baseline; the checkout check leaves them
+/// out. Each is named exactly, so any other change still counts.
+///
+/// - `_folia`: Folia's templates and configuration (plan v6, §14 Q5).
+/// - `.github/workflows/content.yml`: the workflow that runs the content lint (plan v7, §7.2).
+///   Only this file: another workflow is a change like any other.
+const FOLIA_PATHS: [&str; 2] = ["_folia", ".github/workflows/content.yml"];
 
 /// The site checkout must be the commit the baseline was built from, with no changes, or with
 /// exactly the uncommitted changes it was built with (`diff`) and no untracked files. Changes
-/// below `_folia/` do not count.
+/// to `FOLIA_PATHS` do not count.
 pub fn check_checkout(site_dir: &Path, commit: &str, diff: Option<&str>) -> Result<(), String> {
     let git = |args: &[&str]| {
         Command::new("git")
@@ -332,8 +336,14 @@ pub fn check_checkout(site_dir: &Path, commit: &str, diff: Option<&str>) -> Resu
             short(commit)
         ));
     }
-    let outside_folia = format!(":(exclude){FOLIA_DIR}");
-    let status = git(&["status", "--porcelain", "--", ".", &outside_folia])?;
+    let outside_folia = FOLIA_PATHS.map(|path| format!(":(exclude,literal){path}"));
+    let pathspec = |args: &[&'static str]| {
+        let mut all: Vec<&str> = args.to_vec();
+        all.extend(["--", "."]);
+        all.extend(outside_folia.iter().map(String::as_str));
+        all
+    };
+    let status = git(&pathspec(&["status", "--porcelain"]))?;
     match diff {
         None if !status.trim().is_empty() => {
             Err(format!("{} has uncommitted changes", site_dir.display()))
@@ -342,12 +352,10 @@ pub fn check_checkout(site_dir: &Path, commit: &str, diff: Option<&str>) -> Resu
             "{} has untracked files, which the baseline's diff cannot vouch for",
             site_dir.display()
         )),
-        Some(diff) if git(&["diff", "--binary", "HEAD", "--", ".", &outside_folia])? != diff => {
-            Err(format!(
-                "{}'s uncommitted changes are not the ones the baseline was built with",
-                site_dir.display()
-            ))
-        }
+        Some(diff) if git(&pathspec(&["diff", "--binary", "HEAD"]))? != diff => Err(format!(
+            "{}'s uncommitted changes are not the ones the baseline was built with",
+            site_dir.display()
+        )),
         Some(_) => {
             eprintln!(
                 "Note: the baseline was built from uncommitted changes, which {} still has.",
@@ -428,6 +436,64 @@ mod tests {
         let repo = Repo::new("folia");
         repo.write("_folia/templates/page.html", "{{ content }}");
         assert_eq!(repo.check(), Ok(()));
+    }
+
+    /// The content lint's workflow does not count, untracked or changed once tracked.
+    #[test]
+    fn the_content_workflow_does_not_count() {
+        let repo = Repo::new("workflow");
+        repo.write(".github/workflows/content.yml", "name: Content");
+        assert_eq!(repo.check(), Ok(()));
+
+        repo.git(&["add", "."]);
+        repo.git(&["commit", "--quiet", "-m", "workflow"]);
+        repo.write(".github/workflows/content.yml", "name: Changed");
+        assert_eq!(repo.check(), Ok(()));
+    }
+
+    /// Only that file: other workflows, other files of that name, and look-alikes still count.
+    #[test]
+    fn other_workflows_still_count() {
+        for path in [
+            ".github/workflows/jekyll.yml",
+            ".github/workflows/content.yml.bak",
+            ".github/workflows/content.ym?",
+            ".github/content.yml",
+            "content.yml",
+        ] {
+            let repo = Repo::new("lookalike");
+            repo.write(".github/workflows/content.yml", "");
+            repo.write(path, "");
+            assert!(
+                repo.check()
+                    .is_err_and(|e| e.ends_with("has uncommitted changes")),
+                "{path}"
+            );
+        }
+    }
+
+    /// With a baseline built from uncommitted changes, the workflow is not an untracked file, and
+    /// the changes must still be exactly the recorded ones.
+    #[test]
+    fn the_content_workflow_does_not_count_against_a_diff() {
+        let repo = Repo::new("diff");
+        repo.write("about.md", "Edited");
+        let diff = repo.git(&["diff", "--binary", "HEAD"]);
+        let head = repo.git(&["rev-parse", "HEAD"]);
+        repo.write(".github/workflows/content.yml", "name: Content");
+        assert_eq!(check_checkout(&repo.0, head.trim(), Some(&diff)), Ok(()));
+
+        repo.write("about.md", "Edited again");
+        assert!(
+            check_checkout(&repo.0, head.trim(), Some(&diff))
+                .is_err_and(|e| e.ends_with("not the ones the baseline was built with"))
+        );
+        repo.write("about.md", "Edited");
+        repo.write(".github/workflows/other.yml", "");
+        assert!(
+            check_checkout(&repo.0, head.trim(), Some(&diff))
+                .is_err_and(|e| e.ends_with("which the baseline's diff cannot vouch for"))
+        );
     }
 
     #[test]

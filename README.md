@@ -23,8 +23,10 @@ alternative to Jekyll, Hugo, or Zola, although the code is public.
 ## Status
 
 Validation spikes, done; the first vertical slice is under way. Its first
-step, under review, builds one page (`/about`) with `folia build`: rendered
-from templates kept in the site, with its redirect stub and the static
+step, built with its checks passing and committed in Folia (its templates
+are not yet committed in the site), builds one page (`/about`) with
+`folia build`: rendered from templates kept in the site, with its redirect
+stub and the static
 files, matching Jekyll's output. The repository also holds the parity
 harness, which records production builds of the Jekyll site; Folia's
 discovery and routes, which reproduce every output path of the site
@@ -33,6 +35,6 @@ every Markdown document of the site (spike 1).
 
 - [Parity baselines](docs/baseline.md): how to build and compare them.
 - [Development](docs/development.md): how the repository is organized.
-- [Plans](docs/planning/): the architecture proposal; `plan.v6.md` is current.
+- [Plans](docs/planning/): the architecture proposal; `plan.v7.md` is current.
 
 Contributions follow [CONTRIBUTING.md](CONTRIBUTING.md).

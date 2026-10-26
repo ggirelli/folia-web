@@ -142,6 +142,11 @@ markdown label *flags:
 pages label:
     cargo run --quiet --locked -p parity -- pages --site {{site}} --baseline {{baselines}}/{{label}} --config parity/filopoe.toml
 
+# Check the reference site's Markdown has no Liquid outside code (content lint)
+[group('parity')]
+liquid:
+    cargo run --quiet --locked -p parity -- liquid --site {{site}} --config parity/filopoe.toml
+
 # Check the page check fails on a baseline changed where it looks (vertical slice)
 [group('parity')]
 pages-negative label:

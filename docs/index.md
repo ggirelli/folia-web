@@ -20,9 +20,10 @@ or Zola, although the code is public.
 
 ## Status
 
-Folia has finished its validation spikes ([plan v6, §10](planning/plan.v6.md#10-validation-spikes))
-and is building its first vertical slice ([§12.2](planning/plan.v6.md#122-vertical-slice)). Its
-first step, under review, builds one page, `/about`, through the whole pipeline: `folia build`
+Folia has finished its validation spikes ([plan v7, §10](planning/plan.v7.md#10-validation-spikes))
+and is building its first vertical slice ([§12.2](planning/plan.v7.md#122-vertical-slice)). Its
+first step, built with its checks passing and committed in Folia (the templates it uses are not
+yet committed in the site), builds one page, `/about`, through the whole pipeline: `folia build`
 renders it with MiniJinja templates kept in the site, writes its redirect stub, and copies the
 static files, and the result matches Jekyll's. A post and two garden notes come next. Besides
 that, the parity harness records production builds of the Jekyll site with Jekyll's own

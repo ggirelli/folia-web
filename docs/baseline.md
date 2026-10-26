@@ -130,6 +130,43 @@ the script, and fails with the file and line on any other Liquid. The expected d
 listed in `parity/spike3-expected.txt`, and the deviation they come from in
 `parity/deviations.toml`.
 
+### Keeping Liquid out (content lint)
+
+Folia does not run Liquid, but Jekyll still does, so new Liquid in the prose of the site's Markdown
+would work in Jekyll and show as written in Folia. The content lint (plan v7, §7.2) fails on it:
+
+```sh
+just liquid                                # the reference site, ../filopoe or $FOLIA_SITE
+cargo run --locked -p parity -- liquid --site SITE --config parity/filopoe.toml
+```
+
+- **Checked:** the body of every Markdown document Folia discovers. Not front matter, excluded
+  files, hidden directories, or Markdown files without front matter, which Jekyll copies as they
+  are. Only Markdown: HTML pages, layouts and includes go through Liquid in Jekyll too, but are
+  not checked.
+- **Found:** each `{{` and `{%`, in the source as Liquid reads it. Jekyll runs Liquid before
+  kramdown, so raw HTML, HTML comments, HTML's `<code>` and Markdown escapes (`\{{`) do not hide
+  a delimiter.
+- **Exempt:** code, as Folia's Markdown parser reads it: fenced code blocks (backticks or
+  tildes), indented code blocks, and code spans. A code span kramdown keeps as text, such as one
+  in `<u>`, is not code.
+- **Reported** as `file:line:column`, with lines counted from the top of the file. The lint exits
+  1 if it finds any, and 2 if it cannot check (configuration, discovery or reading).
+
+The reference site passes at its local `SITE-COMMIT-B`. Its public `main`, `SITE-MAIN`, still has the
+Liquid spike 3 removed (in `SITE-COMMIT-A`, not yet published), and fails with 363 findings.
+
+The exemption keeps code examples right for Folia, which shows them as written. Jekyll runs Liquid
+inside code too, so until the switch a Liquid example in code may still need `{% raw %}` to show
+as intended on the Jekyll site. The lint neither asks for that nor adds it.
+
+`filopoe`'s `content` workflow runs the same command on Markdown changes, with Folia checked out
+at a pinned commit beside the site. From a `filopoe` checkout with Folia next to it:
+
+```sh
+cargo run --locked --manifest-path ../folia/Cargo.toml -p parity -- liquid --site . --config ../folia/parity/filopoe.toml
+```
+
 ## Checking routes (spike 2)
 
 ```sh
@@ -149,7 +186,9 @@ Folia itself refuses a plan where two outputs share a URL or an output file. The
 site checkout that is not the commit the baseline was built from (with exactly the changes in
 its `site.diff`, if it has one, and no untracked files), and uses the baseline's
 build time to decide what was future-dated. Changes below `_folia/`, Folia's own templates and
-configuration in the site, do not count: neither Jekyll nor Folia's discovery reads them.
+configuration in the site, do not count, nor do changes to `.github/workflows/content.yml`, the
+content lint's workflow: neither Jekyll nor Folia's discovery reads them. Any other file counts,
+other workflows included.
 
 ## Checking Markdown (spike 1)
 

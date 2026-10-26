@@ -15,7 +15,7 @@
 //! 7. `render`: HTML as kramdown writes it, with code highlighted by `highlight`.
 //!
 //! [`excerpt`] finds the part of a document that listings and feeds show, and [`excerpt_html`]
-//! renders it the way the body is rendered.
+//! renders it the way the body is rendered. [`code_ranges`] says where the source is code.
 
 mod excerpt;
 mod heading;
@@ -28,8 +28,12 @@ mod tree;
 mod typography;
 mod wiki_link;
 
+use std::ops::Range;
+
 pub use excerpt::excerpt;
 pub use wiki_link::LinkResolver;
+
+use tree::{Kind, Node};
 
 /// Renders `src` as HTML. Wiki-links are resolved with `links`; without one they stay as written.
 #[must_use]
@@ -38,10 +42,7 @@ pub fn to_html(src: &str, links: Option<&dyn LinkResolver>) -> String {
         Some(links) => wiki_link::replace(src, links),
         None => src.to_owned(),
     };
-    // kramdown reads the source as ending with a line break.
-    if !src.ends_with('\n') {
-        src.push('\n');
-    }
+    with_line_break(&mut src);
     let mut root = tree::parse(&src);
     html::apply(&mut root, &src);
     ial::apply(&mut root, &src);
@@ -49,6 +50,41 @@ pub fn to_html(src: &str, links: Option<&dyn LinkResolver>) -> String {
     typography::apply(&mut root, &src);
     heading::assign_ids(&mut root);
     render::html(&root, &src)
+}
+
+/// Where `src` is code, as Folia renders it: code blocks, fenced or indented, with their fences,
+/// and code spans, with their backticks. A code span inside an element kramdown keeps as written,
+/// such as `u`, is text (`html`), so it is not code.
+#[must_use]
+pub fn code_ranges(src: &str) -> Vec<Range<usize>> {
+    let mut parsed = src.to_owned();
+    with_line_break(&mut parsed);
+    let mut root = tree::parse(&parsed);
+    html::apply(&mut root, &parsed);
+    let mut ranges = Vec::new();
+    gather_code(&root, &mut ranges);
+    // Within `src`, without the line break added for parsing.
+    for range in &mut ranges {
+        range.end = range.end.min(src.len());
+    }
+    ranges
+}
+
+/// kramdown reads the source as ending with a line break.
+fn with_line_break(src: &mut String) {
+    if !src.ends_with('\n') {
+        src.push('\n');
+    }
+}
+
+fn gather_code(node: &Node, ranges: &mut Vec<Range<usize>>) {
+    match node.kind {
+        Kind::CodeBlock { .. } | Kind::Code(_) => ranges.push(node.span.clone()),
+        _ => node
+            .children
+            .iter()
+            .for_each(|child| gather_code(child, ranges)),
+    }
 }
 
 /// Renders the excerpt of `body` as HTML, resolving wiki-links with `links` as the body does.

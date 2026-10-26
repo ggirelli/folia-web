@@ -32,7 +32,8 @@ Each mode crate depends on `folia-core` only, never on another mode.
   redirect stubs. `build` is the pipeline (so far for `/about`, plan v6, §12.2), `render` renders
   pages with MiniJinja from the site's templates (`_folia/templates` in the site), and `output`
   writes the destination whole or not at all.
-- **`crates/parity`**: the dev-only parity tool (`just routes`, `just markdown`, `just pages`).
+- **`crates/parity`**: the dev-only parity tool (`just routes`, `just markdown`, `just pages`), and
+  the content lint (`just liquid`).
   It reads baselines as black boxes and calls only Folia's public API. `markdown` holds spike 1's
   check: `dom` (html5ever parsing and normalization), `liquid` (the template filters excerpts go
   through), `ledger` and `report`. `pages` builds the site and compares what Folia writes with

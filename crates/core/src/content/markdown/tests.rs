@@ -330,3 +330,33 @@ fn an_excerpt_without_wiki_links_does_not_change() {
         assert_eq!(excerpt_html(body, Some(&Garden)), expected);
     }
 }
+
+/// The source of each code range.
+fn code(src: &str) -> Vec<&str> {
+    code_ranges(src).into_iter().map(|r| &src[r]).collect()
+}
+
+/// Code blocks, fenced or indented, and code spans are code, with their fences and backticks.
+#[test]
+fn code_ranges_cover_blocks_and_spans() {
+    let src = "Use `{{ x }}` here.\n\n```liquid\n{% if a %}\n```\n\n    {{ y }}\n\nText.\n";
+    assert_eq!(
+        code(src),
+        ["`{{ x }}`", "```liquid\n{% if a %}\n```", "{{ y }}\n"]
+    );
+}
+
+/// kramdown keeps what is inside `u` as written, so its backticks are text, not code; inside a
+/// span element such as `em`, a code span is still code.
+#[test]
+fn code_ranges_follow_kramdown_raw_html() {
+    assert_eq!(code("<u>`{{ x }}`</u>\n"), Vec::<&str>::new());
+    assert_eq!(code("<em>`{{ x }}`</em>\n"), ["`{{ x }}`"]);
+}
+
+/// An unclosed fence runs to the end of the document; an unmatched backtick is text.
+#[test]
+fn code_ranges_of_unclosed_code() {
+    assert_eq!(code("```\n{{ x }}"), ["```\n{{ x }}"]);
+    assert_eq!(code("a ` {{ x }}\n"), Vec::<&str>::new());
+}

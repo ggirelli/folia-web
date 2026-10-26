@@ -7,9 +7,13 @@
 //! cargo run -p parity -- routes --site ../filopoe --baseline ../folia-baselines/BASELINE-A --config parity/filopoe.toml
 //! cargo run -p parity -- markdown --site ../filopoe --baseline ../folia-baselines/BASELINE-A
 //! cargo run -p parity -- pages --site ../filopoe --baseline ../folia-baselines/BASELINE-B --config parity/filopoe.toml
+//! cargo run -p parity -- liquid --site ../filopoe --config parity/filopoe.toml
 //! ```
+//!
+//! `liquid` is the exception: a content lint for the site, which needs no baseline.
 
 mod baseline;
+mod liquid;
 mod markdown;
 mod pages;
 mod routes;
@@ -73,6 +77,15 @@ enum Command {
         #[arg(long)]
         config: PathBuf,
     },
+    /// Check the site's Markdown has no Liquid outside code, which Folia would show as written
+    Liquid {
+        /// The Jekyll site
+        #[arg(long)]
+        site: PathBuf,
+        /// Folia's configuration for the site
+        #[arg(long)]
+        config: PathBuf,
+    },
 }
 
 fn main() -> ExitCode {
@@ -102,6 +115,7 @@ fn main() -> ExitCode {
             baseline,
             config,
         } => pages::run(&site, &baseline, &config),
+        Command::Liquid { site, config } => liquid::run(&site, &config),
     };
     match result {
         Ok(true) => ExitCode::SUCCESS,
