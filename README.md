@@ -27,7 +27,9 @@ step, built with its checks passing and committed in Folia (its templates
 are not yet committed in the site), builds one page (`/about`) with
 `folia build`: rendered from templates kept in the site, with its redirect
 stub and the static
-files, matching Jekyll's output. The repository also holds the parity
+files, matching Jekyll's output. Its second step, a blog post, is built and
+checked and awaits review; the Jekyll site is still the one published.
+The repository also holds the parity
 harness, which records production builds of the Jekyll site; Folia's
 discovery and routes, which reproduce every output path of the site
 (spike 2); and its Markdown renderer, which reproduces the body HTML of

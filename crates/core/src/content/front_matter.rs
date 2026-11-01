@@ -93,6 +93,34 @@ impl FrontMatter {
         self.0.get(&Yaml::String(key.to_owned()))
     }
 
+    /// The entries of a mapping, in the order they are written, with their values as JSON;
+    /// `None` when the key is absent or not a mapping.
+    #[must_use]
+    pub fn entries(&self, key: &str) -> Option<Vec<(String, serde_json::Value)>> {
+        match self.get(key)? {
+            Yaml::Hash(mapping) => Some(
+                mapping
+                    .iter()
+                    .map(|(key, value)| (json_key(key), to_json(value)))
+                    .collect(),
+            ),
+            _ => None,
+        }
+    }
+
+    /// The keys that are strings, in the order they are written.
+    pub fn keys(&self) -> impl Iterator<Item = &str> {
+        self.0.keys().filter_map(Yaml::as_str)
+    }
+
+    /// The value of a key as JSON, for templates: keys become strings, and a number that JSON
+    /// cannot hold becomes null. A JSON mapping sorts its keys; [`FrontMatter::entries`] keeps
+    /// their order.
+    #[must_use]
+    pub fn json(&self, key: &str) -> Option<serde_json::Value> {
+        self.get(key).map(to_json)
+    }
+
     /// A scalar value as a string; `None` when the key is absent or null.
     ///
     /// # Errors
@@ -174,6 +202,37 @@ fn scalar(key: &str, value: &Yaml) -> Result<Option<String>, FrontMatterError> {
     }
 }
 
+fn to_json(value: &Yaml) -> serde_json::Value {
+    use serde_json::Value;
+    match value {
+        Yaml::String(text) => Value::String(text.clone()),
+        Yaml::Integer(number) => Value::from(*number),
+        Yaml::Real(text) => text
+            .parse::<f64>()
+            .ok()
+            .and_then(serde_json::Number::from_f64)
+            .map_or(Value::Null, Value::Number),
+        Yaml::Boolean(flag) => Value::Bool(*flag),
+        Yaml::Array(items) => Value::Array(items.iter().map(to_json).collect()),
+        Yaml::Hash(mapping) => Value::Object(
+            mapping
+                .iter()
+                .map(|(key, value)| (json_key(key), to_json(value)))
+                .collect(),
+        ),
+        Yaml::Null | Yaml::Alias(_) | Yaml::BadValue => Value::Null,
+    }
+}
+
+fn json_key(key: &Yaml) -> String {
+    match key {
+        Yaml::String(text) | Yaml::Real(text) => text.clone(),
+        Yaml::Integer(number) => number.to_string(),
+        Yaml::Boolean(flag) => flag.to_string(),
+        _ => String::new(),
+    }
+}
+
 fn list(key: &str, items: &[Yaml]) -> Result<Vec<String>, FrontMatterError> {
     let mut strings = Vec::with_capacity(items.len());
     for item in items {
@@ -235,6 +294,36 @@ mod tests {
         assert_eq!(front.strings("redirect_from").unwrap(), ["/x"]);
         assert_eq!(front.words("tags").unwrap(), ["indieweb", "LLM"]);
         assert!(front.published());
+    }
+
+    #[test]
+    fn values_read_as_json_keep_their_shape() {
+        let front = FrontMatter::parse(
+            "toc:\n  enabled: true\n  min_level: 2\nlist: [a, 1.5]\nlast_modified_at: 2021-08-24\n",
+        )
+        .unwrap();
+        assert_eq!(
+            front.json("toc"),
+            Some(serde_json::json!({"enabled": true, "min_level": 2}))
+        );
+        assert_eq!(front.json("list"), Some(serde_json::json!(["a", 1.5])));
+        assert_eq!(
+            front.json("last_modified_at"),
+            Some(serde_json::json!("2021-08-24"))
+        );
+        assert_eq!(front.json("absent"), None);
+        assert_eq!(
+            front.entries("toc").unwrap(),
+            [
+                ("enabled".to_owned(), serde_json::json!(true)),
+                ("min_level".to_owned(), serde_json::json!(2))
+            ]
+        );
+        assert_eq!(front.entries("list"), None);
+        assert_eq!(
+            front.keys().collect::<Vec<_>>(),
+            ["toc", "list", "last_modified_at"]
+        );
     }
 
     #[test]

@@ -10,14 +10,18 @@
 //! 3. **Main content:** the page's `div.main-content` is equal after spike 1's normalization
 //!    (`dom`), and so is its text.
 //! 4. **Other files:** redirect stubs and static files are byte-identical.
+//! 5. **Entries** (`entries`): each document's dates equal the baseline's dump; a page's table of
+//!    contents equals Jekyll's; its code blocks are its body's, highlighted as spike 1 does.
 //!
 //! Outputs Folia does not build yet are counted, not compared.
+
+mod entries;
 
 use std::path::{Path, PathBuf};
 
 use folia::build::{Built, build};
 use folia::config::Config;
-use folia_core::content::Route;
+use folia_core::content::{Route, SiteClock};
 
 use crate::baseline::{self, Row};
 use crate::markdown::dom::{self, Node};
@@ -55,7 +59,8 @@ pub fn run(site_dir: &Path, baseline_dir: &Path, config_path: &Path) -> Result<b
             return Ok(false);
         }
     };
-    let result = compare(&built, &out, &baseline_dir.join("site"), &baseline.rows);
+    let clock = SiteClock::new(&config.time_zone, baseline.built_at).map_err(|e| e.to_string())?;
+    let result = compare(&built, &out, baseline_dir, &baseline.rows, &clock);
     let _ = std::fs::remove_dir_all(&out);
     let passed = result?;
     println!(
@@ -69,7 +74,14 @@ pub fn run(site_dir: &Path, baseline_dir: &Path, config_path: &Path) -> Result<b
     Ok(passed)
 }
 
-fn compare(built: &Built, out: &Path, jekyll: &Path, rows: &[Row]) -> Result<bool, String> {
+fn compare(
+    built: &Built,
+    out: &Path,
+    baseline_dir: &Path,
+    rows: &[Row],
+    clock: &SiteClock,
+) -> Result<bool, String> {
+    let jekyll = &baseline_dir.join("site");
     println!(
         "Folia built {} pages, {} redirect stubs and {} static files; {} planned outputs are not built yet.",
         built.pages.len(),
@@ -87,7 +99,17 @@ fn compare(built: &Built, out: &Path, jekyll: &Path, rows: &[Row]) -> Result<boo
             continue;
         };
         passed &= check_page(&path, &jekyll, &folia);
+        let (toc_ok, _) = entries::check_toc(
+            &path,
+            &dom::normalize_document(&jekyll),
+            &dom::normalize_document(&folia),
+        );
+        passed &= toc_ok;
+        if let Some(entry) = built.entries.iter().find(|entry| &entry.route == route) {
+            passed &= entries::check_code(&path, entry, &jekyll, &folia);
+        }
     }
+    passed &= entries::check_dates(&built.entries, rows, &baseline_dir.join("dump"), clock);
 
     let pages: Vec<String> = built.pages.iter().map(Route::output_path).collect();
     let stubs: Vec<String> = built.stubs.iter().map(Route::output_path).collect();

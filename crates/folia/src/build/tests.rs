@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use super::*;
-use crate::config::{Identity, Roots};
+use crate::config::{Author, Identity, Roots};
 
 /// A throwaway site, committed to its own repository on 2026-01-04 at 13:36:24 in Stockholm,
 /// with an output directory next to it; removed when dropped.
@@ -114,6 +114,18 @@ fn config() -> Config {
             title: "Filopoetica".into(),
             description: "An eclectic blog.".into(),
         },
+        authors: [(
+            "gg".to_owned(),
+            Author {
+                name: "Gabriele Girelli".into(),
+                display_name: "GG".into(),
+                avatar: "gg.webp".into(),
+                web: "/".into(),
+                description: "Eclectic.".into(),
+            },
+        )]
+        .into_iter()
+        .collect(),
     }
 }
 
@@ -140,6 +152,60 @@ fn the_slice_builds_its_page_its_stub_and_the_static_files() {
     assert_eq!(fixture.read("assets/images/cc.png"), "png");
     assert!(!fixture.dest().join("now.html").exists());
     assert!(built.not_built > 0);
+}
+
+/// What a post's template shows of it, and of the site.
+const POST: &str = "{{ page.title }} by {{ site.authors[page.author].display_name }}, \
+                    {{ page.date | date(\"%d %b %Y\") }} ({{ page.modified }}): \
+                    {{ page.toc.placement }} {% for entry in page.toc.entries %}#{{ entry.id }} {% endfor %}\
+                    after {{ page.previous.title }}, before {{ page.next.title }}\
+                    <main>{{ content | safe }}</main>";
+
+#[test]
+fn the_slice_builds_its_post_with_its_dates_contents_and_neighbours() {
+    let fixture = Fixture::new(
+        "post",
+        &[
+            ("base.html", BASE),
+            ("page.html", PAGE),
+            ("post.html", POST),
+        ],
+    );
+    fixture.write(
+        SLICE_POSTS[0],
+        "---\ntitle: Webmentions\nauthor: gg\ntoc:\n  enabled: true\n  position: left\n---\n### One\n\n#### Two\n",
+    );
+    fixture.write(
+        "_posts/2021/2021-08-17-later.md",
+        "---\ntitle: Later\n---\nL\n",
+    );
+    fixture.git(&["add", "."]);
+    fixture.git(&["commit", "--quiet", "-m", "posts"]);
+    let built = fixture.build().unwrap();
+    assert!(
+        built
+            .pages
+            .contains(&Route::html("/blog/2021/08/08/webmentions").unwrap())
+    );
+    assert_eq!(
+        fixture.read("blog/2021/08/08/webmentions.html"),
+        "Webmentions by GG, 08 Aug 2021 (2026-01-04T13:36:24+01:00): left #one \
+         after B, before Later\
+         <main><h3 id=\"one\">One</h3>\n\n<h4 id=\"two\">Two</h4>\n</main>"
+    );
+    let entry = built
+        .entries
+        .iter()
+        .find(|entry| entry.doc.as_str() == SLICE_POSTS[0])
+        .unwrap();
+    assert_eq!(
+        entry.published,
+        Some("2021-08-07T22:00:00Z".parse().unwrap())
+    );
+    assert_eq!(
+        entry.modified.map(|m| m.from),
+        Some(folia_core::content::ModifiedFrom::Git)
+    );
 }
 
 #[test]

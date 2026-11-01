@@ -1,9 +1,11 @@
-//! The build pipeline (plan v6, §11), so far for the first vertical slice (§12.2 step 1).
+//! The build pipeline (plan v6, §11), so far for the vertical slice (plan v7, §12.2 steps 1 and
+//! 2).
 //!
 //! 1. Plan every output of the site, and check the route table (`site::plan`).
-//! 2. Build the slice's pages ([`SLICE_PAGES`]) with the pages mode, dated by their last commit.
-//! 3. Assemble the site index templates show: the site's identity, the build's year, and the
-//!    blog's categories.
+//! 2. Build the slice's pages ([`SLICE_PAGES`]) with the pages mode, and its posts
+//!    ([`SLICE_POSTS`]) with the blog mode, dated with their last commits.
+//! 3. Assemble the site index templates show: the site's identity and authors, the build's year,
+//!    and the blog's categories.
 //! 4. Check every page's template, then render each page.
 //! 5. Add a redirect stub for each of their `redirect_from` URLs, and copy every static file.
 //! 6. Write it all to the destination (`output`).
@@ -16,7 +18,7 @@ use std::fmt::Write;
 use std::path::Path;
 
 use folia_core::content::{Diagnostic, LastCommits, Mode, Route, SiteClock, SourceDoc};
-use folia_core::publish::ModeOutput;
+use folia_core::publish::{EntrySummary, ModeOutput};
 use jiff::Timestamp;
 use serde_json::json;
 
@@ -25,8 +27,11 @@ use crate::output::{self, Content};
 use crate::render::Renderer;
 use crate::site::{Site, plan, redirect_stub};
 
-/// The pages the first vertical slice builds.
+/// The pages the vertical slice builds.
 pub const SLICE_PAGES: [&str; 1] = ["pages/profile.md"];
+
+/// The posts the vertical slice builds.
+pub const SLICE_POSTS: [&str; 1] = ["_posts/2021/2021-08-08-sample-post.md"];
 
 /// What a build wrote.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -39,6 +44,8 @@ pub struct Built {
     pub statics: usize,
     /// Planned outputs not built yet.
     pub not_built: usize,
+    /// The entries of the documents built, with their dates.
+    pub entries: Vec<EntrySummary>,
 }
 
 /// Builds the site at `root` into `dest`, as of the build time `now`.
@@ -55,7 +62,7 @@ pub fn build(
 ) -> Result<Built, Vec<Diagnostic>> {
     let site = plan(root, config, now)?;
     let clock = SiteClock::new(&config.time_zone, now).map_err(|e| vec![Diagnostic::site(e)])?;
-    let pages = build_pages(root, &site, &clock)?;
+    let pages = build_documents(root, &site, &clock)?;
     let index = site_index(config, &site, &clock)?;
 
     let renderer = Renderer::new(&root.join(&config.templates_dir));
@@ -110,20 +117,51 @@ pub fn build(
         return Err(unplanned);
     }
     built.not_built = planned.len() - outputs.len();
+    built.entries = pages.entries;
     output::write(dest, root, &outputs).map_err(|e| vec![e])?;
     Ok(built)
 }
 
-/// The slice's pages, built by the pages mode.
-fn build_pages(root: &Path, site: &Site, clock: &SiteClock) -> Result<ModeOutput, Vec<Diagnostic>> {
-    let docs: Vec<SourceDoc> = documents(site, Mode::Pages)
+/// The slice's pages and posts, built by the pages and blog modes, with the git dates of their
+/// sources.
+fn build_documents(
+    root: &Path,
+    site: &Site,
+    clock: &SiteClock,
+) -> Result<ModeOutput, Vec<Diagnostic>> {
+    let pages: Vec<SourceDoc> = documents(site, Mode::Pages)
         .iter()
         .filter(|doc| SLICE_PAGES.contains(&doc.id.as_str()))
         .cloned()
         .collect();
-    let commits = LastCommits::read(root, docs.iter().map(|doc| &doc.id))
-        .map_err(|e| vec![Diagnostic::site(e)])?;
-    folia_pages::build(&docs, &commits, clock)
+    let posts = documents(site, Mode::Blog);
+    let dated = pages.iter().map(|doc| &doc.id).chain(
+        posts
+            .iter()
+            .map(|doc| &doc.id)
+            .filter(|id| SLICE_POSTS.contains(&id.as_str())),
+    );
+    let commits = LastCommits::read(root, dated).map_err(|e| vec![Diagnostic::site(e)])?;
+
+    let mut output = ModeOutput::default();
+    let mut problems = Vec::new();
+    for built in [
+        folia_pages::build(&pages, &commits, clock),
+        folia_blog::build(posts, &SLICE_POSTS, &commits, clock),
+    ] {
+        match built {
+            Ok(built) => {
+                output.entries.extend(built.entries);
+                output.pages.extend(built.pages);
+            }
+            Err(more) => problems.extend(more),
+        }
+    }
+    if problems.is_empty() {
+        Ok(output)
+    } else {
+        Err(problems)
+    }
 }
 
 /// What every template sees as `site` (plan v6, §6.3).
@@ -136,12 +174,27 @@ fn site_index(
         .into_iter()
         .map(|(name, count)| json!({"name": name, "anchor": anchor(&name), "count": count}))
         .collect();
+    let authors: serde_json::Map<String, serde_json::Value> = config
+        .authors
+        .iter()
+        .map(|(key, author)| {
+            let author = json!({
+                "name": author.name,
+                "display_name": author.display_name,
+                "avatar": author.avatar,
+                "web": author.web,
+                "description": author.description,
+            });
+            (key.clone(), author)
+        })
+        .collect();
     Ok(json!({
         "url": config.site.url,
         "title": config.site.title,
         "description": config.site.description,
         "year": clock.year(),
         "categories": categories,
+        "authors": authors,
     }))
 }
 

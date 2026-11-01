@@ -152,6 +152,11 @@ liquid:
 pages-negative label:
     scripts/pages-negative.sh {{site}} {{baselines}}/{{label}} "$(mktemp -d)/negative"
 
+# Check a step of the vertical slice keeps out of the other step's mode (2 or 3)
+[group('parity')]
+slice-boundary step base="main":
+    scripts/slice-boundary.sh {{step}} {{base}}
+
 # Check the Markdown check fails on a baseline changed once per gate (spike 1)
 [group('parity')]
 markdown-negative label:

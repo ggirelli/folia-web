@@ -224,6 +224,13 @@ fn table(out: &mut String, alignments: &[Alignment], node: &Node, indent: usize,
     out.push_str("</table>\n");
 }
 
+/// The HTML of `node`'s children, as they are written inside it.
+pub fn inline_html(node: &Node, src: &str) -> String {
+    let mut out = String::new();
+    inlines(&mut out, node, src);
+    out
+}
+
 fn inlines(out: &mut String, node: &Node, src: &str) {
     for child in &node.children {
         inline(out, child, src);

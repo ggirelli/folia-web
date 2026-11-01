@@ -1,6 +1,7 @@
 //! The site configuration, `folia.toml`: site identity and paths, not publishing rules
 //! (plan v3, §3).
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::Deserialize;
@@ -25,6 +26,9 @@ pub struct Config {
     pub roots: Roots,
     /// Who the site is: what templates show, and the URL redirect stubs point to.
     pub site: Identity,
+    /// The site's authors, by the key a document's `author` names.
+    #[serde(default)]
+    pub authors: BTreeMap<String, Author>,
 }
 
 /// Where templates live unless the configuration says otherwise: in the site, next to the
@@ -54,6 +58,22 @@ pub struct Identity {
     /// Its name (`Filopoetica`).
     pub title: String,
     /// Its tagline.
+    pub description: String,
+}
+
+/// An author, as pages show them.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct Author {
+    /// Their name (`Gabriele Girelli`).
+    pub name: String,
+    /// The name shown in a post's author box.
+    pub display_name: String,
+    /// Their picture, relative to the site root.
+    pub avatar: String,
+    /// Their web page.
+    pub web: String,
+    /// A line about them.
     pub description: String,
 }
 
@@ -95,6 +115,23 @@ mod tests {
         assert_eq!(config.include, Vec::<String>::new());
         assert_eq!(config.templates_dir, "_folia/templates");
         assert_eq!(config.site.url, "https://example.com");
+        assert!(config.authors.is_empty());
+    }
+
+    #[test]
+    fn authors_are_read_by_their_key() {
+        let config: Config = toml::from_str(
+            "time-zone = \"UTC\"\n[roots]\nblog = \"b\"\nmicro = \"m\"\ngarden = \"g\"\n[site]\nurl = \"u\"\ntitle = \"t\"\ndescription = \"d\"\n[authors.gg]\nname = \"G\"\ndisplay-name = \"GG\"\navatar = \"a.webp\"\nweb = \"/\"\ndescription = \"x\"\n",
+        )
+        .unwrap();
+        assert_eq!(config.authors["gg"].display_name, "GG");
+        assert!(
+            toml::from_str::<Config>(
+                "time-zone = \"UTC\"\n[roots]\nblog = \"b\"\nmicro = \"m\"\ngarden = \"g\"\n[site]\nurl = \"u\"\ntitle = \"t\"\ndescription = \"d\"\n[presentation]\ncomments = false\n"
+            )
+            .is_err(),
+            "presentation defaults are Rust's, not the configuration's"
+        );
     }
 
     #[test]

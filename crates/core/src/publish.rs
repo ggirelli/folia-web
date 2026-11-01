@@ -1,11 +1,13 @@
 //! The contracts a mode hands to the site builder (plan v6, §6.2).
 //!
 //! - [`PlannedOutput`]: the outputs a mode plans, and where each one comes from (spike 2).
-//! - [`ModeOutput`]: what a mode builds, so far with only what the first vertical slice's page
-//!   uses (plan v6, §12.2 step 1): its entries and their pages. Feeds and artifacts join it with
-//!   the steps that need them.
+//! - [`ModeOutput`]: what a mode builds, so far with only what the first vertical slice's pages
+//!   use (plan v7, §12.2 steps 1 and 2): its entries, with their dates, and their pages. Feeds and
+//!   artifacts join it with the steps that need them.
 
-use crate::content::{DocId, Route};
+use jiff::Timestamp;
+
+use crate::content::{DocId, Modified, Route};
 
 /// An output a mode, or the site builder, plans to write.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -61,6 +63,10 @@ pub struct EntrySummary {
     pub doc: DocId,
     /// Where its page is published.
     pub route: Route,
+    /// When it was published, for a dated document.
+    pub published: Option<Timestamp>,
+    /// When it was last modified, and how Folia knows (plan v7, §7.3).
+    pub modified: Option<Modified>,
     /// Its body as HTML, with links resolved.
     pub body_html: String,
     /// Old URLs that redirect to its page.

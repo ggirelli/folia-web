@@ -21,14 +21,54 @@
 //! | `title` | its front matter `title` |
 //! | `layout` | its front matter `layout` |
 //! | `modified` | its last commit's time in the site's time zone (`2026-01-04T13:36:24+01:00`), or none |
+//! | `toc` | its table of contents, `{placement, title, entries}`, or none (`folia_core`'s `Toc`) |
+//! | `cover` | its cover, `{path, position, show, unsplash}` (`folia_core`'s `Cover`) |
+//! | `hide_website_junk` | the parts of the frame it hides, each `true` or `false` |
+//! | `date`, `description`, `author`, `previous`, `next` | none: a page has no date, excerpt, author or neighbours |
+//! | `categories`, `tags`, `syndications` | empty |
 //!
-//! So far [`build`] builds what the first vertical slice needs (plan v6, §12.2 step 1): Markdown
-//! pages with a layout and a title. Anything else it reports as not supported yet.
+//! The keys a page lacks are there, empty, because the templates of pages and posts share their
+//! parts (plan v8, §12.2 step 2).
+//!
+//! So far [`build`] builds what the vertical slice needs (plan v8, §12.2): Markdown pages with a
+//! layout and a title. Front matter it cannot show is refused, never ignored:
+//!
+//! | Front matter | Outcome |
+//! |-|-|
+//! | `layout`, `title`, `permalink`, `redirect_from`, `published`, `hide_website_junk` | built |
+//! | `cover` without a picture, or shown behind the page | built |
+//! | `toc` disabled, or placed on the left | built |
+//! | `comments`, `narrow_post` set to `false` | built: the site's default, which changes nothing |
+//! | `comments`, `narrow_post` set to `true`; `title_icon`, `corner_backlink`, `hide_title`, `last_modified_at`; a cover after the title; a table of contents on the right or at the top | refused as not built yet |
+//! | a value those keys cannot take (`comments: maybe`, a cover position or TOC placement Jekyll's templates do not know) | refused as invalid |
+//! | any other key | refused as unknown, which may be a typo (`narrow-post`) |
 
 use folia_core::content::markdown::to_html;
-use folia_core::content::{Diagnostic, LastCommits, Route, SiteClock, SourceDoc};
+use folia_core::content::{
+    Cover, Diagnostic, LastCommits, Route, SiteClock, SourceDoc, Toc, TocPlacement, cover,
+    hide_website_junk, modified, table_of_contents,
+};
 use folia_core::publish::{EntrySummary, ModeOutput, PageSpec, PlannedOutput};
-use serde_json::json;
+use serde_json::{Value, json};
+
+/// The front matter keys a page may have, besides the switches.
+const KEYS: [&str; 8] = [
+    "layout",
+    "title",
+    "permalink",
+    "redirect_from",
+    "published",
+    "cover",
+    "toc",
+    "hide_website_junk",
+];
+
+/// Switches the page template does not have: a page may only leave them off, as the site's
+/// default does.
+const SWITCHES: [&str; 2] = ["comments", "narrow_post"];
+
+/// Keys the site's pages use whose effect the page template does not have yet.
+const NOT_BUILT: [&str; 3] = ["title_icon", "corner_backlink", "hide_title"];
 
 /// Source extensions that a converter renders as HTML.
 const MARKDOWN_EXTENSIONS: [&str; 5] = [".markdown", ".mkdown", ".mkdn", ".mkd", ".md"];
@@ -62,8 +102,9 @@ pub fn routes(docs: &[SourceDoc]) -> Result<Vec<PlannedOutput>, Vec<Diagnostic>>
 /// # Errors
 ///
 /// Returns every problem found: what [`routes`] reports, a page that is not Markdown or has no
-/// layout or title, and a front matter `last_modified_at`, which Jekyll ignores on pages and
-/// Folia does not read yet.
+/// layout or title, a front matter `last_modified_at`, which Jekyll ignores on pages and Folia
+/// does not read yet, and other front matter the page template cannot show (see the module's
+/// table).
 pub fn build(
     docs: &[SourceDoc],
     commits: &LastCommits,
@@ -110,26 +151,89 @@ fn build_page(
             &"last_modified_at is not read on pages yet; the last commit dates them",
         ));
     }
-    let modified = commits.get(&doc.id).map(|time| clock.xmlschema(time));
+    unknown_or_unbuilt(doc).map_err(|message| problem(&message))?;
+    let modified = modified(doc, commits, None, clock)?;
+    let toc = table_of_contents(doc)?;
+    let cover = cover(doc)?;
+    unshown(&cover, toc.as_ref()).map_err(|message| problem(&message))?;
 
+    let context = json!({
+        "url": planned.route.url(),
+        "title": title,
+        "layout": layout,
+        "modified": modified.map(|m| clock.xmlschema(m.at)),
+        "toc": toc.as_ref().map(Toc::to_json),
+        "cover": cover.to_json(),
+        "hide_website_junk": hide_website_junk(doc),
+        "date": null,
+        "description": null,
+        "author": null,
+        "categories": [],
+        "tags": [],
+        "syndications": [],
+        "previous": null,
+        "next": null,
+    });
     let page = PageSpec {
         route: planned.route.clone(),
         template: format!("{layout}.html"),
         source: Some(doc.id.clone()),
-        context: json!({
-            "url": planned.route.url(),
-            "title": title,
-            "layout": layout,
-            "modified": modified,
-        }),
+        context,
     };
     let entry = EntrySummary {
         doc: doc.id.clone(),
         route: planned.route,
+        published: None,
+        modified,
         body_html: to_html(&doc.body, None),
         redirect_from: planned.redirect_from,
     };
     Ok((entry, page))
+}
+
+/// Why `doc`'s front matter has a key the page template cannot show, if it has one: a key it
+/// does not know, one it knows but has not built, or a switch turned on.
+fn unknown_or_unbuilt(doc: &SourceDoc) -> Result<(), String> {
+    for key in doc.front.keys() {
+        if KEYS.contains(&key) || key == "last_modified_at" {
+            continue;
+        }
+        if NOT_BUILT.contains(&key) {
+            return Err(format!("{key} is not built yet on pages"));
+        }
+        if !SWITCHES.contains(&key) {
+            return Err(format!(
+                "the front matter key {key} is not one pages have (a typo?)"
+            ));
+        }
+        match doc.front.json(key) {
+            Some(Value::Bool(false)) => {}
+            Some(Value::Bool(true)) => return Err(format!("{key}: true is not built yet")),
+            _ => return Err(format!("{key} should be true or false")),
+        }
+    }
+    Ok(())
+}
+
+/// Why the page template cannot show `cover` or `toc`, if it cannot: the template shows a
+/// cover behind the page and a table of contents on the left, and nothing else yet.
+fn unshown(cover: &Cover, toc: Option<&Toc>) -> Result<(), String> {
+    match cover.position.as_str() {
+        "behind" => {}
+        "after_title" if cover.path.is_none() => {}
+        "after_title" => return Err("a cover shown after the title is not built yet".to_owned()),
+        other => return Err(format!("cover: unknown position {other:?}")),
+    }
+    match toc.map(|toc| toc.placement) {
+        None | Some(TocPlacement::Left) => Ok(()),
+        Some(placement) => Err(format!(
+            "a table of contents placed {} is not built yet",
+            match placement {
+                TocPlacement::Top => "at the top",
+                _ => "on the right",
+            }
+        )),
+    }
 }
 
 fn page_output(doc: &SourceDoc) -> Result<PlannedOutput, Diagnostic> {
@@ -184,7 +288,7 @@ fn output_extension(doc: &SourceDoc, permalink: Option<&str>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use folia_core::content::{DocId, FrontMatter, Mode};
+    use folia_core::content::{DocId, FrontMatter, Mode, ModifiedFrom};
 
     use super::*;
 
@@ -230,8 +334,18 @@ mod tests {
         assert_eq!(page.source, Some(DocId::new("pages/profile.md")));
         assert_eq!(
             page.context,
-            json!({"url": "/about", "title": "About me", "layout": "page", "modified": null})
+            json!({
+                "url": "/about", "title": "About me", "layout": "page", "modified": null,
+                "toc": null,
+                "cover": {"path": null, "position": "after_title", "show": true, "unsplash": null},
+                "hide_website_junk": {
+                    "main_nav": false, "title": false, "cat_jumbotron": false, "footer": false,
+                },
+                "date": null, "description": null, "author": null, "categories": [], "tags": [],
+                "syndications": [], "previous": null, "next": null,
+            })
         );
+        assert_eq!((entry.published, entry.modified), (None, None));
     }
 
     #[test]
@@ -246,6 +360,10 @@ mod tests {
         assert_eq!(
             output.pages[0].context["modified"],
             "2026-01-04T13:36:24+01:00"
+        );
+        assert_eq!(
+            output.entries[0].modified.map(|m| m.from),
+            Some(ModifiedFrom::Git)
         );
     }
 
@@ -275,6 +393,108 @@ mod tests {
                 "pages/d.md: last_modified_at is not read on pages yet; the last commit dates them",
             ]
         );
+    }
+
+    /// A page shaped like `pages/disclosure.md`, with a table of contents on the left.
+    fn policy(toc: &str) -> SourceDoc {
+        SourceDoc {
+            body: "# Policy\n\n## Purpose\n\n## Scope\n\n### Out of scope\n\n##### Deep\n\n\
+                   ## Timelines & response\n"
+                .into(),
+            ..page(
+                "pages/disclosure.md",
+                &format!(
+                    "layout: page\ntitle: Vulnerability Disclosure Policy\npermalink: /security-policy\n{toc}"
+                ),
+            )
+        }
+    }
+
+    fn build_one(doc: SourceDoc) -> Result<ModeOutput, Vec<Diagnostic>> {
+        build(&[doc], &LastCommits::default(), &clock())
+    }
+
+    #[test]
+    fn a_page_with_a_toc_on_the_left_gets_its_placement_and_entries() {
+        let output = build_one(policy("toc:\n  enabled: true\n  position: left\n")).unwrap();
+        assert_eq!(
+            output.pages[0].context["toc"],
+            json!({"placement": "left", "title": null, "entries": [
+                {"id": "purpose", "html": "Purpose", "children": []},
+                {"id": "scope", "html": "Scope", "children": [
+                    {"id": "out-of-scope", "html": "Out of scope", "children": []},
+                ]},
+                {"id": "timelines--response", "html": "Timelines &amp; response", "children": []},
+            ]})
+        );
+    }
+
+    #[test]
+    fn a_page_without_an_enabled_toc_has_none() {
+        for toc in ["", "toc:\n  enabled: false\n  position: left\n"] {
+            let output = build_one(policy(toc)).unwrap();
+            assert_eq!(output.pages[0].context["toc"], Value::Null, "{toc:?}");
+        }
+        let about = build_one(about()).unwrap();
+        assert_eq!(about.pages[0].context["toc"], Value::Null);
+    }
+
+    #[test]
+    fn switches_left_off_and_a_cover_behind_the_page_are_built() {
+        let front = "comments: false\nnarrow_post: false\nhide_website_junk:\n  title: true\n\
+                     cover:\n  path: /c.webp\n  position: behind\n";
+        let output = build_one(policy(front)).unwrap();
+        assert_eq!(output.pages[0].context["cover"]["position"], "behind");
+        assert_eq!(output.pages[0].context["hide_website_junk"]["title"], true);
+    }
+
+    #[test]
+    fn front_matter_the_page_template_cannot_show_is_refused_with_its_key() {
+        let cases = [
+            (
+                "title_icon: fas fa-code",
+                "title_icon is not built yet on pages",
+            ),
+            (
+                "corner_backlink:\n  show: true",
+                "corner_backlink is not built yet on pages",
+            ),
+            ("hide_title: true", "hide_title is not built yet on pages"),
+            ("comments: true", "comments: true is not built yet"),
+            ("narrow_post: maybe", "narrow_post should be true or false"),
+            (
+                "narrow-post: true",
+                "the front matter key narrow-post is not one pages have (a typo?)",
+            ),
+            (
+                "cover:\n  path: /c.webp",
+                "a cover shown after the title is not built yet",
+            ),
+            (
+                "cover:\n  path: /c.webp\n  position: top",
+                "cover: unknown position \"top\"",
+            ),
+            (
+                "toc:\n  enabled: true\n  position: right",
+                "a table of contents placed on the right is not built yet",
+            ),
+            (
+                "toc:\n  enabled: true",
+                "a table of contents placed at the top is not built yet",
+            ),
+            (
+                "toc:\n  enabled: true\n  position: middle",
+                "toc: unknown position \"middle\"",
+            ),
+        ];
+        for (front, message) in cases {
+            let problems = build_one(policy(front)).unwrap_err();
+            assert_eq!(
+                problems[0].to_string(),
+                format!("pages/disclosure.md: {message}"),
+                "{front:?}"
+            );
+        }
     }
 
     fn route(doc: SourceDoc) -> (String, String) {

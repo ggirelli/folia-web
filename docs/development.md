@@ -15,29 +15,35 @@ Each mode crate depends on `folia-core` only, never on another mode.
     with Jekyll's conventions.
   - `content::slug`, `content::date`: Jekyll-compatible slugs, the site clock, dated file names.
   - `content::git`: `LastCommits`, each source file's last commit time, for `modified`.
+  - `content::modified`: a document's last modification (front matter, then git, then its date)
+    and where it came from.
+  - `content::presentation`: front matter only templates read (table of contents, cover, the
+    frame's switches), resolved with its defaults.
   - `content::markdown`: Markdown to HTML as Jekyll's kramdown renders it, parsed with
     pulldown-cmark and adjusted by passes, one per subject: `wiki_link`, `html` (raw HTML as
     kramdown reads it), `ial`, `lists`, `typography`, `heading` (IDs), `render` (kramdown's HTML
     and layout) and `highlight` (syntect with bat's grammars from `two-face`, mapped to Rouge's
-    Pygments classes); and `excerpt`.
+    Pygments classes); `excerpt`, with the page description made of it; and `analyze`, the
+    headings and the table of contents built from them.
   - `publish`: what a mode hands to the site builder: `PlannedOutput` (routes), and `ModeOutput`
     with its `EntrySummary`s and `PageSpec`s.
 - **`crates/blog`, `crates/micro`, `crates/garden`, `crates/pages`**: one crate per mode. Each
   module comment holds the mode's route table. `folia_garden::WikiLinks` resolves wiki-links by the
   site's plugin's rules; `folia_pages::build` builds pages, and documents the context their
-  templates see; `folia_blog::category_counts` gives the categories every page shows.
+  templates see; `folia_blog::category_counts` gives the categories every page shows, and
+  `folia_blog::build` (module `post`) builds posts' pages and documents their context.
 - **`crates/folia`** (`folia`): the site builder and the `folia build` command (`main.rs`).
   `config` reads `folia.toml`, `discover` classifies the site's files, and `site` plans every
   output in one route table, checks it for duplicate URLs and colliding output files, and writes
-  redirect stubs. `build` is the pipeline (so far for `/about`, plan v6, §12.2), `render` renders
-  pages with MiniJinja from the site's templates (`_folia/templates` in the site), and `output`
-  writes the destination whole or not at all.
+  redirect stubs. `build` is the pipeline (so far for `/about` and one post, plan v8, §12.2),
+  `render` renders pages with MiniJinja from the site's templates (`_folia/templates` in the
+  site), and `output` writes the destination whole or not at all.
 - **`crates/parity`**: the dev-only parity tool (`just routes`, `just markdown`, `just pages`), and
   the content lint (`just liquid`).
   It reads baselines as black boxes and calls only Folia's public API. `markdown` holds spike 1's
   check: `dom` (html5ever parsing and normalization), `liquid` (the template filters excerpts go
   through), `ledger` and `report`. `pages` builds the site and compares what Folia writes with
-  Jekyll's files.
+  Jekyll's files, and `pages::entries` the documents' dates, tables of contents and code blocks.
 - **`parity/`**: tools that check Folia's output against the Jekyll site.
   - `jekyll/folia_dump.rb`: the passive Jekyll plugin that dumps Jekyll's intermediate results
     (see [parity baselines](baseline.md)). Nothing else may live in `jekyll/`, because Jekyll
@@ -61,6 +67,7 @@ Each mode crate depends on `folia-core` only, never on another mode.
   - `markdown-negative.sh`, `pages-negative.sh`: show the Markdown and page checks fail when
     they should.
   - `check-file-length.sh`: enforces the 1,000-line limit.
+  - `slice-boundary.sh`: checks a step of the vertical slice keeps out of the other step's mode.
 - **`.github/`**: the CI workflow and the pull request template.
 - **`docs/`**: this documentation, and the versioned plans in `docs/planning/`.
 - **`assets/brand/`**: logos and the banner.

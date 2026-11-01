@@ -11,14 +11,19 @@
 //! | a tag feed | `/blog/tag/:tag.xml`, for tags of letters, digits and `_` only |
 //!
 //! [`category_counts`] gives the categories with their number of posts, which every page's
-//! category menu shows.
+//! category menu shows. [`build`] builds posts' pages (module `post`).
+
+mod post;
 
 use folia_core::content::{
     Diagnostic, DocId, FrontMatterError, Route, SiteClock, SlugMode, SourceDoc, dated_file_name,
     slugify,
 };
 use folia_core::publish::PlannedOutput;
+use jiff::Timestamp;
 use jiff::civil::Date;
+
+pub use post::{POST_TEMPLATE, build};
 
 /// Posts per listing page.
 const PER_PAGE: usize = 9;
@@ -30,6 +35,10 @@ pub const LISTING_TEMPLATE: &str = "blog/index.html";
 struct Post {
     id: DocId,
     date: Date,
+    /// Midnight at the start of its date, in the site's time zone.
+    published: Timestamp,
+    /// Its front matter title, or one made from its file name, as Jekyll makes it.
+    title: String,
     route: Route,
     redirect_from: Vec<Route>,
     categories: Vec<String>,
@@ -111,12 +120,16 @@ fn read_post(doc: &SourceDoc, clock: &SiteClock) -> Result<Option<Post>, Diagnos
             &"a front matter date on a post is not supported yet; the file name dates it",
         ));
     }
-    let published_at = clock.midnight(date).map_err(|e| problem(&e))?;
-    if !doc.front.published() || clock.is_future(published_at) {
+    let published = clock.midnight(date).map_err(|e| problem(&e))?;
+    if !doc.front.published() || clock.is_future(published) {
         return Ok(None);
     }
 
     let front = |error: FrontMatterError| problem(&error);
+    let title = match doc.front.string("title").map_err(front)? {
+        Some(title) => title,
+        None => titleize(&file_slug),
+    };
     let route = if let Some(permalink) = doc.front.string("permalink").map_err(front)? {
         Route::html(&permalink).map_err(|e| problem(&e))?
     } else {
@@ -137,12 +150,31 @@ fn read_post(doc: &SourceDoc, clock: &SiteClock) -> Result<Option<Post>, Diagnos
     Ok(Some(Post {
         id: doc.id.clone(),
         date,
+        published,
+        title,
         route,
         redirect_from: doc.redirect_from()?,
         categories: categories(doc).map_err(front)?,
         tags: doc.front.pluralized("tag", "tags").map_err(front)?,
         hidden: doc.front.truthy("hidden"),
     }))
+}
+
+/// The title Jekyll gives a post without one: its file name's slug, each `-`-separated word
+/// capitalized as Ruby's `capitalize` does (`my-first-post` → `My First Post`).
+fn titleize(slug: &str) -> String {
+    slug.split('-')
+        .map(|word| {
+            let mut chars = word.chars();
+            chars.next().map_or_else(String::new, |first| {
+                first
+                    .to_uppercase()
+                    .chain(chars.flat_map(char::to_lowercase))
+                    .collect()
+            })
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Jekyll's categories: the `categories` list (a string is split on whitespace), then the

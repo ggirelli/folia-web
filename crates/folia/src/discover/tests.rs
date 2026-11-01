@@ -42,6 +42,7 @@ fn config(exclude: &[&str]) -> Config {
             title: "Example".into(),
             description: "A site.".into(),
         },
+        authors: std::collections::BTreeMap::new(),
     }
 }
 

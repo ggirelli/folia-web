@@ -165,3 +165,159 @@ fn categories_are_counted_in_the_order_posts_first_use_them() {
         ]
     );
 }
+
+const WEBMENTIONS: &str = "_posts/2021/2021-08-08-sample-post.md";
+
+fn webmentions() -> SourceDoc {
+    SourceDoc {
+        body: "Intro.\n\n### One *a*\n\n#### Two\n\n### Three\n".into(),
+        ..post(
+            WEBMENTIONS,
+            "title: \"Webmentions: letting Disqus go\"\nauthor: gg\ncover:\n  path: /c.webp\n  position: behind\n  unsplash: lunarts\ncategories: [code, announcement]\ntags: [webmentions, blog]\nlast_modified_at: 2021-08-24\ntoc:\n  enabled: true\n  position: left\nsyndications:\n  x-twitter: https://x\n  github: https://g\n",
+        )
+    }
+}
+
+fn build_one(docs: &[SourceDoc]) -> Result<ModeOutput, Vec<Diagnostic>> {
+    build(
+        docs,
+        &[WEBMENTIONS],
+        &folia_core::content::LastCommits::default(),
+        &clock(),
+    )
+}
+
+use folia_core::publish::ModeOutput;
+
+#[test]
+fn a_post_is_built_with_its_dates_and_what_its_template_shows() {
+    let docs = [
+        post("_posts/2021/2021-07-12-sample-theme.md", "title: A new skin!"),
+        webmentions(),
+        post("_posts/2021/2021-08-17-sample-speed.md", ""),
+    ];
+    let output = build_one(&docs).unwrap();
+    let ([entry], [page]) = (&output.entries[..], &output.pages[..]) else {
+        panic!("one entry and one page")
+    };
+    assert_eq!(entry.route.url(), "/blog/2021/08/08/webmentions");
+    assert_eq!(
+        clock().xmlschema(entry.published.unwrap()),
+        "2021-08-08T00:00:00+02:00"
+    );
+    let modified = entry.modified.unwrap();
+    assert_eq!(
+        modified.from,
+        folia_core::content::ModifiedFrom::FrontMatter
+    );
+    assert_eq!(page.template, "post.html");
+    let context = &page.context;
+    assert_eq!(context["date"], "2021-08-08T00:00:00+02:00");
+    assert_eq!(context["modified"], "2021-08-24T00:00:00+02:00");
+    assert_eq!(context["description"], "Intro.One aTwoThree");
+    assert_eq!(context["author"], "gg");
+    assert_eq!(
+        context["categories"],
+        serde_json::json!([{"name": "announcement", "anchor": "announcement"}, {"name": "code", "anchor": "code"}])
+    );
+    assert_eq!(context["tags"][0]["name"], "blog");
+    assert_eq!(
+        context["previous"],
+        serde_json::json!({"url": "/blog/2021/07/12/new-skin", "title": "A new skin!"})
+    );
+    assert_eq!(context["next"]["title"], "Speed Up Ggplot");
+    assert_eq!(
+        context["toc"],
+        serde_json::json!({"placement": "left", "title": null, "entries": [
+            {"id": "one-a", "html": "One <em>a</em>", "children": [{"id": "two", "html": "Two", "children": []}]},
+            {"id": "three", "html": "Three", "children": []},
+        ]})
+    );
+    assert_eq!(
+        context["syndications"],
+        serde_json::json!([{"name": "x-twitter", "url": "https://x"}, {"name": "github", "url": "https://g"}])
+    );
+    assert_eq!(
+        context["cover"],
+        serde_json::json!({"position": "behind", "show": true, "path": "/c.webp", "unsplash": "lunarts"})
+    );
+    assert_eq!(
+        context["hide_website_junk"],
+        serde_json::json!({"main_nav": false, "title": false, "cat_jumbotron": false, "footer": false})
+    );
+    for absent in [
+        "toc_entries",
+        "pagination",
+        "show_author",
+        "section_class",
+        "use_dark_layout",
+    ] {
+        assert!(context.get(absent).is_none(), "{absent}");
+    }
+}
+
+#[test]
+fn a_post_without_a_toc_or_cover_has_none_and_the_default_cover() {
+    let output = build_one(&[post(WEBMENTIONS, "title: T")]).unwrap();
+    let context = &output.pages[0].context;
+    assert_eq!(context["toc"], serde_json::Value::Null);
+    assert_eq!(context["cover"]["position"], "after_title");
+    assert_eq!(context["syndications"], serde_json::json!([]));
+}
+
+#[test]
+fn only_the_posts_asked_for_are_built_and_the_first_has_no_previous() {
+    let docs = [webmentions(), post("_posts/2020/2020-01-01-other.md", "")];
+    let output = build(
+        &docs,
+        &["_posts/2020/2020-01-01-other.md"],
+        &folia_core::content::LastCommits::default(),
+        &clock(),
+    )
+    .unwrap();
+    assert_eq!(output.pages.len(), 1);
+    assert_eq!(output.pages[0].context["previous"], serde_json::Value::Null);
+    assert_eq!(
+        output.pages[0].context["next"]["url"],
+        "/blog/2021/08/08/webmentions"
+    );
+    assert_eq!(
+        output.entries[0].modified.unwrap().from,
+        folia_core::content::ModifiedFrom::Published
+    );
+}
+
+#[test]
+fn front_matter_the_template_cannot_show_is_not_built_yet() {
+    let cases = [
+        ("rating: 4", "the front matter key rating is not built yet"),
+        (
+            "layout: page",
+            "a post with the layout page is not built yet",
+        ),
+        (
+            "cover:\n  path: /c.webp",
+            "a cover not shown behind the post is not built yet",
+        ),
+        (
+            "toc:\n  enabled: true",
+            "a table of contents not on the left is not built yet",
+        ),
+        (
+            "syndications:\n  mastodon: https://m",
+            "a syndication to mastodon is not built yet",
+        ),
+        (
+            "show_author: false",
+            "the front matter key show_author is not built yet",
+        ),
+        (
+            "toc:\n  enabled: true\n  position: middle",
+            "toc: unknown position \"middle\"",
+        ),
+    ];
+    for (front, message) in cases {
+        let problems = build_one(&[post(WEBMENTIONS, front)]).unwrap_err();
+        assert_eq!(problems[0].to_string(), format!("{WEBMENTIONS}: {message}"));
+    }
+}

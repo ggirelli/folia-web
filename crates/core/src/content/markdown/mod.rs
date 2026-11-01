@@ -14,9 +14,12 @@
 //! 6. `heading`: kramdown's GFM heading IDs.
 //! 7. `render`: HTML as kramdown writes it, with code highlighted by `highlight`.
 //!
-//! [`excerpt`] finds the part of a document that listings and feeds show, and [`excerpt_html`]
-//! renders it the way the body is rendered. [`code_ranges`] says where the source is code.
+//! [`excerpt`] finds the part of a document that listings and feeds show, [`excerpt_html`]
+//! renders it the way the body is rendered, and [`description`] makes a page's description of
+//! it. [`analyze`] gives the headings, from which [`toc`] builds a table of contents.
+//! [`code_ranges`] says where the source is code.
 
+mod analyze;
 mod excerpt;
 mod heading;
 mod highlight;
@@ -30,7 +33,8 @@ mod wiki_link;
 
 use std::ops::Range;
 
-pub use excerpt::excerpt;
+pub use analyze::{Heading, TocEntry, toc};
+pub use excerpt::{description, excerpt};
 pub use wiki_link::LinkResolver;
 
 use tree::{Kind, Node};
@@ -38,6 +42,19 @@ use tree::{Kind, Node};
 /// Renders `src` as HTML. Wiki-links are resolved with `links`; without one they stay as written.
 #[must_use]
 pub fn to_html(src: &str, links: Option<&dyn LinkResolver>) -> String {
+    let (root, src) = prepare(src, links);
+    render::html(&root, &src)
+}
+
+/// The headings of `src` as [`to_html`] renders them, in order.
+#[must_use]
+pub fn analyze(src: &str, links: Option<&dyn LinkResolver>) -> Vec<Heading> {
+    let (root, src) = prepare(src, links);
+    analyze::headings(&root, &src)
+}
+
+/// Parses `src` and applies every pass but rendering; returns the tree, and the source it spans.
+fn prepare(src: &str, links: Option<&dyn LinkResolver>) -> (Node, String) {
     let mut src = match links {
         Some(links) => wiki_link::replace(src, links),
         None => src.to_owned(),
@@ -49,7 +66,7 @@ pub fn to_html(src: &str, links: Option<&dyn LinkResolver>) -> String {
     lists::mark_transparent(&mut root, &src);
     typography::apply(&mut root, &src);
     heading::assign_ids(&mut root);
-    render::html(&root, &src)
+    (root, src)
 }
 
 /// Where `src` is code, as Folia renders it: code blocks, fenced or indented, with their fences,
