@@ -1,5 +1,6 @@
 site_name: Folia
 site_description: The static-site generator behind ggirelli.info.
+site_url: https://ggirelli.github.io/folia/
 repo_url: https://github.com/ggirelli/folia
 repo_name: ggirelli/folia
 edit_uri: edit/main/docs/

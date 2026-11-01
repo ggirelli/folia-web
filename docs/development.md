@@ -68,13 +68,15 @@ Each mode crate depends on `folia-core` only, never on another mode.
     they should.
   - `check-file-length.sh`: enforces the 1,000-line limit.
   - `slice-boundary.sh`: checks a step of the vertical slice keeps out of the other step's mode.
-- **`.github/`**: the CI workflow and the pull request template.
+- **`.github/`**: the CI and docs workflows and the pull request template.
 - **`docs/`**: this documentation, and the versioned plans in `docs/planning/`.
 - **`assets/brand/`**: logos and the banner.
 
 ## Checks
 
-`just check` runs every check; CI (`.github/workflows/ci.yml`) runs the same recipes in four jobs:
+`just check` runs every check; CI runs the same recipes, in three jobs of `.github/workflows/ci.yml`
+and one of `.github/workflows/docs.yml`, which also publishes the docs to
+[GitHub Pages](https://ggirelli.github.io/folia/) from `main`:
 
 | Job | Recipes |
 |-|-|
