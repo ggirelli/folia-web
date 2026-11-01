@@ -28,7 +28,10 @@ are not yet committed in the site), builds one page (`/about`) with
 `folia build`: rendered from templates kept in the site, with its redirect
 stub and the static
 files, matching Jekyll's output. Its second step, a blog post, is built,
-checked and committed; the Jekyll site is still the one published.
+checked and committed; its third, two garden notes with their backlinks
+and the note graph, is built, checked and reviewed, its fixes awaiting
+acceptance. The Jekyll site
+is still the one published.
 The repository also holds the parity
 harness, which records production builds of the Jekyll site; Folia's
 discovery and routes, which reproduce every output path of the site
@@ -39,6 +42,6 @@ The documentation is published at <https://ggirelli.github.io/folia/>.
 
 - [Parity baselines](docs/baseline.md): how to build and compare them.
 - [Development](docs/development.md): how the repository is organized.
-- [Plans](docs/planning/): the architecture proposal; `plan.v8.md` is current.
+- [Plans](docs/planning/): the architecture proposal; `plan.v9.md` is current.
 
 Contributions follow [CONTRIBUTING.md](CONTRIBUTING.md).

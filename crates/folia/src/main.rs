@@ -47,10 +47,14 @@ fn main() -> ExitCode {
     };
     match build(&site, &config, &dest, Timestamp::now()) {
         Ok(built) => {
+            for warning in &built.warnings {
+                eprintln!("warning: {warning}");
+            }
             println!(
-                "Built {} pages, {} redirect stubs and {} static files into {}; {} planned outputs are not built yet.",
+                "Built {} pages, {} redirect stubs, {} generated files and {} static files into {}; {} planned outputs are not built yet.",
                 built.pages.len(),
                 built.stubs.len(),
+                built.artifacts.len(),
                 built.statics,
                 dest.display(),
                 built.not_built

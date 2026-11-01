@@ -9,6 +9,9 @@ publish.workspace = true
 
 [dependencies]
 folia-core.workspace = true
+jiff.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

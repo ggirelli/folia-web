@@ -1,13 +1,14 @@
 //! The contracts a mode hands to the site builder (plan v6, §6.2).
 //!
 //! - [`PlannedOutput`]: the outputs a mode plans, and where each one comes from (spike 2).
-//! - [`ModeOutput`]: what a mode builds, so far with only what the first vertical slice's pages
-//!   use (plan v7, §12.2 steps 1 and 2): its entries, with their dates, and their pages. Feeds and
-//!   artifacts join it with the steps that need them.
+//! - [`ModeOutput`]: what a mode builds, so far with only what the first vertical slice uses
+//!   (plan v9, §12.2): its entries, with their dates, their pages, the files generated from them
+//!   ([`Artifact`], such as the garden's note graph), and warnings. Feeds join it with the step
+//!   that needs them.
 
 use jiff::Timestamp;
 
-use crate::content::{DocId, Modified, Route};
+use crate::content::{Diagnostic, DocId, Modified, Route};
 
 /// An output a mode, or the site builder, plans to write.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -54,6 +55,20 @@ pub struct ModeOutput {
     pub entries: Vec<EntrySummary>,
     /// The pages to render: the entries' own pages, and pages generated from them.
     pub pages: Vec<PageSpec>,
+    /// Files generated from the entries, written as they are.
+    pub artifacts: Vec<Artifact>,
+    /// Problems that do not stop the build, such as a broken wiki-link.
+    pub warnings: Vec<Diagnostic>,
+}
+
+/// A file a mode generates, not rendered with a template, such as the garden's note graph.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Artifact {
+    /// Where it is published.
+    pub route: Route,
+    /// Its text, written as it is: the mode serializes it, so that it decides, for example,
+    /// the order of a JSON object's keys.
+    pub body: String,
 }
 
 /// A published document, as the site builder sees it.

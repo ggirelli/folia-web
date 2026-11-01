@@ -17,6 +17,11 @@ const PAGE: &str = "{% extends \"base.html\" %}{% block body %}<main>{{ content 
 
 impl Fixture {
     fn new(test: &str, templates: &[(&str, &str)]) -> Self {
+        Self::with(test, templates, &[])
+    }
+
+    /// A fixture with more source files, `files`, as paths and texts.
+    fn with(test: &str, templates: &[(&str, &str)], files: &[(&str, &str)]) -> Self {
         let root = std::env::temp_dir().join(format!("folia-build-{}-{test}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let fixture = Self(root);
@@ -37,6 +42,9 @@ impl Fixture {
         fixture.write("CNAME", "ggirelli.info\n");
         for (name, text) in templates {
             fixture.write(&format!("_folia/templates/{name}"), text);
+        }
+        for (path, text) in files {
+            fixture.write(path, text);
         }
         fixture.git(&["init", "--quiet"]);
         fixture.git(&["add", "."]);
@@ -241,4 +249,93 @@ fn a_category_anchor_is_escaped_as_liquid_escaped_it() {
     assert_eq!(anchor("journal"), "journal");
     assert_eq!(anchor("open source"), "open%20source");
     assert_eq!(anchor("café"), "caf%C3%A9");
+}
+
+/// What a note's template shows of it.
+const NOTE: &str = "{{ page.title }}: {% for backlink in page.backlinks %}{{ backlink.title }} {% endfor %}\
+                    <main>{{ content | safe }}</main>";
+
+/// The slice's two notes, and a third dated after the build, which both link to and from.
+const NOTES: [(&str, &str); 3] = [
+    (
+        "_digital_garden/topic/index.md",
+        "---\ntitle: Coding\ndate: 2023-01-30 12:20\n---\nTips for [[Rust]] and [[Later]].\n",
+    ),
+    (
+        "_digital_garden/topic/note.md",
+        "---\ntitle: Rust\ndate: 2025-11-08 12:20\n---\nSee [[First setup: rust]] and [[Coding]].\n",
+    ),
+    (
+        "_digital_garden/later.md",
+        "---\ntitle: Later\ndate: 2026-12-01\n---\nAbout [[Rust]].\n",
+    ),
+];
+
+#[test]
+fn the_slice_writes_its_notes_and_the_graph_and_returns_the_warnings() {
+    let fixture = Fixture::with(
+        "garden",
+        &[
+            ("base.html", BASE),
+            ("page.html", PAGE),
+            ("garden_post.html", NOTE),
+        ],
+        &NOTES,
+    );
+    let built = fixture.build().unwrap();
+    assert_eq!(
+        built.pages,
+        [
+            Route::html("/about").unwrap(),
+            Route::html("/dg/coding/index").unwrap(),
+            Route::html("/dg/coding/rust").unwrap(),
+        ]
+    );
+    assert_eq!(
+        built.artifacts,
+        [Route::file("/assets/json/notes_graph.json").unwrap()]
+    );
+    assert_eq!(
+        fixture.read("assets/json/notes_graph.json"),
+        r#"{"nodes":[{"id":"/dg/coding/index","path":"/dg/coding/index","label":"Coding"},{"id":"/dg/coding/rust","path":"/dg/coding/rust","label":"Rust"},{"id":"/dg/later","path":"/dg/later","label":"Later"}],"edges":[{"source":"/dg/coding/rust","target":"/dg/coding/index"},{"source":"/dg/coding/index","target":"/dg/coding/rust"},{"source":"/dg/later","target":"/dg/coding/rust"},{"source":"/dg/coding/index","target":"/dg/later"}]}"#
+    );
+    assert_eq!(
+        fixture.read("dg/coding/rust.html"),
+        "Rust: Coding Later <main><p>See <span class=\"broken-link\">First setup: \
+         rust</span> and <a href=\"/dg/coding/index\" class=\"internal-link\">Coding</a>.</p>\n</main>"
+    );
+    // The note dated after the build is linked to, but its page is not written.
+    assert!(
+        fixture
+            .read("dg/coding/index.html")
+            .contains("href=\"/dg/later\"")
+    );
+    assert!(!fixture.dest().join("dg/later.html").exists());
+    let warnings: Vec<String> = built.warnings.iter().map(ToString::to_string).collect();
+    assert_eq!(
+        warnings,
+        [
+            "_digital_garden/topic/note.md: the wiki-link [[First setup: rust]] names no note, so it \
+          is shown as broken"
+        ]
+    );
+}
+
+#[test]
+fn an_output_built_twice_is_refused_not_overwritten() {
+    let mut outputs = BTreeMap::new();
+    add(
+        &mut outputs,
+        "a.html".into(),
+        Content::Bytes(b"one".to_vec()),
+    )
+    .unwrap();
+    let clash = add(
+        &mut outputs,
+        "a.html".into(),
+        Content::Bytes(b"two".to_vec()),
+    )
+    .unwrap_err();
+    assert_eq!(clash.to_string(), "a.html is built twice");
+    assert!(matches!(&outputs["a.html"], Content::Bytes(bytes) if bytes == b"one"));
 }

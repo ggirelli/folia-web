@@ -1,7 +1,8 @@
 //! Page parity (plan v6, §9.2, and §12.2 step 1): Folia builds the site as of the baseline's
 //! build time, and every file it writes is compared with the one Jekyll wrote at that path.
 //!
-//! 1. **Routes:** each rendered page and redirect stub has Jekyll's URL and output file.
+//! 1. **Routes:** each rendered page, redirect stub and generated file has Jekyll's URL and output
+//!    file.
 //! 2. **Fingerprints:** a rendered page has Jekyll's title, canonical link, description and
 //!    Open Graph values; its headings (level, ID, text, in order), and its link, image and
 //!    resource (`link href`, `script src`) multisets, over the whole page; the text of its
@@ -12,10 +13,13 @@
 //! 4. **Other files:** redirect stubs and static files are byte-identical.
 //! 5. **Entries** (`entries`): each document's dates equal the baseline's dump; a page's table of
 //!    contents equals Jekyll's; its code blocks are its body's, highlighted as spike 1 does.
+//! 6. **The garden** (`garden`): the note graph has Jekyll's nodes and edges, and each broken
+//!    link on a page built gives one warning.
 //!
 //! Outputs Folia does not build yet are counted, not compared.
 
 mod entries;
+mod garden;
 
 use std::path::{Path, PathBuf};
 
@@ -83,9 +87,10 @@ fn compare(
 ) -> Result<bool, String> {
     let jekyll = &baseline_dir.join("site");
     println!(
-        "Folia built {} pages, {} redirect stubs and {} static files; {} planned outputs are not built yet.",
+        "Folia built {} pages, {} redirect stubs, {} generated files and {} static files; {} planned outputs are not built yet.",
         built.pages.len(),
         built.stubs.len(),
+        built.artifacts.len(),
         built.statics,
         built.not_built
     );
@@ -110,12 +115,25 @@ fn compare(
         }
     }
     passed &= entries::check_dates(&built.entries, rows, &baseline_dir.join("dump"), clock);
+    passed &= garden::check_warnings(built, &|path| {
+        std::fs::read_to_string(jekyll.join(path)).ok()
+    });
 
     let pages: Vec<String> = built.pages.iter().map(Route::output_path).collect();
     let stubs: Vec<String> = built.stubs.iter().map(Route::output_path).collect();
     let mut files = Vec::new();
     list_files(out, out, &mut files)?;
-    let others: Vec<&String> = files.iter().filter(|f| !pages.contains(f)).collect();
+    let folia_graph = if files.iter().any(|f| f == garden::GRAPH) {
+        Some(std::fs::read(out.join(garden::GRAPH)).map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
+    let jekyll_graph = std::fs::read(jekyll.join(garden::GRAPH)).ok();
+    passed &= garden::check_graph_file(jekyll_graph.as_deref(), folia_graph.as_deref());
+    let others: Vec<&String> = files
+        .iter()
+        .filter(|f| !pages.contains(f) && f.as_str() != garden::GRAPH)
+        .collect();
     let mut differing = Vec::new();
     for path in &others {
         let folia = std::fs::read(out.join(path)).map_err(|e| format!("{path}: {e}"))?;
@@ -136,10 +154,16 @@ fn compare(
     Ok(passed)
 }
 
-/// Each page and stub Folia rendered has the URL and output file Jekyll gave it.
+/// Each page and stub Folia rendered, and each file a mode generated, has the URL and output
+/// file Jekyll gave it.
 fn check_routes(built: &Built, rows: &[Row]) -> bool {
     let mut differing = Vec::new();
-    for route in built.pages.iter().chain(&built.stubs) {
+    for route in built
+        .pages
+        .iter()
+        .chain(&built.stubs)
+        .chain(&built.artifacts)
+    {
         let output = route.output_path();
         match rows.iter().find(|row| row.written && row.output == output) {
             Some(row) if row.url == route.url() => {}
@@ -151,7 +175,10 @@ fn check_routes(built: &Built, rows: &[Row]) -> bool {
             None => differing.push(format!("{output}: Jekyll wrote no such output")),
         }
     }
-    report("routes of the pages and stubs built", &differing)
+    report(
+        "routes of the pages, stubs and generated files built",
+        &differing,
+    )
 }
 
 /// What a page is checked by.

@@ -16,7 +16,8 @@
 //!
 //! [`excerpt`] finds the part of a document that listings and feeds show, [`excerpt_html`]
 //! renders it the way the body is rendered, and [`description`] makes a page's description of
-//! it. [`analyze`] gives the headings, from which [`toc`] builds a table of contents.
+//! it. [`wiki_link_targets`] lists the targets of a source's wiki-links. [`analyze`] gives the
+//! headings, from which [`toc`] builds a table of contents.
 //! [`code_ranges`] says where the source is code.
 
 mod analyze;
@@ -35,7 +36,7 @@ use std::ops::Range;
 
 pub use analyze::{Heading, TocEntry, toc};
 pub use excerpt::{description, excerpt};
-pub use wiki_link::LinkResolver;
+pub use wiki_link::{LinkResolver, targets as wiki_link_targets};
 
 use tree::{Kind, Node};
 

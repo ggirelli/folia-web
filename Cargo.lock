@@ -304,6 +304,9 @@ name = "folia-garden"
 version = "0.0.0"
 dependencies = [
  "folia-core",
+ "jiff",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -46,6 +46,12 @@ impl SiteClock {
         moment.as_second() > self.now.as_second()
     }
 
+    /// The moment of the build.
+    #[must_use]
+    pub fn now(&self) -> Timestamp {
+        self.now
+    }
+
     /// The year of the build, in the site's time zone.
     #[must_use]
     pub fn year(&self) -> i16 {

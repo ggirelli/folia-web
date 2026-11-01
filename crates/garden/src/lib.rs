@@ -11,17 +11,46 @@
 //! An `index.md` keeps `index` in its URL (`/dg/coding/index`), and is written to
 //! `dg/coding/index.html`, where the host also serves it as `/dg/coding/`.
 //!
-//! Wiki-links between notes are resolved by [`WikiLinks`].
+//! Wiki-links between notes are resolved by [`WikiLinks`]. [`build`] builds notes' pages, with
+//! their backlinks, and the note graph (module `note`).
 
+mod note;
 mod wiki_links;
 
+pub use note::{NOTE_TEMPLATE, build};
 pub use wiki_links::WikiLinks;
 
-use folia_core::content::{Diagnostic, Route, SiteClock, SourceDoc};
+use folia_core::content::{Diagnostic, DocId, Route, SiteClock, SourceDoc, dated_file_name};
 use folia_core::publish::PlannedOutput;
+use jiff::Timestamp;
 
-/// The outputs of the garden: one page per published note, the feed and the note graph. Notes
-/// that are unpublished, or whose front matter `date` is after the build, are left out.
+/// The URL of the note graph.
+const GRAPH_URL: &str = "/assets/json/notes_graph.json";
+
+/// A note of the garden, with what the garden's outputs need to know about it.
+struct Note {
+    id: DocId,
+    /// Its front matter title.
+    title: Option<String>,
+    route: Route,
+    redirect_from: Vec<Route>,
+    /// Its date: its front matter `date`, or else the date its file name starts with, at
+    /// midnight.
+    date: Option<Timestamp>,
+}
+
+impl Note {
+    /// Whether the note's page is written at this build: as Jekyll held back a document dated
+    /// after the build, by its front matter or its file name, a note whose date is after `clock`
+    /// has no page yet. It is still a note of the garden, linked to and linking (`read_notes`).
+    fn is_due(&self, clock: &SiteClock) -> bool {
+        !self.date.is_some_and(|date| clock.is_future(date))
+    }
+}
+
+/// The outputs of the garden: one page per note due at this build, the feed and the note graph.
+/// A note is due unless it is unpublished or dated after the build, by its front matter `date`
+/// or else by the date its file name starts with.
 ///
 /// `root` is the garden root, such as `_digital_garden`.
 ///
@@ -34,11 +63,45 @@ pub fn routes(
     root: &str,
     clock: &SiteClock,
 ) -> Result<Vec<PlannedOutput>, Vec<Diagnostic>> {
-    let mut outputs = Vec::new();
+    let mut outputs: Vec<PlannedOutput> = read_notes(docs, root, clock)?
+        .into_iter()
+        .filter(|note| note.is_due(clock))
+        .map(|note| PlannedOutput {
+            redirect_from: note.redirect_from,
+            ..PlannedOutput::authored(note.route, note.id)
+        })
+        .collect();
+    outputs.push(PlannedOutput::generated(
+        file_route("/dg/feed.xml"),
+        "garden feed",
+    ));
+    outputs.push(PlannedOutput::generated(
+        file_route(GRAPH_URL),
+        "note graph",
+    ));
+    Ok(outputs)
+}
+
+/// The notes of the garden among `docs`: every note but those with `published: false`, dated
+/// after the build or not, as Jekyll's collection kept them for the site's plugin. They are what
+/// wiki-links resolve to, what backlinks come from, and the graph's nodes.
+///
+/// They are in Jekyll's order for dated notes: by date, then by source path, compared byte by
+/// byte. A note with neither a front matter `date` nor a dated file name is ordered as if dated
+/// at the build, which puts it after every other note but one dated later: Folia's own choice.
+/// Jekyll sorted its collection before it dated such a note, comparing it with the others by
+/// path only, so where it went depended on the order Jekyll read the files; Folia does not
+/// reproduce that. No note of the reference site is undated.
+fn read_notes(
+    docs: &[SourceDoc],
+    root: &str,
+    clock: &SiteClock,
+) -> Result<Vec<Note>, Vec<Diagnostic>> {
+    let mut notes = Vec::new();
     let mut problems = Vec::new();
     for doc in docs {
-        match note_output(doc, root, clock) {
-            Ok(Some(output)) => outputs.push(output),
+        match read_note(doc, root, clock) {
+            Ok(Some(note)) => notes.push(note),
             Ok(None) => {}
             Err(problem) => problems.push(problem),
         }
@@ -46,31 +109,30 @@ pub fn routes(
     if !problems.is_empty() {
         return Err(problems);
     }
-    outputs.push(PlannedOutput::generated(
-        file_route("/dg/feed.xml"),
-        "garden feed",
-    ));
-    outputs.push(PlannedOutput::generated(
-        file_route("/assets/json/notes_graph.json"),
-        "note graph",
-    ));
-    Ok(outputs)
+    notes.sort_by(|a, b| {
+        let order = |note: &Note| note.date.unwrap_or(clock.now());
+        (order(a), &a.id).cmp(&(order(b), &b.id))
+    });
+    Ok(notes)
 }
 
-fn note_output(
-    doc: &SourceDoc,
-    root: &str,
-    clock: &SiteClock,
-) -> Result<Option<PlannedOutput>, Diagnostic> {
+/// Reads a note, or `None` when its front matter says `published: false`.
+fn read_note(doc: &SourceDoc, root: &str, clock: &SiteClock) -> Result<Option<Note>, Diagnostic> {
     let problem = |message: &dyn std::fmt::Display| Diagnostic::in_doc(&doc.id, message);
-    if let Some(date) = doc.front.string("date").map_err(|e| problem(&e))?
-        && clock.is_future(clock.parse(&date).map_err(|e| problem(&e))?)
-    {
-        return Ok(None);
-    }
+    let front_date = match doc.front.string("date").map_err(|e| problem(&e))? {
+        Some(date) => Some(clock.parse(&date).map_err(|e| problem(&e))?),
+        None => None,
+    };
     if !doc.front.published() {
         return Ok(None);
     }
+    let date = match front_date {
+        Some(date) => Some(date),
+        None => match dated_file_name(doc.id.file_name()).map_err(|e| problem(&e))? {
+            Some((date, _)) => Some(clock.midnight(date).map_err(|e| problem(&e))?),
+            None => None,
+        },
+    };
 
     let below = doc
         .id
@@ -83,10 +145,12 @@ fn note_output(
             below[..below.len() - doc.id.extension().len()].trim_end_matches('.')
         ),
     };
-    let route = Route::html(&url).map_err(|e| problem(&e))?;
-    Ok(Some(PlannedOutput {
+    Ok(Some(Note {
+        id: doc.id.clone(),
+        title: doc.front.string("title").map_err(|e| problem(&e))?,
+        route: Route::html(&url).map_err(|e| problem(&e))?,
         redirect_from: doc.redirect_from()?,
-        ..PlannedOutput::authored(route, doc.id.clone())
+        date,
     }))
 }
 
@@ -95,70 +159,4 @@ fn file_route(url: &str) -> Route {
 }
 
 #[cfg(test)]
-mod tests {
-    use folia_core::content::{DocId, FrontMatter, Mode};
-
-    use super::*;
-
-    fn clock() -> SiteClock {
-        SiteClock::new("Europe/Stockholm", "2026-10-25T09:00:00Z".parse().unwrap()).unwrap()
-    }
-
-    fn note(path: &str, front: &str) -> SourceDoc {
-        SourceDoc {
-            id: DocId::new(path),
-            mode: Mode::Garden,
-            front: FrontMatter::parse(front).unwrap(),
-            body: String::new(),
-        }
-    }
-
-    #[test]
-    fn a_note_keeps_its_path_case_and_underscores() {
-        let outputs = routes(
-            &[note("_digital_garden/watch/topic_note.md", "")],
-            "_digital_garden",
-            &clock(),
-        )
-        .unwrap();
-        assert_eq!(outputs[0].route.url(), "/dg/tracking/chat_control");
-    }
-
-    #[test]
-    fn an_index_note_keeps_index_in_its_url() {
-        let outputs = routes(
-            &[note("_digital_garden/topic/index.md", "")],
-            "_digital_garden",
-            &clock(),
-        )
-        .unwrap();
-        assert_eq!(outputs[0].route.url(), "/dg/coding/index");
-        assert_eq!(outputs[0].route.output_path(), "dg/coding/index.html");
-    }
-
-    #[test]
-    fn a_note_dated_after_the_build_is_left_out() {
-        let docs = [
-            note("_digital_garden/a.md", "date: 2026-10-25 08:00"),
-            note("_digital_garden/b.md", "date: 2026-10-25 12:00"),
-        ];
-        let outputs = routes(&docs, "_digital_garden", &clock()).unwrap();
-        let notes: Vec<_> = outputs
-            .iter()
-            .filter_map(|o| o.source.as_ref())
-            .map(DocId::as_str)
-            .collect();
-        assert_eq!(notes, ["_digital_garden/a.md"]);
-    }
-
-    #[test]
-    fn a_date_in_another_form_is_reported() {
-        let problems = routes(
-            &[note("_digital_garden/a.md", "date: April 2026")],
-            "_digital_garden",
-            &clock(),
-        )
-        .unwrap_err();
-        assert_eq!(problems.len(), 1);
-    }
-}
+mod tests;

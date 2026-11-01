@@ -1,18 +1,21 @@
-//! The build pipeline (plan v6, §11), so far for the vertical slice (plan v7, §12.2 steps 1 and
-//! 2).
+//! The build pipeline (plan v6, §11), so far for the vertical slice (plan v9, §12.2).
 //!
 //! 1. Plan every output of the site, and check the route table (`site::plan`).
-//! 2. Build the slice's pages ([`SLICE_PAGES`]) with the pages mode, and its posts
-//!    ([`SLICE_POSTS`]) with the blog mode, dated with their last commits.
+//! 2. Build the slice's pages ([`SLICE_PAGES`]) with the pages mode, its posts ([`SLICE_POSTS`])
+//!    with the blog mode, and its notes ([`SLICE_NOTES`]), with the note graph, with the garden
+//!    mode, dated with their last commits.
 //! 3. Assemble the site index templates show: the site's identity and authors, the build's year,
 //!    and the blog's categories.
 //! 4. Check every page's template, then render each page.
-//! 5. Add a redirect stub for each of their `redirect_from` URLs, and copy every static file.
+//! 5. Add a redirect stub for each of their `redirect_from` URLs, the files the modes generated
+//!    (the note graph), and copy every static file.
 //! 6. Write it all to the destination (`output`).
 //!
 //! Every other planned output is not built yet; [`Built::not_built`] counts them. Nothing is
-//! written unless every step succeeds.
+//! written unless every step succeeds; warnings, such as a broken wiki-link, do not stop the
+//! build, and are returned in [`Built::warnings`].
 
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::Path;
@@ -33,6 +36,12 @@ pub const SLICE_PAGES: [&str; 1] = ["pages/profile.md"];
 /// The posts the vertical slice builds.
 pub const SLICE_POSTS: [&str; 1] = ["_posts/2021/2021-08-08-sample-post.md"];
 
+/// The notes the vertical slice builds.
+pub const SLICE_NOTES: [&str; 2] = [
+    "_digital_garden/topic/index.md",
+    "_digital_garden/topic/note.md",
+];
+
 /// What a build wrote.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Built {
@@ -40,12 +49,16 @@ pub struct Built {
     pub pages: Vec<Route>,
     /// Redirect stubs.
     pub stubs: Vec<Route>,
+    /// Files the modes generated, such as the note graph.
+    pub artifacts: Vec<Route>,
     /// Static files copied.
     pub statics: usize,
     /// Planned outputs not built yet.
     pub not_built: usize,
     /// The entries of the documents built, with their dates.
     pub entries: Vec<EntrySummary>,
+    /// Problems that did not stop the build.
+    pub warnings: Vec<Diagnostic>,
 }
 
 /// Builds the site at `root` into `dest`, as of the build time `now`.
@@ -62,7 +75,7 @@ pub fn build(
 ) -> Result<Built, Vec<Diagnostic>> {
     let site = plan(root, config, now)?;
     let clock = SiteClock::new(&config.time_zone, now).map_err(|e| vec![Diagnostic::site(e)])?;
-    let pages = build_documents(root, &site, &clock)?;
+    let pages = build_documents(root, config, &site, &clock)?;
     let index = site_index(config, &site, &clock)?;
 
     let renderer = Renderer::new(&root.join(&config.templates_dir));
@@ -79,26 +92,34 @@ pub fn build(
         match renderer.render(page, content, &index) {
             Ok(html) => {
                 built.pages.push(page.route.clone());
-                outputs.insert(page.route.output_path(), Content::Bytes(html.into_bytes()));
+                let html = Content::Bytes(html.into_bytes());
+                add(&mut outputs, page.route.output_path(), html)
+                    .unwrap_or_else(|clash| problems.push(clash));
             }
             Err(problem) => problems.push(problem),
         }
-    }
-    if !problems.is_empty() {
-        return Err(problems);
     }
     for entry in &pages.entries {
         let to = format!("{}{}", config.site.url, entry.route.url());
         for from in &entry.redirect_from {
             built.stubs.push(from.clone());
-            outputs.insert(
-                from.output_path(),
-                Content::Bytes(redirect_stub(&to).into_bytes()),
-            );
+            let stub = Content::Bytes(redirect_stub(&to).into_bytes());
+            add(&mut outputs, from.output_path(), stub)
+                .unwrap_or_else(|clash| problems.push(clash));
         }
     }
+    for artifact in pages.artifacts {
+        let body = Content::Bytes(artifact.body.into_bytes());
+        add(&mut outputs, artifact.route.output_path(), body)
+            .unwrap_or_else(|clash| problems.push(clash));
+        built.artifacts.push(artifact.route);
+    }
     for id in &site.discovery.statics {
-        outputs.insert(id.to_string(), Content::Copy(root.join(id.as_str())));
+        let copy = Content::Copy(root.join(id.as_str()));
+        add(&mut outputs, id.to_string(), copy).unwrap_or_else(|clash| problems.push(clash));
+    }
+    if !problems.is_empty() {
+        return Err(problems);
     }
     built.statics = site.discovery.statics.len();
 
@@ -118,14 +139,32 @@ pub fn build(
     }
     built.not_built = planned.len() - outputs.len();
     built.entries = pages.entries;
+    built.warnings = pages.warnings;
     output::write(dest, root, &outputs).map_err(|e| vec![e])?;
     Ok(built)
 }
 
-/// The slice's pages and posts, built by the pages and blog modes, with the git dates of their
+/// Adds the output `content` at `path`, unless another output is already there. The route table
+/// keeps outputs apart (`site::plan`); this keeps a clash it missed from overwriting one.
+fn add(
+    outputs: &mut BTreeMap<String, Content>,
+    path: String,
+    content: Content,
+) -> Result<(), Diagnostic> {
+    match outputs.entry(path) {
+        Entry::Vacant(free) => {
+            free.insert(content);
+            Ok(())
+        }
+        Entry::Occupied(taken) => Err(Diagnostic::site(format!("{} is built twice", taken.key()))),
+    }
+}
+
+/// The slice's pages, posts and notes, built by their modes, with the git dates of their
 /// sources.
 fn build_documents(
     root: &Path,
+    config: &Config,
     site: &Site,
     clock: &SiteClock,
 ) -> Result<ModeOutput, Vec<Diagnostic>> {
@@ -135,12 +174,22 @@ fn build_documents(
         .cloned()
         .collect();
     let posts = documents(site, Mode::Blog);
-    let dated = pages.iter().map(|doc| &doc.id).chain(
-        posts
-            .iter()
-            .map(|doc| &doc.id)
-            .filter(|id| SLICE_POSTS.contains(&id.as_str())),
-    );
+    let notes = documents(site, Mode::Garden);
+    let dated = pages
+        .iter()
+        .map(|doc| &doc.id)
+        .chain(
+            posts
+                .iter()
+                .map(|doc| &doc.id)
+                .filter(|id| SLICE_POSTS.contains(&id.as_str())),
+        )
+        .chain(
+            notes
+                .iter()
+                .map(|doc| &doc.id)
+                .filter(|id| SLICE_NOTES.contains(&id.as_str())),
+        );
     let commits = LastCommits::read(root, dated).map_err(|e| vec![Diagnostic::site(e)])?;
 
     let mut output = ModeOutput::default();
@@ -148,11 +197,14 @@ fn build_documents(
     for built in [
         folia_pages::build(&pages, &commits, clock),
         folia_blog::build(posts, &SLICE_POSTS, &commits, clock),
+        folia_garden::build(notes, &config.roots.garden, &SLICE_NOTES, &commits, clock),
     ] {
         match built {
             Ok(built) => {
                 output.entries.extend(built.entries);
                 output.pages.extend(built.pages);
+                output.artifacts.extend(built.artifacts);
+                output.warnings.extend(built.warnings);
             }
             Err(more) => problems.extend(more),
         }

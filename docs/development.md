@@ -29,21 +29,23 @@ Each mode crate depends on `folia-core` only, never on another mode.
     with its `EntrySummary`s and `PageSpec`s.
 - **`crates/blog`, `crates/micro`, `crates/garden`, `crates/pages`**: one crate per mode. Each
   module comment holds the mode's route table. `folia_garden::WikiLinks` resolves wiki-links by the
-  site's plugin's rules; `folia_pages::build` builds pages, and documents the context their
-  templates see; `folia_blog::category_counts` gives the categories every page shows, and
-  `folia_blog::build` (module `post`) builds posts' pages and documents their context.
+  site's plugin's rules, and `folia_garden::build` (module `note`) builds notes' pages, with their
+  backlinks, and the note graph; `folia_pages::build` builds pages; `folia_blog::category_counts`
+  gives the categories every page shows, and `folia_blog::build` (module `post`) builds posts'
+  pages. Each `build` documents the context its templates see.
 - **`crates/folia`** (`folia`): the site builder and the `folia build` command (`main.rs`).
   `config` reads `folia.toml`, `discover` classifies the site's files, and `site` plans every
   output in one route table, checks it for duplicate URLs and colliding output files, and writes
-  redirect stubs. `build` is the pipeline (so far for `/about` and one post, plan v8, §12.2),
-  `render` renders pages with MiniJinja from the site's templates (`_folia/templates` in the
-  site), and `output` writes the destination whole or not at all.
+  redirect stubs. `build` is the pipeline (so far for `/about`, one post and two notes, plan v9,
+  §12.2), `render` renders pages with MiniJinja from the site's templates (`_folia/templates` in
+  the site), and `output` writes the destination whole or not at all.
 - **`crates/parity`**: the dev-only parity tool (`just routes`, `just markdown`, `just pages`), and
   the content lint (`just liquid`).
   It reads baselines as black boxes and calls only Folia's public API. `markdown` holds spike 1's
   check: `dom` (html5ever parsing and normalization), `liquid` (the template filters excerpts go
   through), `ledger` and `report`. `pages` builds the site and compares what Folia writes with
-  Jekyll's files, and `pages::entries` the documents' dates, tables of contents and code blocks.
+  Jekyll's files, `pages::entries` the documents' dates, tables of contents and code blocks, and
+  `pages::garden` the note graph and the broken-link warnings.
 - **`parity/`**: tools that check Folia's output against the Jekyll site.
   - `jekyll/folia_dump.rb`: the passive Jekyll plugin that dumps Jekyll's intermediate results
     (see [parity baselines](baseline.md)). Nothing else may live in `jekyll/`, because Jekyll
