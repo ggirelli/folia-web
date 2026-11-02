@@ -5,7 +5,9 @@ version is current; older ones are kept to show how the design evolved.
 
 | Plan | Status |
 |-|-|
-| [Plan v9](plan.v9.md) | Current. Records step 2 as committed, and step 3 of the slice, two garden notes and the note graph, built and checked locally, reviewed, with the review's fixes and its decisions. |
+| [Plan v11](plan.v11.md) | Current. The migration plan after step 3: the target architecture (listings built in Rust, structured outputs by Rust serializers, whole-document DOM parity with a deviations ledger), the roadmap to cutover (phases A to D), acceptance criteria F1–F16 and the open decisions. Revises v10 after its independent review. |
+| [Plan v10](plan.v10.md) | Superseded by v11. First migration-wide plan after step 3, from the migration assessment; records the three architectural decisions. |
+| [Plan v9](plan.v9.md) | Superseded by v10. Records step 2 as committed, and step 3 of the slice, two garden notes and the note graph, built and checked locally, reviewed, with the review's fixes and its decisions. Its records of the spikes and slice steps 1 to 3 remain current by reference. |
 | [Plan v8](plan.v8.md) | Superseded by v9. Records step 2 of the slice, one post, built and checked locally and awaiting review, with its proposed choices. |
 | [Plan v7](plan.v7.md) | Superseded by v8. Decides and builds the content lint (§7.2), with its CI in `filopoe` pending a Folia pin; records step 1 as committed. |
 | [Plan v6](plan.v6.md) | Superseded by v7. Breaks the first vertical slice into reviewed steps; approves the workspace, MiniJinja, the Markdown rules and Q5; records step 1. |

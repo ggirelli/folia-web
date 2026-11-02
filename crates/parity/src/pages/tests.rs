@@ -101,3 +101,85 @@ fn the_main_content_is_compared_as_a_tree() {
         );
     }
 }
+
+/// A fixture site with a baseline of it beside: Jekyll's `about.html`, its manifest row and
+/// build record, so that `run` checks the build Folia makes.
+fn baseline(fixture: &crate::builds::tests::Fixture) -> PathBuf {
+    let head = fixture.git(&["rev-parse", "HEAD"]);
+    fixture.write(
+        "baseline/BASELINE.json",
+        &format!(
+            r#"{{"created_at": "2026-10-25T14:43:51Z", "site": {{"commit": "{}", "dirty": false}}}}"#,
+            head.trim()
+        ),
+    );
+    fixture.write(
+        "baseline/dump/manifest.jsonl",
+        r#"{"kind": "page", "collection": null, "class": "Jekyll::Page", "source": "pages/profile.md", "url": "/about", "output": "about.html", "written": true, "content": null, "excerpt": null, "meta": null}"#,
+    );
+    fixture.write(
+        "baseline/site/about.html",
+        "<title>About | Example</title><footer>2026</footer>",
+    );
+    fixture.0.join("baseline")
+}
+
+#[test]
+fn pages_keeps_its_build_where_it_is_told_and_never_overwrites_it() {
+    let fixture = crate::builds::tests::Fixture::new("pages-run");
+    let baseline = baseline(&fixture);
+    let dest = fixture.0.join("pages-build");
+    fixture.write("deviations.toml", "");
+    let ledger = fixture.0.join("deviations.toml");
+    // The check itself may pass or fail on this small site; what matters is the build's life.
+    run(
+        &fixture.site(),
+        &baseline,
+        &fixture.config_path(),
+        Some(&dest),
+        None,
+        &ledger,
+    )
+    .unwrap();
+    for file in [
+        "site/about.html",
+        "sha256.txt",
+        "build.json",
+        "build.log",
+        "dom-report.json",
+        "dom-report.md",
+    ] {
+        assert!(dest.join(file).is_file(), "{file} was not kept");
+    }
+    // Built as of the baseline's time, through the shared entry point.
+    let record: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(dest.join("build.json")).unwrap()).unwrap();
+    assert_eq!(record["at"], "2026-10-25T14:43:51Z");
+    assert_eq!(
+        std::fs::read_to_string(dest.join("site/about.html")).unwrap(),
+        "<title>About | Example</title><footer>2026</footer>"
+    );
+    // A second run into the same directory is refused, and the first build stays.
+    let manifest = std::fs::read_to_string(dest.join("sha256.txt")).unwrap();
+    let error = run(
+        &fixture.site(),
+        &baseline,
+        &fixture.config_path(),
+        Some(&dest),
+        None,
+        &ledger,
+    )
+    .expect_err("refused");
+    assert!(error.contains("already exists"), "{error}");
+    assert_eq!(
+        std::fs::read_to_string(dest.join("sha256.txt")).unwrap(),
+        manifest
+    );
+}
+
+#[test]
+fn the_default_build_directory_is_new() {
+    let dir = fresh_temp_dir();
+    assert!(dir.starts_with(std::env::temp_dir()));
+    assert!(dir.symlink_metadata().is_err());
+}

@@ -43,9 +43,12 @@ Each mode crate depends on `folia-core` only, never on another mode.
   the content lint (`just liquid`).
   It reads baselines as black boxes and calls only Folia's public API. `markdown` holds spike 1's
   check: `dom` (html5ever parsing and normalization), `liquid` (the template filters excerpts go
-  through), `ledger` and `report`. `pages` builds the site and compares what Folia writes with
-  Jekyll's files, `pages::entries` the documents' dates, tables of contents and code blocks, and
-  `pages::garden` the note graph and the broken-link warnings.
+  through), `ledger` and `report`. `builds` builds the site at an explicit time into a new
+  directory it keeps, with the output's manifest and a record of the inputs; `document` compares
+  whole HTML documents, and trees of them, by plan v11's §5.1 rules. `pages` builds the
+  site through it and compares what Folia writes with Jekyll's files, `pages::entries` the
+  documents' dates, tables of contents and code blocks, and `pages::garden` the note graph and the
+  broken-link warnings.
 - **`parity/`**: tools that check Folia's output against the Jekyll site.
   - `jekyll/folia_dump.rb`: the passive Jekyll plugin that dumps Jekyll's intermediate results
     (see [parity baselines](baseline.md)). Nothing else may live in `jekyll/`, because Jekyll

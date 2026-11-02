@@ -13,6 +13,8 @@
 //! `liquid` is the exception: a content lint for the site, which needs no baseline.
 
 mod baseline;
+mod builds;
+mod document;
 mod liquid;
 mod markdown;
 mod pages;
@@ -76,6 +78,31 @@ enum Command {
         /// Folia's configuration for the site
         #[arg(long)]
         config: PathBuf,
+        /// Keep Folia's build in this new directory (default: a new one in the temporary
+        /// directory); it must not exist
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Require the templates to have this tree hash (the `templates.tree_sha256` of
+        /// `build.json`); nothing is built otherwise
+        #[arg(long)]
+        templates_sha256: Option<String>,
+        /// The deviation ledger, whose `dom` entries judge the whole-document comparison
+        #[arg(long, default_value = "parity/deviations.toml")]
+        ledger: PathBuf,
+    },
+    /// Compare two HTML files, or the HTML files of two output trees, as whole documents (plan
+    /// v11, §5.1), and report every difference; exit 1 when there is any
+    Dom {
+        /// The expected document or tree (Jekyll's)
+        #[arg(long)]
+        expected: PathBuf,
+        /// The actual document or tree (Folia's)
+        #[arg(long)]
+        actual: PathBuf,
+        /// Write dom-report.json and dom-report.md into this directory (never over existing
+        /// files)
+        #[arg(long)]
+        report: Option<PathBuf>,
     },
     /// Check the site's Markdown has no Liquid outside code, which Folia would show as written
     Liquid {
@@ -114,7 +141,22 @@ fn main() -> ExitCode {
             site,
             baseline,
             config,
-        } => pages::run(&site, &baseline, &config),
+            out,
+            templates_sha256,
+            ledger,
+        } => pages::run(
+            &site,
+            &baseline,
+            &config,
+            out.as_deref(),
+            templates_sha256.as_deref(),
+            &ledger,
+        ),
+        Command::Dom {
+            expected,
+            actual,
+            report,
+        } => document::run(&expected, &actual, report.as_deref()),
         Command::Liquid { site, config } => liquid::run(&site, &config),
     };
     match result {

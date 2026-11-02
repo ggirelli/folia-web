@@ -28,7 +28,7 @@ pub enum Node {
 }
 
 /// Elements whose edges whitespace does not survive.
-const BLOCKS: &[&str] = &[
+pub const BLOCKS: &[&str] = &[
     "address",
     "article",
     "aside",
@@ -70,7 +70,37 @@ const BLOCKS: &[&str] = &[
 ];
 
 fn is_block(node: &Node) -> bool {
-    matches!(node, Node::Element { name, .. } if BLOCKS.contains(&name.as_str()))
+    is_block_in(node, &FRAGMENT)
+}
+
+/// How whitespace is normalized: the spike 1 rules ([`FRAGMENT`]), or the whole-document rules of
+/// plan v11, §5.1 ([`DOCUMENT`]), which add head-level elements to the blocks and keep a
+/// `textarea`'s text exactly.
+pub struct Rules {
+    /// Elements whose edges whitespace does not survive, besides [`BLOCKS`].
+    pub extra_blocks: &'static [&'static str],
+    /// Whether a `textarea`'s text is kept exactly, uncollapsed and untrimmed.
+    pub exact_textarea: bool,
+}
+
+/// Spike 1's rules, for fragments and `div.main-content`.
+pub const FRAGMENT: Rules = Rules {
+    extra_blocks: &[],
+    exact_textarea: false,
+};
+
+/// Plan v11, §5.1, rules 1 to 6, for whole documents.
+pub const DOCUMENT: Rules = Rules {
+    extra_blocks: &["html", "head", "body", "title", "meta", "base"],
+    exact_textarea: true,
+};
+
+fn is_block_name(name: &str, rules: &Rules) -> bool {
+    BLOCKS.contains(&name) || rules.extra_blocks.contains(&name)
+}
+
+fn is_block_in(node: &Node, rules: &Rules) -> bool {
+    matches!(node, Node::Element { name, .. } if is_block_name(name, rules))
 }
 
 /// Parses `html` as the content of a `body`, and reads the body with `read`. The DOM must stay
@@ -97,9 +127,39 @@ fn find_element(handle: &Handle, wanted: &str) -> Option<Handle> {
 
 /// The normalized `html` element of a whole page, head and body.
 pub fn normalize_document(html: &str) -> Vec<Node> {
+    normalize_document_with(html, &FRAGMENT).1
+}
+
+/// A document's doctype: its name, public id and system id, as the parser reads them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Doctype {
+    pub name: String,
+    pub public_id: String,
+    pub system_id: String,
+}
+
+/// A whole page's doctype, if it has one, and its normalized `html` element, by `rules`.
+pub fn normalize_document_with(html: &str, rules: &Rules) -> (Option<Doctype>, Vec<Node>) {
     let dom = parse_document(RcDom::default(), ParseOpts::default()).one(html);
+    let doctype = dom.document.children.borrow().iter().find_map(|child| {
+        if let NodeData::Doctype {
+            name,
+            public_id,
+            system_id,
+        } = &child.data
+        {
+            Some(Doctype {
+                name: name.to_string(),
+                public_id: public_id.to_string(),
+                system_id: system_id.to_string(),
+            })
+        } else {
+            None
+        }
+    });
     let root = find_element(&dom.document, "html").expect("a parsed page has an html element");
-    tidy(convert(&root).into_iter().collect(), true)
+    let nodes = tidy_with(convert(&root).into_iter().collect(), true, rules);
+    (doctype, nodes)
 }
 
 /// The normalized nodes of `html`.
@@ -170,6 +230,10 @@ fn gather_text(handle: &Handle, out: &mut String) {
 /// Collapses whitespace in `nodes`, the children of a block if `in_block`, and drops it at the
 /// edges of blocks.
 fn tidy(nodes: Vec<Node>, in_block: bool) -> Vec<Node> {
+    tidy_with(nodes, in_block, &FRAGMENT)
+}
+
+fn tidy_with(nodes: Vec<Node>, in_block: bool, rules: &Rules) -> Vec<Node> {
     let mut merged: Vec<Node> = Vec::new();
     for node in nodes {
         let node = match node {
@@ -178,10 +242,10 @@ fn tidy(nodes: Vec<Node>, in_block: bool) -> Vec<Node> {
                 name,
                 attrs,
                 children,
-            } if name != "pre" => {
-                let block = BLOCKS.contains(&name.as_str());
+            } if name != "pre" && !(rules.exact_textarea && name == "textarea") => {
+                let block = is_block_name(&name, rules);
                 Node::Element {
-                    children: tidy(children, block),
+                    children: tidy_with(children, block, rules),
                     name,
                     attrs,
                 }
@@ -205,12 +269,12 @@ fn tidy(nodes: Vec<Node>, in_block: bool) -> Vec<Node> {
         let at_start = if i == 0 {
             in_block
         } else {
-            is_block(&merged[i - 1])
+            is_block_in(&merged[i - 1], rules)
         };
         let at_end = if i + 1 == len {
             in_block
         } else {
-            is_block(&merged[i + 1])
+            is_block_in(&merged[i + 1], rules)
         };
         let mut text = text.as_str();
         if at_start {

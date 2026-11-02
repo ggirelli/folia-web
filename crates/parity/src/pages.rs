@@ -23,22 +23,42 @@ mod garden;
 
 use std::path::{Path, PathBuf};
 
-use folia::build::{Built, build};
+use folia::build::Built;
 use folia::config::Config;
 use folia_core::content::{Route, SiteClock};
 
 use crate::baseline::{self, Row};
+use crate::builds::{self, Request};
+use crate::document::assertions::{self, Output};
+use crate::document::{self, Report, Scope, Side, ledger};
 use crate::markdown::dom::{self, Node};
 use crate::routes::{check_checkout, short};
 
-/// Builds the site with Folia and checks what it wrote against the baseline in `baseline_dir`,
-/// printing the report. Returns whether every check passed.
+/// Builds the site with Folia as of the baseline's build time, keeps the build in `out` (a new
+/// directory, `builds::keep`; by default a new one in the temporary directory), and checks what
+/// it wrote against the baseline in `baseline_dir`, printing the report. Returns whether every
+/// check passed. The build is never deleted: its directory is printed, for the caller to inspect
+/// or remove. `expected_templates`, when given, is the templates' tree hash the build requires.
+///
+/// The pages built are also compared as whole documents (`document`, plan v11, §5.1), judged
+/// against the DOM entries of the ledger at `ledger_path` (§5.2) and the hard assertions; that
+/// comparison decides the check too. `dom-report.json` and `dom-report.md` are written into the
+/// build's directory, with every difference and the ledger's verdict on it.
 ///
 /// # Errors
 ///
 /// Fails when the baseline or configuration cannot be read, the site checkout is not the commit
-/// the baseline was built from (`check_checkout`), or Folia's output cannot be read.
-pub fn run(site_dir: &Path, baseline_dir: &Path, config_path: &Path) -> Result<bool, String> {
+/// the baseline was built from (`check_checkout`), the build cannot be kept (`out` exists or is
+/// inside the site), or Folia's output cannot be read.
+pub fn run(
+    site_dir: &Path,
+    baseline_dir: &Path,
+    config_path: &Path,
+    out: Option<&Path>,
+    expected_templates: Option<&str>,
+    ledger_path: &Path,
+) -> Result<bool, String> {
+    let ledger = ledger::load(ledger_path)?;
     let baseline = baseline::load(baseline_dir)?;
     check_checkout(site_dir, &baseline.commit, baseline.diff.as_deref())?;
     let config = Config::load(config_path).map_err(|e| e.to_string())?;
@@ -49,8 +69,37 @@ pub fn run(site_dir: &Path, baseline_dir: &Path, config_path: &Path) -> Result<b
         baseline.built_at
     );
 
-    let out = std::env::temp_dir().join(format!("folia-parity-pages-{}", std::process::id()));
-    let built = match build(site_dir, &config, &out, baseline.built_at) {
+    let dest = match out {
+        Some(out) => out.to_owned(),
+        None => fresh_temp_dir(),
+    };
+    let kept = builds::keep(&Request {
+        site: site_dir,
+        config: &config,
+        config_path,
+        dest: &dest,
+        at: baseline.built_at,
+        expected_templates,
+    })?;
+    match kept.record.files {
+        Some(files) => println!(
+            "Folia's build ({files} files, with its manifest and record) is kept in {}.",
+            kept.dir.display()
+        ),
+        None => println!(
+            "Folia's failed build (its record and log) is kept in {}.",
+            kept.dir.display()
+        ),
+    }
+    for checkout in [&kept.record.site, &kept.record.folia] {
+        if let Some(builds::Changes::Unknown { error }) = &checkout.changes {
+            println!(
+                "warning: the record cannot identify the uncommitted changes of {}: {error}",
+                checkout.path
+            );
+        }
+    }
+    let built = match kept.built {
         Ok(built) => built,
         Err(problems) => {
             println!(
@@ -64,9 +113,15 @@ pub fn run(site_dir: &Path, baseline_dir: &Path, config_path: &Path) -> Result<b
         }
     };
     let clock = SiteClock::new(&config.time_zone, baseline.built_at).map_err(|e| e.to_string())?;
-    let result = compare(&built, &out, baseline_dir, &baseline.rows, &clock);
-    let _ = std::fs::remove_dir_all(&out);
-    let passed = result?;
+    let mut passed = compare(&built, &kept.output, baseline_dir, &baseline.rows, &clock)?;
+    passed &= judge_documents(
+        &built,
+        &kept.output,
+        &kept.dir,
+        &baseline_dir.join("site"),
+        &ledger,
+        &config.site.url,
+    )?;
     println!(
         "{}",
         if passed {
@@ -364,6 +419,147 @@ fn report(title: &str, differing: &[String]) -> bool {
 
 fn read_text(path: &Path) -> Result<String, String> {
     std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// Compares the pages built with Jekyll's as whole documents, judges every difference against
+/// the ledger, checks the hard assertions on the pages and stubs, writes the report into the
+/// build's directory, and prints its outcome. Returns whether it passes.
+fn judge_documents(
+    built: &Built,
+    output: &Path,
+    dir: &Path,
+    jekyll: &Path,
+    ledger: &ledger::Ledger,
+    site_url: &str,
+) -> Result<bool, String> {
+    let pages: Vec<String> = built.pages.iter().map(Route::output_path).collect();
+    let mut outcomes = Vec::new();
+    let read = |root: &Path, path: &str| std::fs::read(root.join(path)).ok();
+    for (path, kind) in pages
+        .iter()
+        .map(|path| {
+            (
+                path.clone(),
+                Output::Page {
+                    root: path == "index.html",
+                },
+            )
+        })
+        .chain(
+            built
+                .stubs
+                .iter()
+                .map(|route| (route.output_path(), Output::Stub)),
+        )
+    {
+        let (want, got) = (read(jekyll, &path), read(output, &path));
+        outcomes.extend(assertions::check_bytes(
+            &path,
+            kind,
+            want.as_deref(),
+            got.as_deref(),
+            site_url,
+        ));
+    }
+    let report = Report::new(
+        Side::of("jekyll", jekyll)?,
+        Side::of("folia", output)?,
+        document::compare_trees(jekyll, output, &Scope::Only(&pages))?,
+    )
+    .judge(ledger, outcomes);
+    let (json, _) = report.write(dir)?;
+    Ok(print_judgement(&report, &json))
+}
+
+/// Prints the outcome of a judged report, whose JSON is at `json`: a summary line, each entry
+/// partly stale, and, when it fails, each difference not accepted, each stale entry and problem,
+/// and each failed assertion. Returns whether it passes.
+fn print_judgement(report: &Report, json: &Path) -> bool {
+    let totals = &report.totals;
+    let applied = report.ledger.as_ref().expect("judged");
+    let accepted = report
+        .files
+        .iter()
+        .flat_map(|file| &file.differences)
+        .filter(|d| matches!(d.ledger, Some(ledger::Verdict::Accepted(_))))
+        .count();
+    let failed_assertions = report.assertions.iter().filter(|o| !o.passed).count();
+    let passed = report.passed == Some(true);
+    println!(
+        "{}: whole-document DOM comparison of {} pages: {} differences, {} accepted by the ledger; {} entries, {} stale, {} partly stale, {} problems; {} assertions, {} failed (see {}).",
+        if passed { "ok" } else { "FAILS" },
+        totals.compared,
+        totals.differences,
+        accepted,
+        applied.entries.len(),
+        applied.entries.iter().filter(|e| e.stale).count(),
+        applied.entries.iter().filter(|e| e.partly_stale).count(),
+        applied.problems.len(),
+        report.assertions.len(),
+        failed_assertions,
+        json.display()
+    );
+    // Partial staleness does not fail a run, but is always shown; final acceptance refuses it.
+    for entry in applied.entries.iter().filter(|e| e.partly_stale) {
+        println!(
+            "  ledger: {} is partly stale (final acceptance, F13, refuses it):",
+            entry.id
+        );
+        for line in applied
+            .final_acceptance
+            .iter()
+            .filter(|line| line.starts_with(&format!("{}: ", entry.id)))
+        {
+            println!("    {line}");
+        }
+    }
+    if !passed {
+        for file in &report.files {
+            for difference in &file.differences {
+                if !matches!(difference.ledger, Some(ledger::Verdict::Accepted(_))) {
+                    println!(
+                        "  {}: {} {}: {:?}",
+                        file.path,
+                        difference.path,
+                        difference.kind.name(),
+                        difference.ledger
+                    );
+                }
+            }
+        }
+        for entry in applied.entries.iter().filter(|e| e.stale) {
+            println!("  ledger: {} explains no difference (stale)", entry.id);
+            for output in entry.outputs.iter().filter(|o| {
+                o.expected != ledger::Binding::AsReviewed || o.actual != ledger::Binding::AsReviewed
+            }) {
+                println!(
+                    "    output {}: the baseline's file is {}, Folia's is {}",
+                    output.path,
+                    ledger::binding_name(output.expected),
+                    ledger::binding_name(output.actual)
+                );
+            }
+        }
+        for problem in &applied.problems {
+            println!("  ledger: {problem}");
+        }
+        for outcome in report.assertions.iter().filter(|o| !o.passed) {
+            println!(
+                "  {}: assertion {}: {}",
+                outcome.file, outcome.assertion, outcome.detail
+            );
+        }
+    }
+    passed
+}
+
+/// A directory in the temporary directory that does not exist yet, for a build to keep.
+fn fresh_temp_dir() -> PathBuf {
+    let base = std::env::temp_dir();
+    (0..u32::MAX)
+        .map(|n| base.join(format!("folia-parity-pages-{}-{n}", std::process::id())))
+        .find(|dir| dir.symlink_metadata().is_err())
+        .expect("some name is free")
 }
 
 /// The files below `dir`, as paths relative to `root` with `/` separators.

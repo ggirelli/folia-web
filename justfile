@@ -11,6 +11,9 @@ bundle := "BUNDLE_PATH=vendor/bundle bundle"
 # The reference Jekyll site, and where baselines go (outside both repositories)
 site := env("FOLIA_SITE", "../filopoe")
 baselines := env("FOLIA_BASELINES", "../folia-baselines")
+# The tree hash of the templates the pages check expects in the site's _folia/templates: filopoe's
+# `folia/templates` at TEMPLATES-COMMIT-B (the `templates.tree_sha256` of a build's build.json)
+templates_sha256 := env("FOLIA_TEMPLATES_SHA256", "TEMPLATES-TREE-SHA256")
 
 # List recipes
 default:
@@ -137,10 +140,11 @@ routes label:
 markdown label *flags:
     cargo run --quiet --locked -p parity -- markdown --site {{site}} --baseline {{baselines}}/{{label}} {{flags}}
 
-# Check the pages Folia builds against a baseline of the reference site (vertical slice)
+# Check the pages Folia builds against a baseline of the reference site (vertical slice), keeping
+# the build in `out` (a new directory) or, by default, a new one in the temporary directory
 [group('parity')]
-pages label:
-    cargo run --quiet --locked -p parity -- pages --site {{site}} --baseline {{baselines}}/{{label}} --config parity/filopoe.toml
+pages label out="":
+    cargo run --quiet --locked -p parity -- pages --site {{site}} --baseline {{baselines}}/{{label}} --config parity/filopoe.toml --templates-sha256 {{templates_sha256}} {{ if out == "" { "" } else { "--out " + quote(out) } }}
 
 # Check the reference site's Markdown has no Liquid outside code (content lint)
 [group('parity')]

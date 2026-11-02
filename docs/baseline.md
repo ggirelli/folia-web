@@ -222,13 +222,52 @@ and `<source>.folia.html` for each document or excerpt that differs.
 
 ```sh
 just pages BASELINE-B            # build with Folia and compare what it writes
+just pages BASELINE-B ../out/p1  # the same, keeping the build in a new directory of your choice
 just pages-negative BASELINE-B   # the check fails when it should
 just build ../folia-out       # just build, into a directory outside the site
 ```
 
 The parity tool builds the site with `folia::build`, as of the baseline's build time and with the
-templates in the site's `_folia/templates`, into a temporary directory, and compares every file
-it writes with the one Jekyll wrote at the same path (plan v6, §9.2):
+templates in the site's `_folia/templates`, and compares every file it writes with the one Jekyll
+wrote at the same path (plan v6, §9.2). The build is kept, never deleted, in a new directory:
+`--out DIR` names it (it must not exist, and must not be inside the site), and otherwise a new
+`folia-parity-pages-*` directory in the temporary directory is used; its path is printed. The
+directory holds Folia's output (`site/`), its manifest (`sha256.txt`, one `<sha256>  ./<path>`
+line per file, sorted by path), the inputs and result (`build.json`: the build time, the site's
+commit and status, the configuration's hash, the templates' tree hash, the Folia source's commit
+and status, the compiler) and the summary with any warnings or problems (`build.log`). A failed
+build keeps its record and log. Each build is about 164 MB; builds are never pruned, so remove
+old ones by hand. `just pages` also requires the templates to have the tree hash it names
+(`templates_sha256` in the justfile, `--templates-sha256`), and builds nothing otherwise. The
+record's `changes`, for the site and for the Folia source, identifies a checkout's uncommitted
+changes beyond its commit: `{"state": "clean"}`, `{"state": "changed", "sha256": …}` (the hash
+of the staged and unstaged diffs and of each untracked, not ignored file), or
+`{"state": "unknown", "error": …}` when git fails, which `build.log` and `just pages` also
+report; a git failure is never recorded as a clean tree. The diffs are taken with every
+configurable setting that would change their text given on the command line (prefixes, quoting,
+drivers, colour, file order, algorithm, indent heuristic, context, inter-hunk context, blank
+lines, `diff.relative`, submodules, full object ids), so the hash does not depend on the git
+configuration; which untracked files count follows the ignore files, the user's
+`core.excludesFile` included, as `git status` does.
+
+The pages built are also compared with Jekyll's as whole documents (plan v11, §5.1), and the
+comparison decides the check: every difference must be explained by an accepted `dom` entry of
+the deviation ledger (`parity/deviations.toml`, `--ledger`; §5.2), no such entry may explain
+nothing, and the hard document assertions (robots, canonical, title, description, `lang`,
+`rel="me"` and the h-card on `/`, h-entry, redirect stubs) must hold; a page that cannot be read
+as UTF-8 fails its assertions as a `read` failure. A `dom` entry is bound to the baseline's
+`BASELINE.json` and, for each output, to both files reviewed (`expected_sha256`, the baseline's;
+`actual_sha256`, Folia's), each checked against the SHA-256 of the file compared, so a new
+baseline, a changed baseline file or a changed page needs a new review: the differences it would
+have explained are reported *stale* for it, and fail. An entry needs an `id` that is not blank,
+and a field the ledger's schema does not know is a problem, never ignored. A difference two
+entries explain (accepted or proposed) fails as an overlap. An entry that explains some of what
+it lists but not all is reported *partly stale* on every run, with what final acceptance (F13)
+would refuse, without failing the run. `dom-report.json` and `dom-report.md` in the build's
+directory list every difference by node path and kind, with the ledger's verdict on it, each
+entry's matches and the state of each output it lists, and every assertion.
+`parity dom --expected A --actual B [--report DIR]` compares any two HTML files or output trees
+the same way, in report only. The checks:
 
 1. each page and redirect stub has Jekyll's URL and output file;
 2. each page has Jekyll's fingerprint: title, canonical link, description and Open Graph values;

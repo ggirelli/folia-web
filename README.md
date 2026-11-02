@@ -42,6 +42,6 @@ The documentation is published at <https://ggirelli.github.io/folia/>.
 
 - [Parity baselines](docs/baseline.md): how to build and compare them.
 - [Development](docs/development.md): how the repository is organized.
-- [Plans](docs/planning/): the architecture proposal; `plan.v9.md` is current.
+- [Plans](docs/planning/): the architecture proposal; `plan.v11.md` is current.
 
 Contributions follow [CONTRIBUTING.md](CONTRIBUTING.md).
