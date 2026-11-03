@@ -45,10 +45,12 @@ Each mode crate depends on `folia-core` only, never on another mode.
   check: `dom` (html5ever parsing and normalization), `liquid` (the template filters excerpts go
   through), `ledger` and `report`. `builds` builds the site at an explicit time into a new
   directory it keeps, with the output's manifest and a record of the inputs; `document` compares
-  whole HTML documents, and trees of them, by plan v11's §5.1 rules. `pages` builds the
+  whole HTML documents, and trees of them, by plan v12's §5.1 rules. `pages` builds the
   site through it and compares what Folia writes with Jekyll's files, `pages::entries` the
   documents' dates, tables of contents and code blocks, and `pages::garden` the note graph and the
-  broken-link warnings.
+  broken-link warnings. `coverage` classifies every row of the baseline's manifest from what
+  Folia plans and writes, the checks' verdict on each output, and the ledger's coverage entries
+  (plan v12, §5.4, A2.1).
 - **`parity/`**: tools that check Folia's output against the Jekyll site.
   - `jekyll/folia_dump.rb`: the passive Jekyll plugin that dumps Jekyll's intermediate results
     (see [parity baselines](baseline.md)). Nothing else may live in `jekyll/`, because Jekyll
@@ -64,18 +66,45 @@ Each mode crate depends on `folia-core` only, never on another mode.
   - `deviations.toml`: the deviation ledger; an entry may name the Markdown gates it explains
     (`markdown_gates`). `spike3-expected.txt`: the differences spike 3 expects, each traced to a
     ledger entry.
-  - `evidence/`: the reviewed outputs of each spike and rebaseline.
+  - `evidence/`: the reviewed outputs of each spike and rebaseline; from A2 on, each folder
+    also keeps its builds' records (`builds/<name>/build.json`, `sha256.txt`), built from a clean
+    Folia commit and committed on their own, as its child (plan v12, §5.4).
 - **`scripts/`**: the scripts behind the `just` recipes.
   - `baseline.sh`: builds a baseline.
   - `compare-builds.sh`: compares two baselines.
   - `verify-baseline.sh`: runs the spike 0 acceptance checks.
   - `markdown-negative.sh`, `pages-negative.sh`: show the Markdown and page checks fail when
     they should.
+  - `ledger-negative.sh`: shows a DOM ledger entry holds only for the baseline record and files
+    it was reviewed against, on copies of the site and baseline, that the templates hash pin
+    refuses changed templates, and that a build whose source identity is unknown fails.
+  - `coverage-negative.sh`: shows the coverage report fails on waivers and removals no owner
+    approved, on a copy of the ledger.
+  - `evidence-provenance.sh`: checks an evidence folder keeps its builds' records, made from one
+    clean Folia commit, and is (or can be) committed on its own, on that commit; it only reads.
+    `evidence-provenance-negative.sh` runs it on throwaway repositories, one per way of breaking
+    the convention.
   - `check-file-length.sh`: enforces the 1,000-line limit.
   - `slice-boundary.sh`: checks a step of the vertical slice keeps out of the other step's mode.
 - **`.github/`**: the CI and docs workflows and the pull request template.
 - **`docs/`**: this documentation, and the versioned plans in `docs/planning/`.
 - **`assets/brand/`**: logos and the banner.
+
+## Owner approvals in the ledger
+
+`parity/deviations.toml` declares, at its top, the `owners`: the only names an approval may give.
+A waiver or removal (`check = "coverage"`) classifies an output only when it has
+`status = "accepted"`, a valid `accepted` date, a `decision` and a `rationale`, and an
+`accepted_by` that is exactly one of `owners`; a missing or empty `owners` approves nothing, and
+proposed and withdrawn entries classify nothing (plan v12, §5.2 and §5.4).
+
+**What the tool checks is the recorded approval, not who wrote it.** It cannot tell whether the
+owner made or approved a ledger change: anyone who can edit the file can type an owner's name, or
+add a name to `owners`. A change to `owners` is visible, not prevented: a test pins the list
+(`the_ledger_names_its_owner_and_holds_no_waiver_or_removal` in `crates/parity/src/coverage/`),
+and every coverage report records it. So review must confirm, for each change to `owners` and
+each accepted entry, that the owner actually approved it; an implementer never writes an owner's
+name into `accepted_by` or `owners` on their own.
 
 ## Checks
 

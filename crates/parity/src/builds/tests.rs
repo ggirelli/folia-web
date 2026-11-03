@@ -233,16 +233,57 @@ fn the_record_names_the_inputs() {
 }
 
 #[test]
-fn a_site_outside_a_repository_is_recorded_as_unknown() {
-    assert_eq!(
-        checkout(Path::new("/")),
-        Checkout {
-            path: "/".to_owned(),
-            commit: None,
-            status: None,
-            changes: None,
+fn a_source_outside_a_repository_has_no_commit_and_an_unknown_identity() {
+    let record = checkout(Path::new("/"));
+    assert_eq!(record.path, "/");
+    assert_eq!(record.commit, None);
+    assert_eq!(record.status, None);
+    match &record.changes {
+        Changes::Unknown { error } => {
+            assert!(error.starts_with("it has no git identity: "), "{error}");
+            assert!(error.contains("git rev-parse HEAD"), "{error}");
         }
+        other => panic!("expected an unknown identity, got {other:?}"),
+    }
+    let json = serde_json::to_value(&record).unwrap();
+    assert_eq!(json["commit"], serde_json::Value::Null);
+    assert_eq!(json["changes"]["state"], "unknown");
+    assert!(json["changes"].get("sha256").is_none());
+}
+
+#[test]
+fn a_site_that_is_not_a_git_checkout_is_kept_with_its_diagnostics_and_an_unknown_identity() {
+    let fixture = Fixture::new("not-git");
+    std::fs::remove_dir_all(fixture.site().join(".git")).unwrap();
+    let kept = fixture
+        .keep(&fixture.0.join("build"), "2026-10-25T14:43:51Z")
+        .unwrap();
+    // Folia cannot build it (a page's date is read from git), and the build is kept as a failed
+    // one: its record and log say why, and the identity is unknown, never clean or hashed.
+    let problems = kept
+        .built
+        .as_ref()
+        .expect_err("a site outside git cannot be built");
+    assert!(
+        problems.iter().any(|p| p.message.contains("git log")),
+        "{problems:?}"
     );
+    assert!(kept.dir.join("build.json").exists());
+    assert!(kept.dir.join("build.log").exists());
+    assert_eq!(kept.record.site.commit, None);
+    let reasons = unknown_identities(&kept.record);
+    assert_eq!(reasons.len(), 1, "{reasons:?}");
+    assert!(
+        reasons[0].starts_with("the site's identity (")
+            && reasons[0].contains("is unknown: it has no git identity: "),
+        "{reasons:?}"
+    );
+    let json: serde_json::Value =
+        serde_json::from_str(&read(&kept.dir.join("build.json"))).unwrap();
+    assert_eq!(json["site"]["commit"], serde_json::Value::Null);
+    assert_eq!(json["site"]["changes"]["state"], "unknown");
+    let log = read(&kept.dir.join("build.log"));
+    assert!(log.contains("are unknown: it has no git identity"), "{log}");
 }
 
 #[test]
@@ -272,9 +313,9 @@ fn a_failed_build_keeps_its_record_and_log() {
 #[test]
 fn a_clean_checkout_has_no_changes_and_its_changes_are_identified_by_content() {
     let fixture = Fixture::new("changes");
-    assert_eq!(checkout(&fixture.site()).changes, Some(Changes::Clean));
+    assert_eq!(checkout(&fixture.site()).changes, Changes::Clean);
     let changed = |fixture: &Fixture| match checkout(&fixture.site()).changes {
-        Some(Changes::Changed { sha256 }) => sha256,
+        Changes::Changed { sha256 } => sha256,
         other => panic!("expected changes, got {other:?}"),
     };
     fixture.write("site/_folia/untracked.txt", "one");
@@ -302,7 +343,7 @@ fn a_git_failure_is_unknown_never_clean_nor_hashed() {
     let record = checkout(&fixture.site());
     assert!(record.commit.is_some());
     match record.changes {
-        Some(Changes::Unknown { error }) => assert!(error.contains("git "), "{error}"),
+        Changes::Unknown { error } => assert!(error.contains("git "), "{error}"),
         other => panic!("expected unknown changes, got {other:?}"),
     }
     let json = serde_json::to_value(checkout(&fixture.site())).unwrap();
@@ -317,10 +358,7 @@ fn a_build_record_says_when_changes_are_unknown() {
     let kept = fixture
         .keep(&fixture.0.join("build"), "2026-10-25T14:43:51Z")
         .unwrap();
-    assert!(matches!(
-        kept.record.site.changes,
-        Some(Changes::Unknown { .. })
-    ));
+    assert!(matches!(kept.record.site.changes, Changes::Unknown { .. }));
     let log = read(&kept.dir.join("build.log"));
     assert!(
         log.contains("record: the uncommitted changes of") && log.contains("are unknown"),
@@ -492,4 +530,309 @@ fn diff_layout_settings_do_not_change_the_hash() {
     }
     // From a subdirectory, with `diff.relative` set, the whole repository still counts.
     assert_eq!(changes_in(&fixture.site().join("sub")), Some(plain));
+}
+
+#[test]
+fn an_untracked_file_whose_name_is_not_utf8_is_identified_by_its_contents() {
+    use std::os::unix::ffi::OsStrExt as _;
+    let fixture = Fixture::new("not-utf8");
+    // `caf\xe9.txt`: Latin-1, not UTF-8. A lossy reading of the name would name no file, and
+    // hash the same placeholder whatever the file holds.
+    let name = std::ffi::OsStr::from_bytes(b"caf\xe9.txt");
+    let file = fixture.site().join(name);
+    std::fs::write(&file, "one").unwrap();
+    let one = changes_of(&fixture).expect("changed");
+    std::fs::write(&file, "two").unwrap();
+    let two = changes_of(&fixture).expect("changed");
+    assert_ne!(one, two, "a change of the file's contents changes the hash");
+    std::fs::write(&file, "one").unwrap();
+    assert_eq!(changes_of(&fixture).expect("changed"), one);
+    // Another name whose lossy reading is the same (`caf\xe8.txt` also reads as `caf�.txt`),
+    // with the same contents, is another tree.
+    std::fs::remove_file(&file).unwrap();
+    std::fs::write(
+        fixture
+            .site()
+            .join(std::ffi::OsStr::from_bytes(b"caf\xe8.txt")),
+        "one",
+    )
+    .unwrap();
+    assert_ne!(changes_of(&fixture).expect("changed"), one);
+}
+
+#[test]
+fn an_untracked_nested_repository_is_refused_as_unknown_never_hashed() {
+    let fixture = Fixture::new("nested");
+    let nested = fixture.site().join("nested");
+    std::fs::create_dir_all(&nested).unwrap();
+    let git = |args: &[&str]| {
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&nested)
+            .args(args)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?}");
+    };
+    git(&["init", "--quiet"]);
+    std::fs::write(nested.join("file.txt"), "one").unwrap();
+    // Git lists the nested repository as a directory, not its files: its contents cannot be
+    // identified, so the changes are unknown, naming it, and never a hash.
+    match changes(&fixture.site()) {
+        Changes::Unknown { error } => {
+            assert!(error.contains("nested/"), "{error}");
+            assert!(error.contains("not supported"), "{error}");
+        }
+        other => panic!("expected unknown changes, got {other:?}"),
+    }
+    let record = checkout(&fixture.site());
+    assert!(matches!(record.changes, Changes::Unknown { .. }));
+    // An ignored nested repository is not part of the tree, as any ignored file is not.
+    fixture.write("site/.gitignore", "nested/\n");
+    fixture.git(&["add", ".gitignore"]);
+    fixture.git(&["commit", "--quiet", "-m", "ignore"]);
+    assert_eq!(changes_of(&fixture), None);
+}
+
+#[test]
+fn a_manifest_is_read_back_as_written_and_a_malformed_one_is_refused() {
+    let fixture = Fixture::new("read-manifest");
+    fixture.write("out/a.html", "a");
+    fixture.write("out/b/c.css", "c");
+    let manifest = manifest(&fixture.0.join("out")).unwrap();
+    fixture.write("sha256.txt", &manifest_text(&manifest));
+    let read = read_manifest(&fixture.0.join("sha256.txt")).unwrap();
+    assert_eq!(read.into_iter().collect::<Vec<_>>(), manifest);
+    for bad in [
+        "x  ./a.html\n",
+        &format!("{}  a.html\n", "0".repeat(64)),
+        &format!("{}  ./\n", "0".repeat(64)),
+        &format!("{}  ./a.html\n", "A".repeat(64)),
+        &format!("{0}  ./a.html\n{0}  ./a.html\n", "0".repeat(64)),
+    ] {
+        fixture.write("bad.txt", bad);
+        assert!(
+            read_manifest(&fixture.0.join("bad.txt")).is_err(),
+            "{bad:?}"
+        );
+    }
+}
+
+/// Makes `path`, in the fixture's site, unreadable; `false` when it can still be read (as root),
+/// so a test of an unreadable file has nothing to test.
+fn make_unreadable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt as _;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o000)).unwrap();
+    if std::fs::read(path).is_ok() {
+        eprintln!(
+            "{} is still readable (run as root?); not tested",
+            path.display()
+        );
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        return false;
+    }
+    true
+}
+
+#[test]
+fn an_unreadable_untracked_file_is_unknown_naming_it_and_the_error_never_a_placeholder() {
+    let fixture = Fixture::new("unreadable");
+    let file = fixture.site().join("_folia/secret.txt");
+    fixture.write("site/_folia/secret.txt", "one");
+    if !make_unreadable(&file) {
+        return;
+    }
+    match changes(&fixture.site()) {
+        Changes::Unknown { error } => {
+            assert!(error.contains("_folia/secret.txt"), "{error}");
+            assert!(error.contains("cannot be read"), "{error}");
+            assert!(
+                error.to_lowercase().contains("permission denied"),
+                "{error}"
+            );
+        }
+        other => panic!("expected unknown changes, got {other:?}"),
+    }
+    let json = serde_json::to_value(checkout(&fixture.site())).unwrap();
+    assert_eq!(json["changes"]["state"], "unknown");
+    assert!(json["changes"].get("sha256").is_none());
+    // Readable again, it is identified by its contents.
+    std::fs::set_permissions(&file, std::os::unix::fs::PermissionsExt::from_mode(0o644)).unwrap();
+    assert!(changes_of(&fixture).is_some());
+}
+
+/// Commits a repository at `sub` in the fixture's site and records it there as a submodule (a
+/// gitlink), as `git submodule add` would without its `.gitmodules`.
+fn add_submodule(fixture: &Fixture, sub: &str) {
+    let dir = fixture.site().join(sub);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("file.txt"), "one").unwrap();
+    let git = |args: &[&str]| {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(&dir)
+            .args([
+                "-c",
+                "user.name=Folia",
+                "-c",
+                "user.email=folia@example.com",
+            ])
+            .args(args)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "git {args:?}");
+        String::from_utf8(out.stdout).unwrap()
+    };
+    git(&["init", "--quiet"]);
+    git(&["add", "."]);
+    git(&["commit", "--quiet", "-m", "sub"]);
+    let head = git(&["rev-parse", "HEAD"]);
+    fixture.git(&[
+        "update-index",
+        "--add",
+        "--cacheinfo",
+        &format!("160000,{},{sub}", head.trim()),
+    ]);
+}
+
+fn assert_submodule_refused(fixture: &Fixture, sub: &str) {
+    match changes(&fixture.site()) {
+        Changes::Unknown { error } => {
+            assert!(error.contains(&format!("submodule {sub}")), "{error}");
+            assert!(error.contains("not supported"), "{error}");
+        }
+        other => panic!("expected unknown changes, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_submodule_clean_or_dirty_staged_or_committed_is_unknown() {
+    let fixture = Fixture::new("submodule");
+    add_submodule(&fixture, "sub");
+    // Staged only.
+    assert_submodule_refused(&fixture, "sub");
+    fixture.git(&["commit", "--quiet", "-m", "add the submodule"]);
+    // Committed, its working tree clean: still refused, since a dirty one could not be told from
+    // it by the diffs.
+    assert_submodule_refused(&fixture, "sub");
+    // Dirty, two ways: never hashed, so the two cannot be confused.
+    std::fs::write(fixture.site().join("sub/file.txt"), "two").unwrap();
+    assert_submodule_refused(&fixture, "sub");
+    std::fs::write(fixture.site().join("sub/file.txt"), "three").unwrap();
+    assert_submodule_refused(&fixture, "sub");
+    // Removed from the index but still in HEAD: still an entry, still refused.
+    fixture.git(&["rm", "--cached", "--quiet", "sub"]);
+    assert_submodule_refused(&fixture, "sub");
+}
+
+#[test]
+fn a_repository_without_submodule_entries_is_identified_even_with_a_gitmodules_file() {
+    let fixture = Fixture::new("no-submodule");
+    assert_eq!(changes(&fixture.site()), Changes::Clean);
+    // A `.gitmodules` that names no gitlink (as `filopoe`'s does) is a file like any other.
+    fixture.write(
+        "site/.gitmodules",
+        "[submodule \"gone\"]\n\tpath = gone\n\turl = https://example.org/gone.git\n",
+    );
+    fixture.git(&["add", ".gitmodules"]);
+    fixture.git(&["commit", "--quiet", "-m", "gitmodules"]);
+    assert_eq!(changes(&fixture.site()), Changes::Clean);
+    fixture.write("site/_folia/untracked.txt", "one");
+    assert!(changes_of(&fixture).is_some());
+}
+
+#[test]
+fn an_unknown_site_or_folia_identity_is_named_and_a_known_one_is_not() {
+    let fixture = Fixture::new("identities");
+    let kept = fixture
+        .keep(&fixture.0.join("build"), "2026-10-25T14:43:51Z")
+        .unwrap();
+    let known = Record {
+        site: Checkout {
+            changes: Changes::Clean,
+            ..kept.record.site.clone()
+        },
+        folia: Checkout {
+            changes: Changes::Changed {
+                sha256: "0".repeat(64),
+            },
+            ..kept.record.folia.clone()
+        },
+        ..kept.record.clone()
+    };
+    assert_eq!(unknown_identities(&known), Vec::<String>::new());
+    let unknown = || Changes::Unknown {
+        error: "git failed".to_owned(),
+    };
+    let site = Record {
+        site: Checkout {
+            changes: unknown(),
+            ..known.site.clone()
+        },
+        ..known.clone()
+    };
+    let reasons = unknown_identities(&site);
+    assert_eq!(reasons.len(), 1);
+    assert!(
+        reasons[0].starts_with("the site's identity ("),
+        "{reasons:?}"
+    );
+    assert!(
+        reasons[0].ends_with("is unknown: git failed"),
+        "{reasons:?}"
+    );
+    let folia = Record {
+        folia: Checkout {
+            changes: unknown(),
+            ..known.folia.clone()
+        },
+        ..known.clone()
+    };
+    let reasons = unknown_identities(&folia);
+    assert_eq!(reasons.len(), 1);
+    assert!(
+        reasons[0].starts_with("the Folia source's identity ("),
+        "{reasons:?}"
+    );
+    let both = Record {
+        folia: folia.folia.clone(),
+        ..site
+    };
+    assert_eq!(unknown_identities(&both).len(), 2);
+}
+
+#[test]
+fn a_build_whose_identity_is_unknown_is_kept_with_its_diagnostics() {
+    let fixture = Fixture::new("unknown-kept");
+    let file = fixture.site().join("_folia/secret.txt");
+    fixture.write("site/_folia/secret.txt", "one");
+    if !make_unreadable(&file) {
+        return;
+    }
+    let kept = fixture
+        .keep(&fixture.0.join("build"), "2026-10-25T14:43:51Z")
+        .unwrap();
+    // The build itself succeeds, and is kept whole: its output, manifest, record and log.
+    assert!(kept.built.is_ok());
+    assert!(kept.output.join("about.html").exists());
+    assert!(kept.dir.join("sha256.txt").exists());
+    let reasons = unknown_identities(&kept.record);
+    assert_eq!(reasons.len(), 1, "{reasons:?}");
+    assert!(reasons[0].contains("_folia/secret.txt"), "{reasons:?}");
+    let json: serde_json::Value =
+        serde_json::from_str(&read(&kept.dir.join("build.json"))).unwrap();
+    assert_eq!(json["site"]["changes"]["state"], "unknown");
+    assert!(
+        json["site"]["changes"]["error"]
+            .as_str()
+            .unwrap()
+            .contains("_folia/secret.txt")
+    );
+    let log = read(&kept.dir.join("build.log"));
+    assert!(
+        log.contains("are unknown") && log.contains("_folia/secret.txt"),
+        "{log}"
+    );
 }

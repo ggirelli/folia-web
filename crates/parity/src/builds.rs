@@ -1,4 +1,4 @@
-//! Folia builds that parity keeps (plan v11, §5.4): one entry point that builds the site with
+//! Folia builds that parity keeps (plan v12, §5.4): one entry point that builds the site with
 //! Folia's library at an explicit time, keeps everything it wrote, and records what it was built
 //! from, so that a build can be compared, rebuilt and compared again.
 //!
@@ -84,9 +84,9 @@ pub struct Checkout {
     /// `git status --porcelain`, one entry per line; `None` when `commit` is.
     pub status: Option<Vec<String>>,
     /// The identity of the working tree beyond its commit ([`changes`]): clean, changed with the
-    /// SHA-256 of its uncommitted changes, or unknown because git failed; `None` when `commit`
-    /// is.
-    pub changes: Option<Changes>,
+    /// SHA-256 of its uncommitted changes, or unknown; unknown too when `commit` is `None`, since
+    /// a directory without a commit has no git identity.
+    pub changes: Changes,
 }
 
 /// A working tree's uncommitted changes, as [`changes`] reads them. Written in `build.json` as
@@ -99,7 +99,7 @@ pub enum Changes {
     Clean,
     /// Changes, identified by the SHA-256 of their text ([`changes`]).
     Changed { sha256: String },
-    /// Git could not say; `error` is why.
+    /// Git could not say, or the tree holds what cannot be identified; `error` is why.
     Unknown { error: String },
 }
 
@@ -111,7 +111,7 @@ pub struct Hashed {
 }
 
 /// A templates directory, identified by its contents: no commit is recorded, since the
-/// templates may be untracked where they are read (`_folia/` in the site, plan v11, §1.1).
+/// templates may be untracked where they are read (`_folia/` in the site, plan v12, §1.1).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Templates {
     pub path: String,
@@ -276,6 +276,39 @@ pub fn manifest(root: &Path) -> Result<Vec<(String, String)>, String> {
         .collect()
 }
 
+/// Reads a manifest written by [`manifest_text`] (a kept build's `sha256.txt`), as path to the
+/// SHA-256 it records.
+///
+/// # Errors
+///
+/// Fails when the file cannot be read, or a line is not `<sha256>  ./<path>` with a lowercase
+/// hexadecimal SHA-256, or a path is listed twice.
+pub fn read_manifest(file: &Path) -> Result<std::collections::BTreeMap<String, String>, String> {
+    let text = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
+    let mut out = std::collections::BTreeMap::new();
+    for (index, line) in text.lines().enumerate() {
+        let bad = || {
+            format!(
+                "{} line {}: not `<sha256>  ./<path>`",
+                file.display(),
+                index + 1
+            )
+        };
+        let (sha256, path) = line.split_once("  ./").ok_or_else(bad)?;
+        let hex = sha256.len() == 64
+            && sha256
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+        if !hex || path.is_empty() {
+            return Err(bad());
+        }
+        if out.insert(path.to_owned(), sha256.to_owned()).is_some() {
+            return Err(format!("{}: {path} is listed twice", file.display()));
+        }
+    }
+    Ok(out)
+}
+
 /// A manifest as `sha256sum` writes it for `./`-prefixed paths: `<sha256>  ./<path>`.
 pub fn manifest_text(manifest: &[(String, String)]) -> String {
     let mut out = String::new();
@@ -330,15 +363,34 @@ fn checkout(dir: &Path) -> Checkout {
             .arg(dir)
             .args(args)
             .output()
-            .ok()
-            .filter(|out| out.status.success())
-            .map(|out| String::from_utf8_lossy(&out.stdout).into_owned())
+            .map_err(|e| format!("git {} could not run ({e})", args.join(" ")))
+            .and_then(|out| {
+                if out.status.success() {
+                    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+                } else {
+                    Err(format!(
+                        "git {} failed: {}",
+                        args.join(" "),
+                        String::from_utf8_lossy(&out.stderr).trim()
+                    ))
+                }
+            })
     };
-    let commit = git(&["rev-parse", "HEAD"]).map(|head| head.trim().to_owned());
+    let head = git(&["rev-parse", "HEAD"]).map(|head| head.trim().to_owned());
+    let commit = head.as_ref().ok().cloned();
     let status = commit.as_ref().and_then(|_| {
-        git(&["status", "--porcelain"]).map(|text| text.lines().map(str::to_owned).collect())
+        git(&["status", "--porcelain"])
+            .ok()
+            .map(|text| text.lines().map(str::to_owned).collect())
     });
-    let changes = commit.as_ref().map(|_| changes(dir));
+    // Without a commit there is no git identity to record: the directory is not a checkout (or
+    // has no commit, or git cannot run), and its identity is unknown, never left out.
+    let changes = match head {
+        Ok(_) => changes(dir),
+        Err(error) => Changes::Unknown {
+            error: format!("it has no git identity: {error}"),
+        },
+    };
     Checkout {
         path: dir
             .canonicalize()
@@ -358,8 +410,15 @@ fn checkout(dir: &Path) -> Checkout {
 /// - `staged`: `git diff --cached` (HEAD to the index);
 /// - `unstaged`: `git diff` (the index to the working tree);
 /// - `untracked`: for each untracked file that is not ignored, in git's order, its path, a NUL,
-///   the SHA-256 of its bytes (of `symlink:` and its target for a symbolic link, of
-///   `unreadable:` and the error for a file that cannot be read) and a newline.
+///   the SHA-256 of its bytes (of `symlink:` and its target for a symbolic link) and a newline.
+///   The path is read as git gives it, byte for byte, so a name that is not UTF-8 still names its
+///   file (on platforms where a path must be UTF-8, such a name is refused as unknown).
+///
+/// What cannot be identified this way makes the changes [`Changes::Unknown`], naming it and why,
+/// never a hash that would leave it out: an untracked file or link that cannot be read; an
+/// untracked nested repository (git lists it as a directory, not its files); and a submodule (a
+/// gitlink in the index or `HEAD`, whose working tree the diffs give only as a commit and a
+/// `-dirty` marker). Nested repositories and submodules are not supported.
 ///
 /// The diffs are binary with full object ids, of the whole repository whatever the directory
 /// (`--no-relative`), with renames off. Every diff setting that configuration can change, and
@@ -437,6 +496,14 @@ fn changes_text(dir: &Path) -> Result<Option<Vec<u8>>, String> {
     };
     let top = git(&["rev-parse", "--show-toplevel"])?;
     let top = PathBuf::from(String::from_utf8_lossy(&top).trim());
+    refuse_submodules(
+        &git(&["ls-files", "--stage", "-z", "--full-name", ":/"])?,
+        "index",
+    )?;
+    refuse_submodules(
+        &git(&["ls-tree", "-r", "-z", "--full-tree", "HEAD"])?,
+        "HEAD",
+    )?;
     let (staged, unstaged) = (diff(true)?, diff(false)?);
     let untracked = git(&[
         "ls-files",
@@ -451,27 +518,110 @@ fn changes_text(dir: &Path) -> Result<Option<Vec<u8>>, String> {
     text.extend(b"unstaged\n");
     text.extend(&unstaged);
     text.extend(b"untracked\n");
+    let any_untracked = untracked_text(&top, &untracked, &mut text)?;
+    Ok((any_untracked || !staged.is_empty() || !unstaged.is_empty()).then_some(text))
+}
+
+/// Appends to `text` each untracked file of `listing` (`git ls-files --others -z`, paths from the
+/// repository's top `top`): its path, a NUL, the SHA-256 of its contents and a newline. Returns
+/// whether there was any; fails on what cannot be identified (see [`changes`]).
+fn untracked_text(top: &Path, listing: &[u8], text: &mut Vec<u8>) -> Result<bool, String> {
     let mut any_untracked = false;
-    for path in untracked
+    for path in listing
         .split(|&byte| byte == 0)
         .filter(|path| !path.is_empty())
     {
         any_untracked = true;
-        let file = top.join(String::from_utf8_lossy(path).as_ref());
-        let content = match file.symlink_metadata() {
-            Ok(meta) if meta.file_type().is_symlink() => std::fs::read_link(&file).map_or_else(
-                |e| format!("unreadable:{}", e.kind()).into_bytes(),
-                |target| format!("symlink:{}", target.display()).into_bytes(),
-            ),
-            _ => std::fs::read(&file)
-                .unwrap_or_else(|e| format!("unreadable:{}", e.kind()).into_bytes()),
+        let file = top.join(git_path(path)?);
+        let metadata = file.symlink_metadata();
+        if path.ends_with(b"/") || metadata.as_ref().is_ok_and(std::fs::Metadata::is_dir) {
+            return Err(format!(
+                "the untracked directory {} is a nested repository, whose contents cannot be \
+                 identified; nested repositories are not supported",
+                String::from_utf8_lossy(path)
+            ));
+        }
+        let unreadable = |e: std::io::Error| {
+            format!(
+                "the untracked file {} cannot be read ({e}), so its contents cannot be identified",
+                String::from_utf8_lossy(path)
+            )
+        };
+        let content = match metadata {
+            Ok(meta) if meta.file_type().is_symlink() => std::fs::read_link(&file)
+                .map(|target| [b"symlink:", target.as_os_str().as_encoded_bytes()].concat())
+                .map_err(unreadable)?,
+            _ => std::fs::read(&file).map_err(unreadable)?,
         };
         text.extend(path);
         text.push(0);
         text.extend(hex(&Sha256::digest(&content)).as_bytes());
         text.push(b'\n');
     }
-    Ok((any_untracked || !staged.is_empty() || !unstaged.is_empty()).then_some(text))
+    Ok(any_untracked)
+}
+
+/// Refuses a submodule: an entry of mode `160000` (a gitlink) in `listing`, the `-z` output of
+/// `git ls-files --stage` or `git ls-tree -r` (each entry starts with its mode). A submodule's
+/// working tree is not in the diffs, which give only its commit and a `-dirty` marker, so two
+/// different states of it would hash the same.
+fn refuse_submodules(listing: &[u8], place: &str) -> Result<(), String> {
+    let gitlink = listing
+        .split(|&byte| byte == 0)
+        .find(|entry| entry.starts_with(b"160000 "));
+    match gitlink {
+        None => Ok(()),
+        Some(entry) => {
+            let path = entry
+                .iter()
+                .position(|&byte| byte == b'\t')
+                .map_or(entry, |tab| &entry[tab + 1..]);
+            Err(format!(
+                "the submodule {} (in the {place}) cannot be identified: its working tree is not \
+                 part of the diffs; submodules are not supported",
+                String::from_utf8_lossy(path)
+            ))
+        }
+    }
+}
+
+/// Why each source of `record`, the site's and Folia's checkout, has no complete identity: one
+/// line for each whose changes are [`Changes::Unknown`]. A parity run fails on any (plan v12,
+/// §5.4): its result cannot be trusted when what it was built from cannot be said.
+pub fn unknown_identities(record: &Record) -> Vec<String> {
+    [("site", &record.site), ("Folia source", &record.folia)]
+        .into_iter()
+        .filter_map(|(name, checkout)| match &checkout.changes {
+            Changes::Unknown { error } => Some(format!(
+                "the {name}'s identity ({}) is unknown: {error}",
+                checkout.path
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A path as git writes it with `-z`, relative to the repository's top: its bytes as they are.
+#[cfg(unix)]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the same signature as on platforms where a path must be UTF-8"
+)]
+fn git_path(bytes: &[u8]) -> Result<PathBuf, String> {
+    use std::os::unix::ffi::OsStrExt as _;
+    Ok(PathBuf::from(std::ffi::OsStr::from_bytes(bytes)))
+}
+
+/// A path as git writes it with `-z`: elsewhere a path must be UTF-8, and one that is not is
+/// refused rather than read as another name.
+#[cfg(not(unix))]
+fn git_path(bytes: &[u8]) -> Result<PathBuf, String> {
+    std::str::from_utf8(bytes).map(PathBuf::from).map_err(|_| {
+        format!(
+            "the untracked path {} is not UTF-8",
+            String::from_utf8_lossy(bytes)
+        )
+    })
 }
 
 /// Folia's counts, worded as `folia build` prints them, without the destination.
@@ -508,7 +658,7 @@ fn log(record: &Record) -> String {
         let _ = writeln!(out, "problem: {problem}");
     }
     for checkout in [&record.site, &record.folia] {
-        if let Some(Changes::Unknown { error }) = &checkout.changes {
+        if let Changes::Unknown { error } = &checkout.changes {
             let _ = writeln!(
                 out,
                 "record: the uncommitted changes of {} are unknown: {error}",
@@ -521,6 +671,11 @@ fn log(record: &Record) -> String {
 
 fn write(path: &Path, text: &str) -> Result<(), String> {
     std::fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// The SHA-256 of `bytes`, in lowercase hexadecimal, as the output manifest records it.
+pub fn sha256(bytes: &[u8]) -> String {
+    hex(&Sha256::digest(bytes))
 }
 
 fn hex(bytes: &[u8]) -> String {

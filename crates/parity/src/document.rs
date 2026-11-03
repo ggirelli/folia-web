@@ -1,9 +1,17 @@
-//! The whole-document DOM comparison of plan v11, §5.1: every HTML document is parsed and
+//! The whole-document DOM comparison of plan v12, §5.1: every HTML document is parsed and
 //! normalized by the §5.1 rules ([`dom::DOCUMENT`]), the two trees are compared node by node, and
 //! **every** difference is reported, each by its node path and kind. Nothing is suppressed: a
 //! report is judged ([`Report::judge`]) by the DOM entries of the deviations ledger ([`ledger`],
 //! §5.2) and the hard assertions ([`assertions`]), which give each difference a verdict and decide
 //! whether the comparison passes, but remove nothing from the report. `parity dom` reports only.
+//! `dom-report.json` keeps both values of every difference in full; only the Markdown summary
+//! shortens them ([`VALUE_LENGTH`]).
+//!
+//! **Folia's files are identified by its output manifest** (a kept build's `sha256.txt`): the hash
+//! it records for a page is the page's identity, which a DOM entry's `actual_sha256` is checked
+//! against, and a judged report fails if a page compared is not in the manifest or its bytes have
+//! another hash (plan v12, §5.2). The baseline has no output manifest: its files are identified by
+//! the hash of their bytes.
 //!
 //! **Paths** start at the document's `html` element. Each step is `tag[n]`, the n-th child
 //! element with that tag (1-based), or `#text[n]` / `#comment[n]`, the n-th text or comment child;
@@ -28,7 +36,7 @@ use crate::markdown::dom::{self, Doctype, Node};
 pub mod assertions;
 pub mod ledger;
 
-/// The kinds of difference, a fixed vocabulary (plan v11, §5.1). Jekyll's document is the
+/// The kinds of difference, a fixed vocabulary (plan v12, §5.1). Jekyll's document is the
 /// *expected* side and Folia's the *actual* one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -74,13 +82,15 @@ impl Kind {
 pub struct Difference {
     pub path: String,
     pub kind: Kind,
-    /// The expected side's value (shortened), or `None` if it has none.
+    /// The expected side's value, in full, or `None` if it has none: an element's start tag, an
+    /// attribute's value, a text or comment. A text or comment only the actual side has is the
+    /// empty string here (§5.1), never `None`; a normalized text or comment is never empty.
     pub expected: Option<String>,
-    /// The actual side's value (shortened), or `None` if it has none.
+    /// The actual side's value, in full, as `expected` is.
     pub actual: Option<String>,
-    /// For an attribute value: whether the two are equal once whitespace runs are collapsed and
-    /// the ends trimmed (plan v11, §5.1's named head difference). Informative only: the
-    /// difference is reported all the same.
+    /// For an attribute value: whether the two are equal once runs of HTML whitespace are
+    /// collapsed and the ends trimmed ([`dom::collapse_and_trim`]; plan v12, §5.1's named head
+    /// difference). Informative only: the difference is reported all the same.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub equal_after_collapse_and_trim: Option<bool>,
     /// How the ledger judged it, once a ledger is applied ([`Report::judge`]).
@@ -88,8 +98,9 @@ pub struct Difference {
     pub ledger: Option<ledger::Verdict>,
 }
 
-/// How long a reported value may be, in characters, before it is shortened.
-const VALUE_LENGTH: usize = 160;
+/// How long a value may be, in characters, before the Markdown summary shortens it; the JSON
+/// report keeps every value in full.
+pub const VALUE_LENGTH: usize = 160;
 
 /// Compares two whole HTML documents by the §5.1 rules, and returns every difference, in
 /// document order.
@@ -269,18 +280,20 @@ fn same_class(a: &Node, b: &Node) -> bool {
     )
 }
 
+/// A node only one side has: an element is missing or extra, and has no value on the other side;
+/// a text or comment differs from the empty string (plan v12, §5.1).
 fn only_one_side(node: &Node, path: String, expected_side: bool) -> Difference {
-    let kind = match (node, expected_side) {
-        (Node::Element { .. }, true) => Kind::ElementMissing,
-        (Node::Element { .. }, false) => Kind::ElementExtra,
-        (Node::Text(_), _) => Kind::TextDiffers,
-        (Node::Comment(_), _) => Kind::CommentDiffers,
+    let (kind, other) = match (node, expected_side) {
+        (Node::Element { .. }, true) => (Kind::ElementMissing, None),
+        (Node::Element { .. }, false) => (Kind::ElementExtra, None),
+        (Node::Text(_), _) => (Kind::TextDiffers, Some(String::new())),
+        (Node::Comment(_), _) => (Kind::CommentDiffers, Some(String::new())),
     };
     let value = Some(describe(node));
     if expected_side {
-        difference(path, kind, value, None)
+        difference(path, kind, value, other)
     } else {
-        difference(path, kind, None, value)
+        difference(path, kind, other, value)
     }
 }
 
@@ -304,18 +317,18 @@ fn compare_nodes(expected: &Node, actual: &Node, path: &str, out: &mut Vec<Diffe
                     None => out.push(difference(
                         here,
                         Kind::AttributeMissing,
-                        Some(shorten(value)),
+                        Some(value.clone()),
                         None,
                     )),
                     Some(other) if other != value => out.push(Difference {
                         equal_after_collapse_and_trim: Some(
-                            collapse_and_trim(value) == collapse_and_trim(other),
+                            dom::collapse_and_trim(value) == dom::collapse_and_trim(other),
                         ),
                         ..difference(
                             here,
                             Kind::AttributeValueDiffers,
-                            Some(shorten(value)),
-                            Some(shorten(other)),
+                            Some(value.clone()),
+                            Some(other.clone()),
                         )
                     }),
                     Some(_) => {}
@@ -327,7 +340,7 @@ fn compare_nodes(expected: &Node, actual: &Node, path: &str, out: &mut Vec<Diffe
                         format!("{path}@{name}"),
                         Kind::AttributeExtra,
                         None,
-                        Some(shorten(value)),
+                        Some(value.clone()),
                     ));
                 }
             }
@@ -336,14 +349,14 @@ fn compare_nodes(expected: &Node, actual: &Node, path: &str, out: &mut Vec<Diffe
         (Node::Text(a), Node::Text(b)) if a != b => out.push(difference(
             path.to_owned(),
             Kind::TextDiffers,
-            Some(shorten(a)),
-            Some(shorten(b)),
+            Some(a.clone()),
+            Some(b.clone()),
         )),
         (Node::Comment(a), Node::Comment(b)) if a != b => out.push(difference(
             path.to_owned(),
             Kind::CommentDiffers,
-            Some(shorten(a)),
-            Some(shorten(b)),
+            Some(a.clone()),
+            Some(b.clone()),
         )),
         _ => {}
     }
@@ -365,11 +378,8 @@ fn difference(
     }
 }
 
-fn collapse_and_trim(value: &str) -> String {
-    value.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-/// A node as the report shows it: an element's start tag with its attributes, or the text.
+/// A node as the report shows it, in full: an element's start tag with its attributes, the text,
+/// or the comment.
 fn describe(node: &Node) -> String {
     match node {
         Node::Element { name, attrs, .. } => {
@@ -378,13 +388,14 @@ fn describe(node: &Node) -> String {
                 let _ = write!(out, " {key}=\"{value}\"");
             }
             out.push('>');
-            shorten(&out)
+            out
         }
-        Node::Text(text) => shorten(text),
-        Node::Comment(text) => shorten(&format!("<!--{text}-->")),
+        Node::Text(text) => text.clone(),
+        Node::Comment(text) => format!("<!--{text}-->"),
     }
 }
 
+/// `text` cut to [`VALUE_LENGTH`] characters, with `…` if it was longer: for the Markdown summary.
 fn shorten(text: &str) -> String {
     let mut chars = text.chars();
     let mut out: String = chars.by_ref().take(VALUE_LENGTH).collect();
@@ -414,9 +425,14 @@ pub struct FileReport {
     pub status: Status,
     /// The SHA-256 of the expected side's file, or `None` if it has none.
     pub expected_sha256: Option<String>,
-    /// The SHA-256 of the actual side's file, or `None` if it has none: what a DOM ledger entry
-    /// binds an output to (plan v11, §5.2).
+    /// The SHA-256 of the actual side's file's bytes, or `None` if it has none.
     pub actual_sha256: Option<String>,
+    /// The SHA-256 the actual side's output manifest records for the file, when that side has a
+    /// manifest ([`Side::manifest`]) and lists it: the identity a DOM ledger entry's
+    /// `actual_sha256` is checked against (plan v12, §5.2). A judged report fails when it is not
+    /// [`FileReport::actual_sha256`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actual_manifest_sha256: Option<String>,
     pub differences: Vec<Difference>,
 }
 
@@ -478,6 +494,7 @@ pub fn compare_trees(
                 status,
                 expected_sha256: a.as_deref().map(|bytes| hex(&Sha256::digest(bytes))),
                 actual_sha256: b.as_deref().map(|bytes| hex(&Sha256::digest(bytes))),
+                actual_manifest_sha256: None,
                 differences,
             })
         })
@@ -506,6 +523,10 @@ pub struct Side {
     /// The SHA-256 of its manifest: of a kept build's `sha256.txt`, or of one computed in that
     /// format for any other tree.
     pub manifest_sha256: String,
+    /// A kept build's manifest, `sha256.txt`, as path to the SHA-256 it records; `None` for any
+    /// other tree (a baseline has none). Not written in the report, which has each page's entry.
+    #[serde(skip)]
+    pub manifest: Option<BTreeMap<String, String>>,
 }
 
 impl Side {
@@ -525,18 +546,21 @@ impl Side {
             .map(|file| hash_file(&file))
             .transpose()?;
         let kept_manifest = parent.join("sha256.txt");
-        let manifest_sha256 = if is_site && kept_manifest.is_file() {
-            hash_file(&kept_manifest)?.sha256
+        let (manifest_sha256, manifest) = if is_site && kept_manifest.is_file() {
+            (
+                hash_file(&kept_manifest)?.sha256,
+                Some(crate::builds::read_manifest(&kept_manifest)?),
+            )
         } else {
             let manifest = crate::builds::manifest(root)?;
-            hex(&Sha256::digest(
-                crate::builds::manifest_text(&manifest).as_bytes(),
-            ))
+            let text = crate::builds::manifest_text(&manifest);
+            (hex(&Sha256::digest(text.as_bytes())), None)
         };
         Ok(Side {
             label: label.to_owned(),
             record,
             manifest_sha256,
+            manifest,
         })
     }
 }
@@ -563,8 +587,9 @@ fn hex(bytes: &[u8]) -> String {
 /// A comparison's report, written as `dom-report.json`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Report {
-    /// The report's format version: 2 since DOM entries bind both files of an output and the
-    /// ledger reports partial staleness and final acceptance.
+    /// The report's format version: 3 since values are kept in full, a text or comment one side
+    /// lacks is empty there, Folia's pages carry their manifest hash and every stale entry fails
+    /// (2: DOM entries bind both files of an output).
     pub format: u32,
     /// `report-only` when no ledger is applied; `judged` when it is ([`Report::judge`]).
     pub mode: &'static str,
@@ -578,8 +603,13 @@ pub struct Report {
     /// The hard assertions' results, when judged.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub assertions: Vec<assertions::Outcome>,
+    /// When judged, each page compared whose bytes are not what Folia's output manifest records
+    /// for it, or that the manifest does not list, one line each.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub manifest_mismatches: Vec<String>,
     /// Whether the comparison passes, when judged: every difference accepted by the ledger, no
-    /// entry stale, no ledger problem, no file missing or extra, every assertion holding.
+    /// entry stale, no ledger problem, no file missing or extra, no manifest mismatch, every
+    /// assertion holding.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub passed: Option<bool>,
 }
@@ -598,7 +628,14 @@ pub struct Totals {
 }
 
 impl Report {
-    pub fn new(expected: Side, actual: Side, files: Vec<FileReport>) -> Self {
+    /// A report-only comparison of `files`; each page's manifest hash is taken from `actual`'s
+    /// manifest, when it has one.
+    pub fn new(expected: Side, actual: Side, mut files: Vec<FileReport>) -> Self {
+        if let Some(manifest) = &actual.manifest {
+            for file in &mut files {
+                file.actual_manifest_sha256 = manifest.get(&file.path).cloned();
+            }
+        }
         let count = |status| files.iter().filter(|file| file.status == status).count();
         let mut by_kind = BTreeMap::new();
         for difference in files.iter().flat_map(|file| &file.differences) {
@@ -617,7 +654,7 @@ impl Report {
             by_kind,
         };
         Report {
-            format: 2,
+            format: 3,
             mode: "report-only",
             expected,
             actual,
@@ -625,6 +662,7 @@ impl Report {
             totals,
             ledger: None,
             assertions: Vec::new(),
+            manifest_mismatches: Vec::new(),
             passed: None,
         }
     }
@@ -640,9 +678,11 @@ impl Report {
                 difference.ledger = Some(verdict.clone());
             }
         }
+        self.manifest_mismatches = self.files.iter().filter_map(manifest_mismatch).collect();
         let passed = applied.passed
             && self.totals.missing == 0
             && self.totals.extra == 0
+            && self.manifest_mismatches.is_empty()
             && assertions.iter().all(|outcome| outcome.passed);
         self.mode = "judged";
         self.ledger = Some(applied);
@@ -734,16 +774,11 @@ impl Report {
             for entry in &applied.entries {
                 let _ = writeln!(
                     *out,
-                    "- {} ({:?}): explains {} differences{}{}; follow-up {}",
+                    "- {} ({:?}): explains {} differences{}; follow-up {}",
                     entry.id,
                     entry.status,
                     entry.explained.len(),
                     if entry.stale { ", STALE" } else { "" },
-                    if entry.partly_stale {
-                        ", PARTLY STALE"
-                    } else {
-                        ""
-                    },
                     entry.follow_up_status
                 );
                 if entry.expected_build != ledger::Binding::AsReviewed {
@@ -782,6 +817,9 @@ impl Report {
                     let _ = writeln!(*out, "- {line}");
                 }
             }
+        }
+        for mismatch in &self.manifest_mismatches {
+            let _ = writeln!(*out, "- FAILS: Folia's output manifest: {mismatch}");
         }
         if !self.assertions.is_empty() {
             let failed: Vec<_> = self.assertions.iter().filter(|o| !o.passed).collect();
@@ -827,6 +865,20 @@ impl Report {
     }
 }
 
+/// Why a page's bytes are not the file Folia's output manifest records, if they are not: the page is
+/// not listed, or listed with another hash. A page Folia did not write has nothing to check.
+fn manifest_mismatch(file: &FileReport) -> Option<String> {
+    let bytes = file.actual_sha256.as_deref()?;
+    match file.actual_manifest_sha256.as_deref() {
+        Some(recorded) if recorded == bytes => None,
+        Some(recorded) => Some(format!(
+            "{}: the manifest records {recorded}, the file's bytes hash to {bytes}",
+            file.path
+        )),
+        None => Some(format!("{}: the manifest does not list it", file.path)),
+    }
+}
+
 fn verdict_note(verdict: Option<&ledger::Verdict>) -> String {
     match verdict {
         None => String::new(),
@@ -844,11 +896,11 @@ fn verdict_note(verdict: Option<&ledger::Verdict>) -> String {
 /// How many differences per file the summary lists.
 pub const SUMMARY_LIMIT: usize = 25;
 
-/// A value in the summary, on one line: backticks become `'`, and line breaks `\n` and `\r`
-/// (the JSON report keeps the exact values).
+/// A value in the summary, on one line and shortened ([`VALUE_LENGTH`]): backticks become `'`, and
+/// line breaks `\n` and `\r` (the JSON report keeps the exact values, in full).
 fn quote(value: Option<&str>) -> String {
     value.map_or("(none)".to_owned(), |value| {
-        let value = value
+        let value = shorten(value)
             .replace('`', "'")
             .replace('\r', "\\r")
             .replace('\n', "\\n");
@@ -881,6 +933,7 @@ pub fn run(expected: &Path, actual: &Path, report_dir: Option<&Path>) -> Result<
                 status: Status::Compared,
                 expected_sha256: Some(hex(&Sha256::digest(a.as_bytes()))),
                 actual_sha256: Some(hex(&Sha256::digest(b.as_bytes()))),
+                actual_manifest_sha256: None,
                 differences: compare_documents(&a, &b),
             }]
         }
@@ -895,6 +948,7 @@ pub fn run(expected: &Path, actual: &Path, report_dir: Option<&Path>) -> Result<
                 label: label.to_owned(),
                 record: None,
                 manifest_sha256: file.sha256,
+                manifest: None,
             })
         }
     };

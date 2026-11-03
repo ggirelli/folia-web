@@ -16,11 +16,14 @@
 //! 6. **The garden** (`garden`): the note graph has Jekyll's nodes and edges, and each broken
 //!    link on a page built gives one warning.
 //!
-//! Outputs Folia does not build yet are counted, not compared.
+//! Outputs Folia does not build yet are counted, not compared. The run fails, too, when the
+//! build's record cannot identify the site or the Folia source it was built from, a directory
+//! that is not a git checkout among them (`builds::unknown_identities`).
 
 mod entries;
 mod garden;
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use folia::build::Built;
@@ -29,6 +32,7 @@ use folia_core::content::{Route, SiteClock};
 
 use crate::baseline::{self, Row};
 use crate::builds::{self, Request};
+use crate::coverage::{self, Checks};
 use crate::document::assertions::{self, Output};
 use crate::document::{self, Report, Scope, Side, ledger};
 use crate::markdown::dom::{self, Node};
@@ -40,7 +44,7 @@ use crate::routes::{check_checkout, short};
 /// check passed. The build is never deleted: its directory is printed, for the caller to inspect
 /// or remove. `expected_templates`, when given, is the templates' tree hash the build requires.
 ///
-/// The pages built are also compared as whole documents (`document`, plan v11, §5.1), judged
+/// The pages built are also compared as whole documents (`document`, plan v12, §5.1), judged
 /// against the DOM entries of the ledger at `ledger_path` (§5.2) and the hard assertions; that
 /// comparison decides the check too. `dom-report.json` and `dom-report.md` are written into the
 /// build's directory, with every difference and the ledger's verdict on it.
@@ -59,6 +63,7 @@ pub fn run(
     ledger_path: &Path,
 ) -> Result<bool, String> {
     let ledger = ledger::load(ledger_path)?;
+    let coverage_ledger = coverage::load(ledger_path)?;
     let baseline = baseline::load(baseline_dir)?;
     check_checkout(site_dir, &baseline.commit, baseline.diff.as_deref())?;
     let config = Config::load(config_path).map_err(|e| e.to_string())?;
@@ -91,14 +96,13 @@ pub fn run(
             kept.dir.display()
         ),
     }
-    for checkout in [&kept.record.site, &kept.record.folia] {
-        if let Some(builds::Changes::Unknown { error }) = &checkout.changes {
-            println!(
-                "warning: the record cannot identify the uncommitted changes of {}: {error}",
-                checkout.path
-            );
-        }
+    // An unknown source identity fails the run (plan v12, §5.4), and every other check still
+    // runs, so the kept build and its reports keep their diagnostics.
+    let unknown = builds::unknown_identities(&kept.record);
+    for reason in &unknown {
+        println!("FAILS: source identity: {reason}");
     }
+    let identified = unknown.is_empty();
     let built = match kept.built {
         Ok(built) => built,
         Err(problems) => {
@@ -113,7 +117,22 @@ pub fn run(
         }
     };
     let clock = SiteClock::new(&config.time_zone, baseline.built_at).map_err(|e| e.to_string())?;
-    let mut passed = compare(&built, &kept.output, baseline_dir, &baseline.rows, &clock)?;
+    // Outputs whose comparison an owner waived (A2.1, plan v12, §5.4) are compared by no check
+    // but their route.
+    let waived = coverage_ledger.waived();
+    let planned = planned_routes(site_dir, &config, &baseline)?;
+    let mut checks = Checks::default();
+    let mut passed = identified;
+    passed &= compare(
+        &built,
+        &kept.output,
+        baseline_dir,
+        &baseline.rows,
+        &clock,
+        &planned,
+        &waived,
+        &mut checks,
+    )?;
     passed &= judge_documents(
         &built,
         &kept.output,
@@ -121,6 +140,17 @@ pub fn run(
         &baseline_dir.join("site"),
         &ledger,
         &config.site.url,
+        &waived,
+        &mut checks,
+    )?;
+    passed &= report_coverage(
+        &baseline,
+        &built,
+        &kept.output,
+        &kept.dir,
+        &planned,
+        &checks,
+        &coverage_ledger,
     )?;
     println!(
         "{}",
@@ -133,12 +163,40 @@ pub fn run(
     Ok(passed)
 }
 
+/// Every output Folia plans for the site, by output path, with its URL.
+fn planned_routes(
+    site_dir: &Path,
+    config: &Config,
+    baseline: &baseline::Baseline,
+) -> Result<BTreeMap<String, String>, String> {
+    let site = folia::site::plan(site_dir, config, baseline.built_at).map_err(|problems| {
+        let lines: Vec<String> = problems.iter().map(ToString::to_string).collect();
+        format!("Folia cannot plan the site: {}", lines.join("; "))
+    })?;
+    Ok(site
+        .routes
+        .outputs()
+        .iter()
+        .map(|planned| (planned.route.output_path(), planned.route.url().to_owned()))
+        .collect())
+}
+
+/// Runs the checks of the pages, stubs, generated and static files Folia wrote, recording each
+/// one's verdict on each output in `checks`; the outputs in `waived` are compared by none but
+/// the route check, which is not a comparison of their contents.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each is one input of the comparison; a struct would only rename them"
+)]
 fn compare(
     built: &Built,
     out: &Path,
     baseline_dir: &Path,
     rows: &[Row],
     clock: &SiteClock,
+    planned: &BTreeMap<String, String>,
+    waived: &BTreeSet<String>,
+    checks: &mut Checks,
 ) -> Result<bool, String> {
     let jekyll = &baseline_dir.join("site");
     println!(
@@ -149,24 +207,33 @@ fn compare(
         built.statics,
         built.not_built
     );
-    let mut passed = check_routes(built, rows);
+    let mut files = Vec::new();
+    list_files(out, out, &mut files)?;
+    let mut passed = check_routes(&files, planned, rows, checks);
     for route in &built.pages {
         let path = route.output_path();
+        if waived.contains(&path) {
+            continue;
+        }
         let folia = read_text(&out.join(&path))?;
         let Ok(jekyll) = std::fs::read_to_string(jekyll.join(&path)) else {
             println!("FAILS: {path}: Jekyll wrote no such page.");
             passed = false;
             continue;
         };
-        passed &= check_page(&path, &jekyll, &folia);
+        let page_ok = check_page(&path, &jekyll, &folia);
+        checks.record(&path, "page", page_ok);
         let (toc_ok, _) = entries::check_toc(
             &path,
             &dom::normalize_document(&jekyll),
             &dom::normalize_document(&folia),
         );
-        passed &= toc_ok;
+        checks.record(&path, "toc", toc_ok);
+        passed &= page_ok && toc_ok;
         if let Some(entry) = built.entries.iter().find(|entry| &entry.route == route) {
-            passed &= entries::check_code(&path, entry, &jekyll, &folia);
+            let code_ok = entries::check_code(&path, entry, &jekyll, &folia);
+            checks.record(&path, "code", code_ok);
+            passed &= code_ok;
         }
     }
     passed &= entries::check_dates(&built.entries, rows, &baseline_dir.join("dump"), clock);
@@ -176,27 +243,38 @@ fn compare(
 
     let pages: Vec<String> = built.pages.iter().map(Route::output_path).collect();
     let stubs: Vec<String> = built.stubs.iter().map(Route::output_path).collect();
-    let mut files = Vec::new();
-    list_files(out, out, &mut files)?;
     let folia_graph = if files.iter().any(|f| f == garden::GRAPH) {
         Some(std::fs::read(out.join(garden::GRAPH)).map_err(|e| e.to_string())?)
     } else {
         None
     };
     let jekyll_graph = std::fs::read(jekyll.join(garden::GRAPH)).ok();
-    passed &= garden::check_graph_file(jekyll_graph.as_deref(), folia_graph.as_deref());
+    if !waived.contains(garden::GRAPH) {
+        let graph_ok = garden::check_graph_file(jekyll_graph.as_deref(), folia_graph.as_deref());
+        if folia_graph.is_some() {
+            checks.record(garden::GRAPH, "graph", graph_ok);
+        }
+        passed &= graph_ok;
+    }
     let others: Vec<&String> = files
         .iter()
-        .filter(|f| !pages.contains(f) && f.as_str() != garden::GRAPH)
+        .filter(|f| !pages.contains(f) && f.as_str() != garden::GRAPH && !waived.contains(*f))
         .collect();
     let mut differing = Vec::new();
     for path in &others {
         let folia = std::fs::read(out.join(path)).map_err(|e| format!("{path}: {e}"))?;
-        match std::fs::read(jekyll.join(path)) {
-            Ok(bytes) if bytes == folia => {}
-            Ok(_) => differing.push(format!("{path}: differs")),
-            Err(_) => differing.push(format!("{path}: Jekyll wrote no such file")),
-        }
+        let same = match std::fs::read(jekyll.join(path)) {
+            Ok(bytes) if bytes == folia => true,
+            Ok(_) => {
+                differing.push(format!("{path}: differs"));
+                false
+            }
+            Err(_) => {
+                differing.push(format!("{path}: Jekyll wrote no such file"));
+                false
+            }
+        };
+        checks.record(path, "bytes", same);
     }
     let stub_count = others.iter().filter(|f| stubs.contains(f)).count();
     passed &= report(
@@ -209,29 +287,32 @@ fn compare(
     Ok(passed)
 }
 
-/// Each page and stub Folia rendered, and each file a mode generated, has the URL and output
-/// file Jekyll gave it.
-fn check_routes(built: &Built, rows: &[Row]) -> bool {
+/// Each output Folia wrote, static files included, is one Folia planned, at the URL and output
+/// file Jekyll gave it: the route check, recorded as `route` (`coverage::ROUTE`). It compares no
+/// contents.
+fn check_routes(
+    files: &[String],
+    planned: &BTreeMap<String, String>,
+    rows: &[Row],
+    checks: &mut Checks,
+) -> bool {
     let mut differing = Vec::new();
-    for route in built
-        .pages
-        .iter()
-        .chain(&built.stubs)
-        .chain(&built.artifacts)
-    {
-        let output = route.output_path();
-        match rows.iter().find(|row| row.written && row.output == output) {
-            Some(row) if row.url == route.url() => {}
-            Some(row) => differing.push(format!(
-                "{output}: Jekyll's URL is {}, Folia's {}",
-                row.url,
-                route.url()
+    for output in files {
+        let row = rows.iter().find(|row| row.written && &row.output == output);
+        let difference = match (planned.get(output), row) {
+            (None, _) => Some(format!("{output}: Folia writes it, but does not plan it")),
+            (Some(_), None) => Some(format!("{output}: Jekyll wrote no such output")),
+            (Some(url), Some(row)) if *url == row.url => None,
+            (Some(url), Some(row)) => Some(format!(
+                "{output}: Jekyll's URL is {}, Folia's {url}",
+                row.url
             )),
-            None => differing.push(format!("{output}: Jekyll wrote no such output")),
-        }
+        };
+        checks.record(output, coverage::ROUTE, difference.is_none());
+        differing.extend(difference);
     }
     report(
-        "routes of the pages, stubs and generated files built",
+        &format!("routes of every output written ({} files)", files.len()),
         &differing,
     )
 }
@@ -423,7 +504,12 @@ fn read_text(path: &Path) -> Result<String, String> {
 
 /// Compares the pages built with Jekyll's as whole documents, judges every difference against
 /// the ledger, checks the hard assertions on the pages and stubs, writes the report into the
-/// build's directory, and prints its outcome. Returns whether it passes.
+/// build's directory, and prints its outcome. Returns whether it passes. Each page's and stub's
+/// verdicts are recorded in `checks`; the outputs in `waived` are not compared.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each is one input of the comparison; a struct would only rename them"
+)]
 fn judge_documents(
     built: &Built,
     output: &Path,
@@ -431,8 +517,15 @@ fn judge_documents(
     jekyll: &Path,
     ledger: &ledger::Ledger,
     site_url: &str,
+    waived: &BTreeSet<String>,
+    checks: &mut Checks,
 ) -> Result<bool, String> {
-    let pages: Vec<String> = built.pages.iter().map(Route::output_path).collect();
+    let pages: Vec<String> = built
+        .pages
+        .iter()
+        .map(Route::output_path)
+        .filter(|path| !waived.contains(path))
+        .collect();
     let mut outcomes = Vec::new();
     let read = |root: &Path, path: &str| std::fs::read(root.join(path)).ok();
     for (path, kind) in pages
@@ -449,7 +542,8 @@ fn judge_documents(
             built
                 .stubs
                 .iter()
-                .map(|route| (route.output_path(), Output::Stub)),
+                .map(|route| (route.output_path(), Output::Stub))
+                .filter(|(path, _)| !waived.contains(path)),
         )
     {
         let (want, got) = (read(jekyll, &path), read(output, &path));
@@ -467,13 +561,80 @@ fn judge_documents(
         document::compare_trees(jekyll, output, &Scope::Only(&pages))?,
     )
     .judge(ledger, outcomes);
+    for file in &report.files {
+        let accepted = file.status == document::Status::Compared
+            && file.actual_sha256.is_some()
+            && file.actual_sha256 == file.actual_manifest_sha256
+            && file
+                .differences
+                .iter()
+                .all(|d| matches!(d.ledger, Some(ledger::Verdict::Accepted(_))));
+        checks.record(&file.path, "dom", accepted);
+    }
+    for outcome in &report.assertions {
+        checks.record(&outcome.file, "assertions", outcome.passed);
+    }
     let (json, _) = report.write(dir)?;
     Ok(print_judgement(&report, &json))
 }
 
-/// Prints the outcome of a judged report, whose JSON is at `json`: a summary line, each entry
-/// partly stale, and, when it fails, each difference not accepted, each stale entry and problem,
-/// and each failed assertion. Returns whether it passes.
+/// Classifies every manifest row (A2.1, plan v12, §5.4) by what Folia plans and writes, the
+/// checks' verdicts and the ledger's coverage entries; writes `coverage.json` and `coverage.md`
+/// into the build's directory, and prints the counts and every problem. Returns whether it
+/// passes.
+fn report_coverage(
+    baseline: &baseline::Baseline,
+    built: &Built,
+    output: &Path,
+    dir: &Path,
+    planned: &BTreeMap<String, String>,
+    checks: &Checks,
+    ledger: &coverage::Ledger,
+) -> Result<bool, String> {
+    let planned: BTreeSet<String> = planned.keys().cloned().collect();
+    let mut files = Vec::new();
+    list_files(output, output, &mut files)?;
+    let written: BTreeSet<String> = files.into_iter().collect();
+    // A waived output's bytes are accounted for: Folia's output manifest records it, with the
+    // hash of the bytes written.
+    let manifest = builds::read_manifest(&dir.join("sha256.txt"))?;
+    let mut accounted = BTreeSet::new();
+    for path in ledger.waived().intersection(&written) {
+        let bytes = std::fs::read(output.join(path)).map_err(|e| format!("{path}: {e}"))?;
+        if manifest.get(path) == Some(&builds::sha256(&bytes)) {
+            accounted.insert(path.clone());
+        }
+    }
+    let report = coverage::classify(
+        &baseline.rows,
+        &coverage::Folia {
+            planned: &planned,
+            written: &written,
+            accounted: &accounted,
+            not_built: built.not_built,
+        },
+        checks,
+        ledger,
+    );
+    let (json, _) = report.write(dir)?;
+    println!("{} (see {}).", report.summary(), json.display());
+    for problem in &report.problems {
+        println!("  {problem}");
+    }
+    for row in report.rows.iter().filter(|row| row.class.is_none()) {
+        println!(
+            "  {}: unclassified: {}",
+            row.output,
+            row.problems.join("; ")
+        );
+    }
+    Ok(report.passed)
+}
+
+/// Prints the outcome of a judged report, whose JSON is at `json`: a summary line and, when it
+/// fails, each difference not accepted, each stale entry with why it is stale, each problem, each
+/// page whose bytes are not what Folia's output manifest records, and each failed assertion.
+/// Returns whether it passes.
 fn print_judgement(report: &Report, json: &Path) -> bool {
     let totals = &report.totals;
     let applied = report.ledger.as_ref().expect("judged");
@@ -486,33 +647,19 @@ fn print_judgement(report: &Report, json: &Path) -> bool {
     let failed_assertions = report.assertions.iter().filter(|o| !o.passed).count();
     let passed = report.passed == Some(true);
     println!(
-        "{}: whole-document DOM comparison of {} pages: {} differences, {} accepted by the ledger; {} entries, {} stale, {} partly stale, {} problems; {} assertions, {} failed (see {}).",
+        "{}: whole-document DOM comparison of {} pages: {} differences, {} accepted by the ledger; {} entries, {} stale, {} problems; {} manifest mismatches; {} assertions, {} failed (see {}).",
         if passed { "ok" } else { "FAILS" },
         totals.compared,
         totals.differences,
         accepted,
         applied.entries.len(),
         applied.entries.iter().filter(|e| e.stale).count(),
-        applied.entries.iter().filter(|e| e.partly_stale).count(),
         applied.problems.len(),
+        report.manifest_mismatches.len(),
         report.assertions.len(),
         failed_assertions,
         json.display()
     );
-    // Partial staleness does not fail a run, but is always shown; final acceptance refuses it.
-    for entry in applied.entries.iter().filter(|e| e.partly_stale) {
-        println!(
-            "  ledger: {} is partly stale (final acceptance, F13, refuses it):",
-            entry.id
-        );
-        for line in applied
-            .final_acceptance
-            .iter()
-            .filter(|line| line.starts_with(&format!("{}: ", entry.id)))
-        {
-            println!("    {line}");
-        }
-    }
     if !passed {
         for file in &report.files {
             for difference in &file.differences {
@@ -528,7 +675,21 @@ fn print_judgement(report: &Report, json: &Path) -> bool {
             }
         }
         for entry in applied.entries.iter().filter(|e| e.stale) {
-            println!("  ledger: {} explains no difference (stale)", entry.id);
+            if entry.explained.is_empty() {
+                println!("  ledger: {} explains no difference (stale)", entry.id);
+            } else {
+                println!(
+                    "  ledger: {} is stale: it explains {} differences, but not all it lists",
+                    entry.id,
+                    entry.explained.len()
+                );
+            }
+            if entry.expected_build != ledger::Binding::AsReviewed {
+                println!(
+                    "    the baseline's record is {}",
+                    ledger::binding_name(entry.expected_build)
+                );
+            }
             for output in entry.outputs.iter().filter(|o| {
                 o.expected != ledger::Binding::AsReviewed || o.actual != ledger::Binding::AsReviewed
             }) {
@@ -539,6 +700,15 @@ fn print_judgement(report: &Report, json: &Path) -> bool {
                     ledger::binding_name(output.actual)
                 );
             }
+            for item in &entry.unused {
+                println!(
+                    "    output {}: match {} {} explains nothing",
+                    item.output, item.path, item.kind
+                );
+            }
+        }
+        for mismatch in &report.manifest_mismatches {
+            println!("  Folia's output manifest: {mismatch}");
         }
         for problem in &applied.problems {
             println!("  ledger: {problem}");

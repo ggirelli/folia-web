@@ -289,8 +289,14 @@ impl Trees {
         trees.write("folia/site/only-folia.html", PAGE);
         trees.write("folia/site/style.css", "y");
         trees.write("folia/build.json", "{}");
-        trees.write("folia/sha256.txt", "manifest\n");
+        trees.write_manifest();
         trees
+    }
+
+    /// Writes Folia's `sha256.txt`, the manifest of its `site/` as a kept build has it.
+    fn write_manifest(&self) {
+        let manifest = crate::builds::manifest(&self.folia()).unwrap();
+        self.write("folia/sha256.txt", &crate::builds::manifest_text(&manifest));
     }
 
     fn write(&self, path: &str, text: &str) {
@@ -389,9 +395,19 @@ fn the_report_names_both_sides_by_record_and_manifest() {
             crate::builds::manifest_text(&manifest).as_bytes()
         ))
     );
+    assert_eq!(jekyll.manifest, None);
     let folia = &report.actual;
     assert_eq!(folia.record.as_ref().unwrap().path, "build.json");
-    assert_eq!(folia.manifest_sha256, hex(&Sha256::digest(b"manifest\n")));
+    let written = std::fs::read(trees.0.join("folia/sha256.txt")).unwrap();
+    assert_eq!(folia.manifest_sha256, hex(&Sha256::digest(&written)));
+    // Each Folia page carries the hash its manifest records, here that of its bytes.
+    for file in report.files.iter().filter(|f| f.actual_sha256.is_some()) {
+        assert_eq!(
+            file.actual_manifest_sha256, file.actual_sha256,
+            "{}",
+            file.path
+        );
+    }
 }
 
 #[test]
@@ -534,14 +550,22 @@ fn a_text_or_comment_on_one_side_only_is_a_text_or_comment_difference() {
             differences[0].expected.as_deref(),
             differences[0].actual.as_deref()
         ),
-        (Some("Hi "), None)
+        (Some("Hi "), Some(""))
     );
     let differences = compare_documents(&page("<b>x</b>"), &page("<!-- c --><b>x</b>"));
     assert_eq!(
         kinds(&differences),
         [("html[1]/body[1]/p[1]/#comment[1]", Kind::CommentDiffers)]
     );
-    assert_eq!(differences[0].expected, None);
+    // The side without it is the empty string (plan v12, §5.1), never `null`.
+    assert_eq!(differences[0].expected.as_deref(), Some(""));
+    assert_eq!(differences[0].actual.as_deref(), Some("<!-- c -->"));
+    let json = serde_json::to_value(&differences[0]).unwrap();
+    assert_eq!(json["expected"], "");
+    // An element on one side only still has no value on the other.
+    let differences = compare_documents(&page("<b>x</b><i>y</i>"), &page("<b>x</b>"));
+    assert_eq!(kinds(&differences)[0].1, Kind::ElementMissing);
+    assert_eq!(differences[0].actual, None);
 }
 
 #[test]
@@ -554,4 +578,170 @@ fn indices_count_siblings_of_the_same_tag_only() {
         )),
         [("html[1]/body[1]/p[2]/#text[1]", Kind::TextDiffers)]
     );
+}
+
+/// A page whose description `content` is `value` (written as is, so character references work).
+fn described(value: &str) -> String {
+    format!(
+        "<!DOCTYPE html><html><head><meta name=\"description\" content=\"{value}\"></head>\
+         <body></body></html>"
+    )
+}
+
+#[test]
+fn html_whitespace_differences_are_equal_after_collapse_and_trim() {
+    // Each of the five HTML whitespace characters (§5.1 rule 3), at the ends and inside, written
+    // as character references so that the parser keeps them.
+    for value in [
+        "&#32;S&#9;-&#10;&#10;A&#32;",
+        "&#13;S - A&#12;",
+        "S&#12;&#13;&#9; - &#10;A",
+    ] {
+        let differences = compare_documents(&described("S - A"), &described(value));
+        assert_eq!(differences.len(), 1, "{value}");
+        assert_eq!(differences[0].kind, Kind::AttributeValueDiffers);
+        assert_eq!(
+            differences[0].equal_after_collapse_and_trim,
+            Some(true),
+            "{value}"
+        );
+    }
+}
+
+#[test]
+fn a_no_break_space_or_other_unicode_space_is_not_html_whitespace() {
+    // NBSP, en and em spaces, the ideographic space, Ogham's space mark, the line and paragraph
+    // separators, next line and the vertical tab: Unicode whitespace, but not HTML whitespace.
+    for space in [
+        '\u{a0}', '\u{2002}', '\u{2003}', '\u{3000}', '\u{1680}', '\u{2028}', '\u{2029}', '\u{85}',
+        '\u{b}',
+    ] {
+        let value = format!("S{space}- A");
+        let differences = compare_documents(&described("S - A"), &described(&value));
+        assert_eq!(differences.len(), 1, "{space:?}");
+        assert_eq!(
+            differences[0].equal_after_collapse_and_trim,
+            Some(false),
+            "{space:?}"
+        );
+        // Nor does it collapse at the ends.
+        let differences =
+            compare_documents(&described("S - A"), &described(&format!("{space}S - A")));
+        assert_eq!(
+            differences[0].equal_after_collapse_and_trim,
+            Some(false),
+            "{space:?}"
+        );
+    }
+}
+
+#[test]
+fn values_are_kept_in_full_in_the_json_and_shortened_in_the_summary() {
+    let long = "word ".repeat(80); // 400 characters
+    let differences = compare_documents(&described("short"), &described(long.trim()));
+    let value = differences[0].actual.clone().unwrap();
+    assert_eq!(value.chars().count(), 399);
+    let file = FileReport {
+        path: "a.html".to_owned(),
+        status: Status::Compared,
+        expected_sha256: None,
+        actual_sha256: None,
+        actual_manifest_sha256: None,
+        differences,
+    };
+    let side = |label: &str| Side {
+        label: label.to_owned(),
+        record: None,
+        manifest_sha256: "0".repeat(64),
+        manifest: None,
+    };
+    let report = Report::new(side("jekyll"), side("folia"), vec![file]);
+    let json: serde_json::Value = serde_json::from_str(&report.json()).unwrap();
+    assert_eq!(json["files"][0]["differences"][0]["actual"], value.as_str());
+    let summary = report.summary(SUMMARY_LIMIT);
+    assert!(!summary.contains(&value), "{summary}");
+    let shortened: String = value.chars().take(VALUE_LENGTH).collect();
+    assert!(summary.contains(&format!("`{shortened}…`")), "{summary}");
+    // The summary stays one line per difference.
+    let line = summary.lines().find(|l| l.contains("@content")).unwrap();
+    assert!(line.chars().count() < 2 * VALUE_LENGTH, "{line}");
+}
+
+/// An empty ledger, judging nothing but the report itself.
+fn no_ledger() -> ledger::Ledger {
+    ledger::Ledger {
+        path: "deviations.toml".to_owned(),
+        sha256: "0".repeat(64),
+        entries: Vec::new(),
+        problems: Vec::new(),
+    }
+}
+
+#[test]
+fn a_page_whose_bytes_are_not_what_folia_s_manifest_records_fails_when_judged() {
+    let trees = Trees::new("manifest");
+    let only = ["a.html".to_owned()];
+    // As written, the manifest records a.html's bytes: the page is equal to Jekyll's, and passes.
+    let report = trees
+        .report(&Scope::Only(&only))
+        .judge(&no_ledger(), Vec::new());
+    assert_eq!(report.passed, Some(true), "{}", report.json());
+    assert_eq!(report.manifest_mismatches, Vec::<String>::new());
+    // The manifest records another hash for it: the same page fails, naming it.
+    let manifest = trees.0.join("folia/sha256.txt");
+    let text = std::fs::read_to_string(&manifest).unwrap();
+    let sha = hex(&Sha256::digest(PAGE.as_bytes()));
+    trees.write(
+        "folia/sha256.txt",
+        &text.replace(
+            &format!("{sha}  ./a.html"),
+            &format!("{}  ./a.html", "1".repeat(64)),
+        ),
+    );
+    let report = trees
+        .report(&Scope::Only(&only))
+        .judge(&no_ledger(), Vec::new());
+    assert_eq!(report.passed, Some(false));
+    assert_eq!(report.manifest_mismatches.len(), 1);
+    assert!(
+        report.manifest_mismatches[0].starts_with("a.html: the manifest records 1111"),
+        "{:?}",
+        report.manifest_mismatches
+    );
+    assert!(
+        report
+            .summary(SUMMARY_LIMIT)
+            .contains("FAILS: Folia's output manifest: a.html")
+    );
+    // The manifest does not list it: it fails too.
+    trees.write(
+        "folia/sha256.txt",
+        &text
+            .lines()
+            .filter(|line| !line.ends_with("./a.html"))
+            .fold(String::new(), |out, line| out + line + "\n"),
+    );
+    let report = trees
+        .report(&Scope::Only(&only))
+        .judge(&no_ledger(), Vec::new());
+    assert_eq!(report.passed, Some(false));
+    assert_eq!(
+        report.manifest_mismatches,
+        ["a.html: the manifest does not list it"]
+    );
+    // A file changed after the manifest was written is a mismatch as well.
+    trees.write_manifest();
+    trees.write("folia/site/a.html", &changed("three.", "3."));
+    let report = trees
+        .report(&Scope::Only(&only))
+        .judge(&no_ledger(), Vec::new());
+    assert_eq!(report.manifest_mismatches.len(), 1);
+}
+
+#[test]
+fn a_malformed_manifest_is_refused() {
+    let trees = Trees::new("bad-manifest");
+    trees.write("folia/sha256.txt", "manifest\n");
+    let error = Side::of("folia", &trees.folia()).expect_err("refused");
+    assert!(error.contains("not `<sha256>  ./<path>`"), "{error}");
 }

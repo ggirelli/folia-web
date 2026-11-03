@@ -14,6 +14,7 @@
 
 mod baseline;
 mod builds;
+mod coverage;
 mod document;
 mod liquid;
 mod markdown;
@@ -91,7 +92,7 @@ enum Command {
         ledger: PathBuf,
     },
     /// Compare two HTML files, or the HTML files of two output trees, as whole documents (plan
-    /// v11, §5.1), and report every difference; exit 1 when there is any
+    /// v12, §5.1), and report every difference; exit 1 when there is any
     Dom {
         /// The expected document or tree (Jekyll's)
         #[arg(long)]

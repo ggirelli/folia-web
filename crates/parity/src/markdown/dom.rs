@@ -74,7 +74,7 @@ fn is_block(node: &Node) -> bool {
 }
 
 /// How whitespace is normalized: the spike 1 rules ([`FRAGMENT`]), or the whole-document rules of
-/// plan v11, §5.1 ([`DOCUMENT`]), which add head-level elements to the blocks and keep a
+/// plan v12, §5.1 ([`DOCUMENT`]), which add head-level elements to the blocks and keep a
 /// `textarea`'s text exactly.
 pub struct Rules {
     /// Elements whose edges whitespace does not survive, besides [`BLOCKS`].
@@ -89,7 +89,7 @@ pub const FRAGMENT: Rules = Rules {
     exact_textarea: false,
 };
 
-/// Plan v11, §5.1, rules 1 to 6, for whole documents.
+/// Plan v12, §5.1, rules 1 to 6, for whole documents.
 pub const DOCUMENT: Rules = Rules {
     extra_blocks: &["html", "head", "body", "title", "meta", "base"],
     exact_textarea: true,
@@ -290,12 +290,26 @@ fn tidy_with(nodes: Vec<Node>, in_block: bool, rules: &Rules) -> Vec<Node> {
     out
 }
 
+/// Whether `c` is HTML whitespace (plan v12, §5.1 rule 3): space, tab, line feed, carriage
+/// return or form feed. A no-break space, and every other Unicode space, is not.
+pub fn is_html_whitespace(c: char) -> bool {
+    matches!(c, ' ' | '\t' | '\n' | '\r' | '\x0c')
+}
+
+/// `text` with each run of HTML whitespace ([`is_html_whitespace`]) collapsed to one space and
+/// the ends trimmed: the operation of the ledger kind *attribute value equal after collapse and
+/// trim* and of the title and description assertions (plan v12, §5.1). Other characters,
+/// a no-break space among them, are kept as they are.
+pub fn collapse_and_trim(text: &str) -> String {
+    collapse(text).trim_matches(' ').to_owned()
+}
+
 /// Runs of HTML whitespace become one space.
 fn collapse(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut in_space = false;
     for c in text.chars() {
-        if matches!(c, ' ' | '\t' | '\n' | '\r' | '\x0c') {
+        if is_html_whitespace(c) {
             if !in_space {
                 out.push(' ');
             }

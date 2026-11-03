@@ -1,4 +1,4 @@
-//! The deviations ledger as the whole-document DOM comparison reads it (plan v11, §5.2): the
+//! The deviations ledger as the whole-document DOM comparison reads it (plan v12, §5.2): the
 //! `[[deviation]]` entries of `parity/deviations.toml` whose `check` is `dom`. Other entries are
 //! the Markdown check's (`markdown::ledger`) and are not read here, except that every entry needs
 //! an `id` that is not blank and that no other entry has.
@@ -8,14 +8,18 @@
 //! - `expected_build`: the SHA-256 of the expected side's record, the baseline's `BASELINE.json`;
 //! - `outputs`: each output file it applies to, with `expected_sha256`, the SHA-256 of the
 //!   baseline's (Jekyll's) file reviewed, and `actual_sha256`, that of the Folia file reviewed.
-//!   Both are checked against the files compared, whose hashes the comparison computes from their
-//!   bytes ([`super::FileReport`]); a different file on either side is not covered, so a changed
-//!   page or baseline needs a new review;
+//!   `expected_sha256` is checked against the hash of the baseline file's bytes (a baseline has
+//!   no output manifest), `actual_sha256` against the hash Folia's output manifest records for
+//!   the page, which the judged report checks against the page's bytes in turn
+//!   ([`super::FileReport`]); a different file on either side is not covered, so a changed page
+//!   or baseline needs a new review. Each output is bound by its own files only: a change to
+//!   another output leaves the entry as it was;
 //! - `match`: the differences, each a node path (§5.1) and a kind. The kind is one of the
 //!   comparator's, which matches a difference of that kind at that path whatever its values, or
 //!   the ledger-only `attribute-value-equal-after-collapse-and-trim`, which matches an
-//!   `attribute-value-differs` only when the two values are equal once whitespace runs are
-//!   collapsed and the ends trimmed (§5.1's named head difference).
+//!   `attribute-value-differs` only when the two values are equal once runs of HTML whitespace
+//!   are collapsed and the ends trimmed (§5.1's named head difference; a no-break space is not
+//!   whitespace).
 //!
 //! An entry *covers* a difference when its output is listed and one of its `match` items holds;
 //! it *explains* it when, besides, the expected record and both files are the ones reviewed. Then:
@@ -25,16 +29,16 @@
 //! - a difference that two or more entries (accepted or proposed) explain fails, as an overlap;
 //! - a difference that an entry covers but cannot explain, because the record or a file is not
 //!   the one reviewed, is *stale* for that entry, and fails;
-//! - an accepted or proposed entry that explains no difference is *stale*, and fails;
-//! - an entry that explains some differences, but lists an output whose files are not the ones
-//!   reviewed or a `match` item that explains nothing on one of its outputs, is *partly stale*:
-//!   reported on every run, without failing it, and refused by final acceptance (F13, below);
+//! - an accepted or proposed entry is valid only when the record is the one reviewed, every
+//!   output it lists was compared with both its files the ones reviewed, and every `match` item
+//!   explains a difference on every output it lists; one that is not is *stale*, and fails the
+//!   run, with each reason (plan v12, §5.2, as decided on 2026-11-03);
 //! - an entry that is not well formed fails (its problems are [`Ledger::problems`]): a field the
 //!   schema does not know, in the entry, an output or a `match` item, is a problem, never ignored.
 //!
-//! An `open` follow-up does not fail a run. What final acceptance (plan v11, F13) would refuse is
-//! listed by [`Applied::final_acceptance`]: a proposed entry, an open follow-up, an entry stale or
-//! partly stale, and any problem.
+//! An `open` follow-up does not fail a run. What final acceptance (plan v12, F13) would refuse is
+//! listed by [`Applied::final_acceptance`]: a proposed entry, an open follow-up, each reason an
+//! entry is stale, and any problem.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -47,13 +51,20 @@ use super::{Difference, FileReport, Kind, Report};
 /// The ledger-only kind of §5.1's named head difference.
 pub const EQUAL_AFTER_COLLAPSE_AND_TRIM: &str = "attribute-value-equal-after-collapse-and-trim";
 
-/// The ledger file: `[[deviation]]` tables and nothing else. Each entry is read as a table first,
-/// so that the entries of other checks, whose fields differ, are left to their check.
+/// The ledger file: `[[deviation]]` tables and the `owners` who may accept an entry (read by the
+/// coverage check, `crate::coverage`), nothing else. Each entry is read as a table first, so that
+/// the entries of other checks, whose fields differ, are left to their check.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct File {
     #[serde(default)]
     deviation: Vec<toml::Table>,
+    #[serde(default)]
+    #[expect(
+        dead_code,
+        reason = "read so that the schema knows it; the coverage check uses it"
+    )]
+    owners: Option<toml::Value>,
 }
 
 /// A DOM entry as written; [`Entry`] is it checked. Every field the schema knows is listed: the
@@ -222,12 +233,14 @@ impl Entry {
             .collect()
     }
 
-    /// Whether the expected record and both files of `file` are the ones reviewed.
+    /// Whether the expected record and both files of `file` are the ones reviewed: the baseline's
+    /// by the hash of its bytes, Folia's by the hash its output manifest records.
     fn binds(&self, expected_record: Option<&str>, file: &FileReport) -> bool {
         expected_record == Some(self.expected_build.as_str())
             && self.outputs.get(&file.path).is_some_and(|reviewed| {
                 file.expected_sha256.as_deref() == Some(reviewed.expected_sha256.as_str())
-                    && file.actual_sha256.as_deref() == Some(reviewed.actual_sha256.as_str())
+                    && file.actual_manifest_sha256.as_deref()
+                        == Some(reviewed.actual_sha256.as_str())
             })
     }
 }
@@ -431,7 +444,8 @@ pub enum Binding {
     AsReviewed,
     /// The file compared has another hash.
     Changed,
-    /// No such file was compared (the output was not built, or a side lacks it).
+    /// No such file was compared (the output was not built, a side lacks it, or Folia's output
+    /// manifest does not list it).
     Absent,
 }
 
@@ -441,7 +455,8 @@ pub struct OutputResult {
     pub path: String,
     /// The baseline's file, against the entry's `expected_sha256`.
     pub expected: Binding,
-    /// Folia's file, against the entry's `actual_sha256`.
+    /// Folia's file, by the hash its output manifest records, against the entry's
+    /// `actual_sha256`.
     pub actual: Binding,
 }
 
@@ -472,12 +487,10 @@ pub struct EntryResult {
     pub outputs: Vec<OutputResult>,
     /// Each pair of a listed output and a `match` item that explained nothing there.
     pub unused: Vec<Unused>,
-    /// Whether it explained nothing (only accepted and proposed entries can be stale).
+    /// Whether it is not valid, which fails the run (only accepted and proposed entries can be
+    /// stale): it explains nothing, the record is not the one reviewed, an output it lists is
+    /// absent or not as reviewed on either side, or a `match` item is unused on an output.
     pub stale: bool,
-    /// Whether it explained something but not everything it lists: an output whose files, or a
-    /// record, that is not the one reviewed, or an unused `match` item. Reported, not failed, by a
-    /// run; refused by final acceptance.
-    pub partly_stale: bool,
     pub follow_up_status: String,
 }
 
@@ -492,10 +505,11 @@ pub struct Applied {
     pub problems: Vec<String>,
     /// Whether everything passes: every difference accepted, no entry stale, no problem.
     pub passed: bool,
-    /// What final acceptance (plan v11, F13) would refuse in this ledger against this comparison,
-    /// one line each: a problem, a proposed entry, an open follow-up, an entry stale or partly
-    /// stale with each output not as reviewed and each unused `match` item. A run does not fail on
-    /// it; F13 requires it empty.
+    /// What final acceptance (plan v12, F13) would refuse in this ledger against this comparison,
+    /// one line each: a problem, a proposed entry, an open follow-up, and each reason an entry is
+    /// stale (it explains nothing, the record, each output not as reviewed, each unused `match`
+    /// item). A run fails on problems and stale entries, not on a proposed entry's or an open
+    /// follow-up's line; F13 requires it empty.
     pub final_acceptance: Vec<String>,
 }
 
@@ -599,7 +613,7 @@ fn entry_result(
                     &reviewed.expected_sha256,
                 ),
                 actual: binding(
-                    file.and_then(|f| f.actual_sha256.as_deref()),
+                    file.and_then(|f| f.actual_manifest_sha256.as_deref()),
                     &reviewed.actual_sha256,
                 ),
             }
@@ -633,10 +647,9 @@ fn entry_result(
             })
             .collect()
     };
-    let stale = !withdrawn && explained.is_empty();
-    let partly_stale = !withdrawn
-        && !stale
-        && (expected_build != Binding::AsReviewed
+    let stale = !withdrawn
+        && (explained.is_empty()
+            || expected_build != Binding::AsReviewed
             || !unused.is_empty()
             || !outputs.iter().all(OutputResult::as_reviewed));
     EntryResult {
@@ -647,7 +660,6 @@ fn entry_result(
         outputs,
         unused,
         stale,
-        partly_stale,
         follow_up_status: entry.follow_up_status.clone(),
     }
 }
@@ -663,7 +675,7 @@ fn final_acceptance(problems: &[String], entries: &[EntryResult]) -> Vec<String>
         if entry.follow_up_status == "open" {
             out.push(format!("{id}: its follow-up is open"));
         }
-        if entry.stale {
+        if entry.stale && entry.explained.is_empty() {
             out.push(format!("{id}: stale, it explains no difference"));
         }
         if entry.expected_build != Binding::AsReviewed {

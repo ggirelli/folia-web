@@ -156,6 +156,28 @@ liquid:
 pages-negative label:
     scripts/pages-negative.sh {{site}} {{baselines}}/{{label}} "$(mktemp -d)/negative"
 
+# Check a DOM ledger entry holds only for the files it was reviewed against, and an unknown
+# source identity fails (copies the site)
+[group('parity')]
+ledger-negative label:
+    scripts/ledger-negative.sh {{site}} {{baselines}}/{{label}} "$(mktemp -d)/ledger-negative"
+
+# Check the coverage report fails on waivers and removals no owner approved (copies the ledger)
+[group('parity')]
+coverage-negative label:
+    scripts/coverage-negative.sh {{site}} {{baselines}}/{{label}} "$(mktemp -d)/coverage-negative"
+
+# Check an evidence folder keeps its builds' records, made from one clean Folia commit, and is
+# (or can be) committed on its own on that commit (plan v12, Q26)
+[group('parity')]
+evidence-provenance dir:
+    scripts/evidence-provenance.sh {{dir}}
+
+# Check the evidence provenance check refuses what breaks the convention (throwaway repositories)
+[group('parity')]
+evidence-provenance-negative:
+    scripts/evidence-provenance-negative.sh "$(mktemp -d)/evidence-provenance-negative"
+
 # Check a step of the vertical slice keeps out of the other step's mode (2 or 3)
 [group('parity')]
 slice-boundary step base="main":

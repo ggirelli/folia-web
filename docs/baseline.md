@@ -224,6 +224,9 @@ and `<source>.folia.html` for each document or excerpt that differs.
 just pages BASELINE-B            # build with Folia and compare what it writes
 just pages BASELINE-B ../out/p1  # the same, keeping the build in a new directory of your choice
 just pages-negative BASELINE-B   # the check fails when it should
+just ledger-negative BASELINE-B  # a DOM entry holds only for its files; an unknown identity fails
+just coverage-negative BASELINE-B  # waivers and removals no owner approved fail
+just evidence-provenance parity/evidence/<step>  # evidence built from a clean commit, on its own
 just build ../folia-out       # just build, into a directory outside the site
 ```
 
@@ -242,42 +245,89 @@ old ones by hand. `just pages` also requires the templates to have the tree hash
 record's `changes`, for the site and for the Folia source, identifies a checkout's uncommitted
 changes beyond its commit: `{"state": "clean"}`, `{"state": "changed", "sha256": …}` (the hash
 of the staged and unstaged diffs and of each untracked, not ignored file), or
-`{"state": "unknown", "error": …}` when git fails, which `build.log` and `just pages` also
-report; a git failure is never recorded as a clean tree. The diffs are taken with every
-configurable setting that would change their text given on the command line (prefixes, quoting,
+`{"state": "unknown", "error": …}` when the directory has no commit (it is not a git checkout,
+and `commit` is `null`), when git fails, or when the tree holds what cannot be identified: an
+untracked file that cannot be read, an untracked nested repository (whose contents git does
+not list) or a submodule (a gitlink in the index or `HEAD`, whose working tree the diffs give
+only as a commit and a `-dirty` marker); the error names it. None of these is ever recorded as a
+clean tree or given a hash. **An unknown identity, of the site or of the Folia source, fails
+`just pages`** (plan v12, §5.4): `build.log` names it, the run prints it as a failure, and every
+other check still runs, so the kept build and its reports keep their diagnostics. Untracked files
+are read by the name git gives, byte for byte, so a name that is not UTF-8 still counts (where a
+path must be UTF-8, such a name makes the identity unknown).
+The diffs are taken with every configurable setting that would change their text given on the
+command line (prefixes, quoting,
 drivers, colour, file order, algorithm, indent heuristic, context, inter-hunk context, blank
 lines, `diff.relative`, submodules, full object ids), so the hash does not depend on the git
 configuration; which untracked files count follows the ignore files, the user's
 `core.excludesFile` included, as `git status` does.
 
-The pages built are also compared with Jekyll's as whole documents (plan v11, §5.1), and the
+The pages built are also compared with Jekyll's as whole documents (plan v12, §5.1), and the
 comparison decides the check: every difference must be explained by an accepted `dom` entry of
 the deviation ledger (`parity/deviations.toml`, `--ledger`; §5.2), no such entry may explain
 nothing, and the hard document assertions (robots, canonical, title, description, `lang`,
 `rel="me"` and the h-card on `/`, h-entry, redirect stubs) must hold; a page that cannot be read
 as UTF-8 fails its assertions as a `read` failure. A `dom` entry is bound to the baseline's
-`BASELINE.json` and, for each output, to both files reviewed (`expected_sha256`, the baseline's;
-`actual_sha256`, Folia's), each checked against the SHA-256 of the file compared, so a new
-baseline, a changed baseline file or a changed page needs a new review: the differences it would
-have explained are reported *stale* for it, and fail. An entry needs an `id` that is not blank,
-and a field the ledger's schema does not know is a problem, never ignored. A difference two
-entries explain (accepted or proposed) fails as an overlap. An entry that explains some of what
-it lists but not all is reported *partly stale* on every run, with what final acceptance (F13)
-would refuse, without failing the run. `dom-report.json` and `dom-report.md` in the build's
+`BASELINE.json` and, for each output, to both files reviewed: `expected_sha256`, checked against
+the SHA-256 of the baseline file's bytes, and `actual_sha256`, checked against the SHA-256 that
+Folia's output manifest (`sha256.txt`) records for the page. Every page compared must be in that
+manifest with the hash of its bytes, or the check fails. A new baseline, a changed baseline file
+or a changed page needs a new review; a change to an output the entry does not list does not.
+An entry is valid only when its record is the one reviewed, every output it lists was compared
+with both its files the ones reviewed, and every `match` item explains a difference on every
+output it lists; an entry that is not valid is *stale*, and fails the check, with each reason.
+The kind `attribute-value-equal-after-collapse-and-trim` collapses HTML whitespace only (space,
+tab, line feed, carriage return, form feed): a no-break space is a character like any other, as
+in the title and description assertions. An entry needs an `id` that is not blank, and a field
+the ledger's schema does not know is a problem, never ignored. A difference two entries explain
+(accepted or proposed) fails as an overlap. `dom-report.json` and `dom-report.md` in the build's
 directory list every difference by node path and kind, with the ledger's verdict on it, each
-entry's matches and the state of each output it lists, and every assertion.
+entry's matches and the state of each output it lists, and every assertion; the JSON keeps both
+values of each difference in full, and only the Markdown shortens them.
 `parity dom --expected A --actual B [--report DIR]` compares any two HTML files or output trees
 the same way, in report only. The checks:
 
-1. each page and redirect stub has Jekyll's URL and output file;
+1. each output Folia writes, static files included, is one it planned, with Jekyll's URL and
+   output file;
 2. each page has Jekyll's fingerprint: title, canonical link, description and Open Graph values;
    headings in order; `a href`, `img src` and `link href`/`script src` multisets; and the text of
    its `div.main-content` and of its body, whitespace collapsed;
 3. each page's `div.main-content` is equal after the Markdown check's normalization;
 4. redirect stubs and static files are byte-identical.
 
-So far Folia builds `/about`, its stub and the static files (step 1 of the slice); the outputs
-it does not build yet are counted, not compared.
+So far Folia builds 4 pages, a stub, the note graph and the static files; the outputs it does not
+build yet are not compared, and the coverage report says which they are.
+
+**Coverage** (plan v12, §5.4, A2.1): every run gives each row of the baseline's manifest exactly
+one class, prints the counts, and writes `coverage.json` and `coverage.md` (every row, its class,
+and the checks or the approval behind it) into the build's directory:
+
+- **Built and checked:** Folia writes the output, at least one applicable check compares it, and
+  every applicable check passes.
+- **Not built yet:** Folia does not write the output; it remains in scope.
+- **Waived:** Folia writes the output, but an explicitly owner-approved entry waives its
+  comparison.
+- **Removed:** Folia does not write the output because it has been intentionally removed from
+  the site, with explicit owner approval.
+
+How each is enforced: every output Folia writes, static files included, has a route check (it is
+one Folia planned, at Jekyll's URL and output file), which compares no contents; *built and
+checked* needs at least one other check (page checks, whole-document comparison, assertions,
+bytes or the note graph) and every check passing. *Not built yet* needs Folia's route table to
+plan the output. *Waived* needs the output written, Folia's output manifest to record its bytes,
+and its route check to pass; no other check compares it. *Removed* needs the output neither
+written nor planned, so a removal cannot stand for an output that is merely not built yet.
+
+A waiver or removal is a `[[deviation]]` with `check = "coverage"`, `class = "waived"` or
+`"removed"`, explicit `outputs` (manifest rows), a `rationale` and a `status`; accepted, it also
+needs `accepted` (a date), `decision`, and `accepted_by` equal to one of the ledger's top-level
+`owners` (see [development](development.md#owner-approvals-in-the-ledger): the tool checks the
+recorded approval, review checks that the owner gave it). Proposed and withdrawn entries waive
+and remove nothing. The run fails on a row with no class (one Folia writes that no check compares
+or whose check fails, one Folia neither writes nor plans), on a row two entries claim, on a
+proposed or unapproved entry, an unknown class, an output that is no manifest row, a waiver that
+does not meet its conditions or a removal of an output Folia writes or plans. The ledger holds no
+coverage entry today.
 
 ## Reproducing from a clean checkout
 
@@ -330,6 +380,7 @@ just markdown-negative BASELINE-B
 just routes BASELINE-B
 just pages BASELINE-B                            # the vertical slice, with ../filopoe/_folia
 just pages-negative BASELINE-B
+just ledger-negative BASELINE-B
 ```
 
 The slice's templates are in `filopoe/_folia/templates`, uncommitted in the local checkout until

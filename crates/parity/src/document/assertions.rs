@@ -1,6 +1,7 @@
-//! The hard document assertions of plan v11, §5.1 (Q15): each a failure of its own, checked
+//! The hard document assertions of plan v12, §5.1 (Q15): each a failure of its own, checked
 //! whatever the DOM comparison and the ledger say. Pages are read with the whole-document rules
-//! ([`dom::DOCUMENT`]); text values are compared with whitespace collapsed and trimmed.
+//! ([`dom::DOCUMENT`]); text values are compared with HTML whitespace collapsed and trimmed
+//! ([`dom::collapse_and_trim`], the ledger kind's operation): a no-break space is not whitespace.
 //!
 //! | Assertion | Applies to | Requires |
 //! |-|-|-|
@@ -237,10 +238,6 @@ fn entry_assertion(want: &[Node], got: &[Node]) -> Option<(bool, String)> {
     Some((problems.is_empty(), detail))
 }
 
-fn collapse_and_trim(text: &str) -> String {
-    text.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
 fn walk<'a>(nodes: &'a [Node], visit: &mut dyn FnMut(&'a Node)) {
     for node in nodes {
         visit(node);
@@ -285,8 +282,8 @@ fn has_token(attrs: &std::collections::BTreeMap<String, String>, name: &str, tok
 
 fn text(node: &Node) -> String {
     match node {
-        Node::Element { children, .. } => collapse_and_trim(&dom::text(children)),
-        Node::Text(text) => collapse_and_trim(text),
+        Node::Element { children, .. } => dom::collapse_and_trim(&dom::text(children)),
+        Node::Text(text) => dom::collapse_and_trim(text),
         Node::Comment(_) => String::new(),
     }
 }
@@ -329,7 +326,7 @@ fn description(nodes: &[Node]) -> Vec<String> {
                 .is_some_and(|v| v.eq_ignore_ascii_case("description"))
     })
     .into_iter()
-    .map(|node| collapse_and_trim(attr(node, "content").unwrap_or_default()))
+    .map(|node| dom::collapse_and_trim(attr(node, "content").unwrap_or_default()))
     .collect()
 }
 

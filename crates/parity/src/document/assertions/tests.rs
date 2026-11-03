@@ -517,3 +517,87 @@ fn the_root_card_s_url_and_name_are_its_own() {
         Some(("https://example.org/".to_owned(), "Gabriele".to_owned()))
     );
 }
+
+#[test]
+fn title_and_description_collapse_html_whitespace_only() {
+    // The five HTML whitespace characters (as character references, so the parser keeps them)
+    // collapse: both assertions hold.
+    let html_whitespace = changed(
+        &changed(
+            PAGE,
+            "<title>\n\nAbout\n\n | Example</title>",
+            "<title>&#9;About&#12;&#13;|&#10;Example&#32;</title>",
+        ),
+        "content=\"\nExample - About\n\"",
+        "content=\"&#12;Example&#9;-&#13;About&#10;\"",
+    );
+    assert_eq!(
+        failed(&check("a.html", PAGE_OUTPUT, PAGE, &html_whitespace, SITE)),
+        Vec::<&str>::new()
+    );
+    // A no-break space, or another Unicode space, is a character like any other: each fails.
+    for space in ['\u{a0}', '\u{2003}', '\u{3000}', '\u{b}'] {
+        let title = changed(
+            PAGE,
+            "<title>\n\nAbout\n\n | Example</title>",
+            &format!("<title>About{space}| Example</title>"),
+        );
+        assert_eq!(
+            failed(&check("a.html", PAGE_OUTPUT, PAGE, &title, SITE)),
+            ["title"],
+            "{space:?}"
+        );
+        let description = changed(
+            PAGE,
+            "content=\"\nExample - About\n\"",
+            &format!("content=\"Example{space}- About\""),
+        );
+        assert_eq!(
+            failed(&check("a.html", PAGE_OUTPUT, PAGE, &description, SITE)),
+            ["description"],
+            "{space:?}"
+        );
+        // Nor is one trimmed at an end.
+        let trailing = changed(
+            PAGE,
+            "content=\"\nExample - About\n\"",
+            &format!("content=\"Example - About{space}\""),
+        );
+        assert_eq!(
+            failed(&check("a.html", PAGE_OUTPUT, PAGE, &trailing, SITE)),
+            ["description"],
+            "{space:?}"
+        );
+    }
+}
+
+#[test]
+fn the_assertions_and_the_ledger_kind_share_one_whitespace_operation() {
+    // The same pairs of values, judged by the description assertion and by the comparator's
+    // collapse-and-trim flag, get the same answer.
+    for (jekyll, folia) in [
+        ("\nExample - About\n", "Example - About"),
+        ("Example&#9;-&#12;About", "Example - About"),
+        ("Example\u{a0}- About", "Example - About"),
+        ("Example - About\u{2003}", "Example - About"),
+    ] {
+        let page = |value: &str| {
+            format!(
+                "<!DOCTYPE html><html lang=\"en\"><head><link rel=\"canonical\" \
+                 href=\"https://example.org/a\"><title>A</title><meta name=\"description\" \
+                 content=\"{value}\"></head><body></body></html>"
+            )
+        };
+        let assertion = check("a.html", PAGE_OUTPUT, &page(jekyll), &page(folia), SITE)
+            .into_iter()
+            .find(|o| o.assertion == "description")
+            .unwrap()
+            .passed;
+        let differences = crate::document::compare_documents(&page(jekyll), &page(folia));
+        let ledger = differences
+            .iter()
+            .find(|d| d.path.ends_with("@content"))
+            .and_then(|d| d.equal_after_collapse_and_trim);
+        assert_eq!(Some(assertion), ledger, "{jekyll:?} / {folia:?}");
+    }
+}

@@ -31,6 +31,8 @@ fn report(expected_record: &str, pages: &[(&str, &str, &str)]) -> Report {
             status: FileStatus::Compared,
             expected_sha256: Some(sha(jekyll)),
             actual_sha256: Some(sha(folia)),
+            // As a kept build's manifest records it: the hash of Folia's bytes.
+            actual_manifest_sha256: Some(sha(folia)),
             differences: compare_documents(jekyll, folia),
         })
         .collect();
@@ -41,6 +43,7 @@ fn report(expected_record: &str, pages: &[(&str, &str, &str)]) -> Report {
             sha256: sha256.to_owned(),
         }),
         manifest_sha256: "0".repeat(64),
+        manifest: None,
     };
     Report::new(
         side("jekyll", Some(expected_record)),
@@ -361,9 +364,10 @@ fn an_output_whose_baseline_file_is_absent_is_not_explained() {
 }
 
 #[test]
-fn a_partly_stale_entry_is_reported_and_refused_by_final_acceptance_only() {
+fn an_output_changed_on_folia_s_side_makes_the_entry_stale_though_others_are_explained() {
     // b.html is now equal to Jekyll's (its file changed and it has no difference left); a.html
-    // still has both head differences, which the entry explains.
+    // still has both head differences, which the entry explains. The entry is not valid: it
+    // fails the run (plan v12, §5.2, as decided on 2026-11-03; it was "partly stale" before).
     let report = report(
         EXPECTED_BUILD,
         &[("a.html", JEKYLL, FOLIA), ("b.html", JEKYLL, JEKYLL)],
@@ -377,9 +381,10 @@ fn a_partly_stale_entry_is_reported_and_refused_by_final_acceptance_only() {
         ),
         &report,
     );
-    assert!(applied.passed, "{applied:?}");
+    assert!(!applied.passed, "{applied:?}");
     let result = &applied.entries[0];
-    assert!(!result.stale && result.partly_stale);
+    assert!(result.stale);
+    assert_eq!(result.explained.len(), 2);
     assert_eq!(result.outputs[1].actual, Binding::Changed);
     assert_eq!(result.unused.len(), 2);
     assert!(result.unused.iter().all(|u| u.output == "b.html"));
@@ -394,7 +399,7 @@ fn a_partly_stale_entry_is_reported_and_refused_by_final_acceptance_only() {
 }
 
 #[test]
-fn a_match_item_unused_on_an_output_as_reviewed_is_partly_stale() {
+fn a_match_item_unused_on_an_output_as_reviewed_makes_the_entry_stale() {
     // Folia's og:title now equals Jekyll's exactly: one difference left, one `match` item unused.
     let folia = FOLIA.replace("content=\"A\"", "content=\"\n\nA\n\n\"");
     let report = report(EXPECTED_BUILD, &[("a.html", JEKYLL, &folia)]);
@@ -403,9 +408,11 @@ fn a_match_item_unused_on_an_output_as_reviewed_is_partly_stale() {
         &entry(ACCEPTED, &[("a.html", &folia)], &[DESCRIPTION, OG_TITLE]),
         &report,
     );
-    assert!(applied.passed, "{applied:?}");
+    assert!(!applied.passed, "{applied:?}");
+    // The difference it does explain is still accepted; the entry is what fails.
+    assert_eq!(applied.verdicts[0], [Verdict::Accepted("D-900".to_owned())]);
     let result = &applied.entries[0];
-    assert!(result.partly_stale);
+    assert!(result.stale);
     assert!(result.outputs[0].as_reviewed());
     assert_eq!(
         result.unused,
@@ -423,7 +430,7 @@ fn an_entry_that_explains_everything_it_lists_is_ready_for_final_acceptance() {
     let report = report(EXPECTED_BUILD, &[("a.html", JEKYLL, FOLIA)]);
     let ledger = entry(ACCEPTED, &[("a.html", FOLIA)], &[DESCRIPTION, OG_TITLE]);
     let applied = judge("ready", &ledger, &report);
-    assert!(applied.passed && !applied.entries[0].partly_stale);
+    assert!(applied.passed && !applied.entries[0].stale);
     assert_eq!(applied.final_acceptance, Vec::<String>::new());
     // A proposed entry, or an open follow-up, is not.
     let proposed = ACCEPTED.replace("status = \"accepted\"", "status = \"proposed\"");
@@ -699,4 +706,220 @@ fn the_repository_ledger_is_well_formed() {
             .unwrap();
     assert_eq!(ledger.problems, Vec::<String>::new());
     assert!(ledger.entries.iter().any(|entry| entry.id == "D-004"));
+}
+
+#[test]
+fn a_listed_output_that_was_not_compared_makes_the_entry_stale() {
+    // The entry lists a.html and b.html; only a.html was built and compared (b.html is missing).
+    let report = report(EXPECTED_BUILD, &[("a.html", JEKYLL, FOLIA)]);
+    let applied = judge(
+        "missing",
+        &entry(
+            ACCEPTED,
+            &[("a.html", FOLIA), ("b.html", FOLIA)],
+            &[DESCRIPTION, OG_TITLE],
+        ),
+        &report,
+    );
+    assert!(!applied.passed);
+    let result = &applied.entries[0];
+    assert!(result.stale);
+    assert_eq!(result.explained.len(), 2);
+    assert_eq!(
+        result.outputs[1],
+        OutputResult {
+            path: "b.html".to_owned(),
+            expected: Binding::Absent,
+            actual: Binding::Absent,
+        }
+    );
+    assert!(
+        applied.final_acceptance.contains(
+            &"D-900: output b.html: the baseline's file is absent, Folia's is absent".to_owned()
+        ),
+        "{:?}",
+        applied.final_acceptance
+    );
+}
+
+#[test]
+fn a_change_to_an_unrelated_output_leaves_the_entry_valid() {
+    let ledger = entry(ACCEPTED, &[("a.html", FOLIA)], &[DESCRIPTION, OG_TITLE]);
+    // Another output, equal on both sides, in whatever version: the entry is valid and passes.
+    for other in ["<p>One.</p>", "<p>Two.</p>"] {
+        let page = FOLIA.replace("<p>Text.</p>", other);
+        let report = report(
+            EXPECTED_BUILD,
+            &[("a.html", JEKYLL, FOLIA), ("other.html", &page, &page)],
+        );
+        let applied = judge("unrelated", &ledger, &report);
+        assert!(applied.passed, "{applied:?}");
+        assert!(!applied.entries[0].stale);
+        assert_eq!(applied.final_acceptance, Vec::<String>::new());
+    }
+    // Another output that now differs: that difference fails as unexplained, and only it; the
+    // entry still explains both of its own, and is not stale.
+    let changed = FOLIA.replace("Text.", "Changed.");
+    let report = report(
+        EXPECTED_BUILD,
+        &[("a.html", JEKYLL, FOLIA), ("other.html", FOLIA, &changed)],
+    );
+    let applied = judge("unrelated-differs", &ledger, &report);
+    assert!(!applied.passed);
+    assert!(!applied.entries[0].stale);
+    assert_eq!(applied.entries[0].explained.len(), 2);
+    assert_eq!(applied.verdicts[1], [Verdict::Unexplained]);
+}
+
+#[test]
+fn folia_s_side_is_bound_by_the_hash_its_manifest_records() {
+    let ledger = entry(ACCEPTED, &[("a.html", FOLIA)], &[DESCRIPTION, OG_TITLE]);
+    // The manifest records another hash than the one reviewed (whatever the bytes): stale.
+    let mut other = report(EXPECTED_BUILD, &[("a.html", JEKYLL, FOLIA)]);
+    other.files[0].actual_manifest_sha256 = Some("1".repeat(64));
+    let applied = judge("manifest-changed", &ledger, &other);
+    assert!(!applied.passed);
+    assert_eq!(applied.entries[0].outputs[0].actual, Binding::Changed);
+    // No manifest hash at all: absent, stale.
+    other.files[0].actual_manifest_sha256 = None;
+    let applied = judge("manifest-absent", &ledger, &other);
+    assert!(!applied.passed);
+    assert_eq!(applied.entries[0].outputs[0].actual, Binding::Absent);
+    // The manifest records the hash reviewed: the ledger explains the differences (that the
+    // bytes are another file is the judged report's manifest check, which fails it).
+    let mut recorded = report(EXPECTED_BUILD, &[("a.html", JEKYLL, FOLIA)]);
+    recorded.files[0].actual_sha256 = Some("2".repeat(64));
+    let applied = judge("manifest-recorded", &ledger, &recorded);
+    assert!(applied.passed, "{applied:?}");
+    let judged = recorded.judge(
+        &LedgerFile::new("manifest-judged", &ledger).load(),
+        Vec::new(),
+    );
+    assert_eq!(judged.passed, Some(false));
+    assert_eq!(judged.manifest_mismatches.len(), 1);
+}
+
+#[test]
+fn a_no_break_space_does_not_satisfy_the_collapse_and_trim_kind() {
+    for space in ['\u{a0}', '\u{2003}', '\u{3000}'] {
+        let folia = FOLIA.replace("content=\"S - A\"", &format!("content=\"S{space}- A\""));
+        let report = report(EXPECTED_BUILD, &[("a.html", JEKYLL, &folia)]);
+        let applied = judge(
+            "nbsp",
+            &entry(ACCEPTED, &[("a.html", &folia)], &[DESCRIPTION, OG_TITLE]),
+            &report,
+        );
+        assert!(!applied.passed, "{space:?}");
+        assert_eq!(applied.verdicts[0][0], Verdict::Unexplained, "{space:?}");
+        assert_eq!(
+            applied.verdicts[0][1],
+            Verdict::Accepted("D-900".to_owned())
+        );
+    }
+    // HTML whitespace (a tab and a form feed) does.
+    let folia = FOLIA.replace("content=\"S - A\"", "content=\"S&#9;-&#12;A\"");
+    let report = report(EXPECTED_BUILD, &[("a.html", JEKYLL, &folia)]);
+    let applied = judge(
+        "html-whitespace",
+        &entry(ACCEPTED, &[("a.html", &folia)], &[DESCRIPTION, OG_TITLE]),
+        &report,
+    );
+    assert!(applied.passed, "{applied:?}");
+}
+
+#[test]
+fn the_repository_ledger_s_d_004_has_exactly_its_approved_scope() {
+    // Approved by the project owner (2026-11-01, re-accepted 2026-11-03): four outputs, two
+    // attributes, one kind, baseline BASELINE-B's record. Anything broader must fail here.
+    let ledger =
+        load(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../parity/deviations.toml"))
+            .unwrap();
+    let d004: Vec<&Entry> = ledger.entries.iter().filter(|e| e.id == "D-004").collect();
+    let [entry] = d004.as_slice() else {
+        panic!("D-004 is listed once")
+    };
+    assert_eq!(entry.status, Status::Accepted);
+    assert_eq!(entry.expected_build, EXPECTED_BUILD);
+    assert_eq!(
+        entry.outputs.keys().map(String::as_str).collect::<Vec<_>>(),
+        [
+            "about.html",
+            "blog/2021/08/08/webmentions.html",
+            "dg/coding/index.html",
+            "dg/coding/rust.html",
+        ]
+    );
+    assert_eq!(
+        entry.matches,
+        [
+            (
+                "html[1]/head[1]/meta[3]@content".to_owned(),
+                Condition::EqualAfterCollapseAndTrim
+            ),
+            (
+                "html[1]/head[1]/meta[7]@content".to_owned(),
+                Condition::EqualAfterCollapseAndTrim
+            ),
+        ]
+    );
+    // The only DOM entry: no other deviation is accepted by the DOM comparison.
+    assert_eq!(ledger.entries.len(), 1);
+}
+
+#[test]
+fn on_kept_trees_an_unrelated_folia_output_or_record_changing_leaves_the_entry_valid() {
+    use crate::document::{Scope, compare_trees};
+    let root = std::env::temp_dir().join(format!("parity-ledger-{}-trees", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let write = |path: &str, text: &str| {
+        let path = root.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    };
+    let write_manifest = || {
+        let manifest = crate::builds::manifest(&root.join("folia/site")).unwrap();
+        write("folia/sha256.txt", &crate::builds::manifest_text(&manifest));
+    };
+    write("jekyll/BASELINE.json", "{}");
+    write("jekyll/site/a.html", JEKYLL);
+    write("jekyll/site/other.css", "x");
+    write("folia/build.json", "{\"folia\": 1}");
+    write("folia/site/a.html", FOLIA);
+    write("folia/site/other.css", "x");
+    write_manifest();
+    let mut ledger = entry(ACCEPTED, &[("a.html", FOLIA)], &[DESCRIPTION, OG_TITLE]);
+    ledger = ledger.replace(EXPECTED_BUILD, &sha("{}"));
+    let ledger = LedgerFile::new("kept-trees", &ledger);
+    let judged = || {
+        let (jekyll, folia) = (root.join("jekyll/site"), root.join("folia/site"));
+        let pages = ["a.html".to_owned()];
+        Report::new(
+            Side::of("jekyll", &jekyll).unwrap(),
+            Side::of("folia", &folia).unwrap(),
+            compare_trees(&jekyll, &folia, &Scope::Only(&pages)).unwrap(),
+        )
+        .judge(&ledger.load(), Vec::new())
+    };
+    let before = judged();
+    assert_eq!(before.passed, Some(true), "{}", before.json());
+    // Another of Folia's outputs and its record change, so do the whole manifest's hash and the
+    // record's: the entry is bound to neither, and stays valid.
+    write("folia/site/other.css", "y");
+    write("folia/build.json", "{\"folia\": 2}");
+    write_manifest();
+    let after = judged();
+    assert_eq!(after.passed, Some(true), "{}", after.json());
+    assert_ne!(after.actual.manifest_sha256, before.actual.manifest_sha256);
+    assert_ne!(after.actual.record, before.actual.record);
+    let entry = &after.ledger.as_ref().unwrap().entries[0];
+    assert!(!entry.stale);
+    assert_eq!(entry.explained.len(), 2);
+    // Folia's a.html changes, and the manifest with it: stale, and the run fails.
+    write("folia/site/a.html", &FOLIA.replace("</body>", "\n</body>"));
+    write_manifest();
+    let changed = judged();
+    assert_eq!(changed.passed, Some(false));
+    assert!(changed.ledger.as_ref().unwrap().entries[0].stale);
+    assert_eq!(changed.manifest_mismatches, Vec::<String>::new());
+    let _ = std::fs::remove_dir_all(&root);
 }
