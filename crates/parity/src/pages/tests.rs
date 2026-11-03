@@ -131,6 +131,8 @@ fn pages_keeps_its_build_where_it_is_told_and_never_overwrites_it() {
     let dest = fixture.0.join("pages-build");
     fixture.write("deviations.toml", "");
     let ledger = fixture.0.join("deviations.toml");
+    fixture.write("expected-warnings.toml", "");
+    let expected_warnings = fixture.0.join("expected-warnings.toml");
     // The check itself may pass or fail on this small site; what matters is the build's life.
     run(
         &fixture.site(),
@@ -139,6 +141,7 @@ fn pages_keeps_its_build_where_it_is_told_and_never_overwrites_it() {
         Some(&dest),
         None,
         &ledger,
+        &expected_warnings,
     )
     .unwrap();
     for file in [
@@ -148,6 +151,8 @@ fn pages_keeps_its_build_where_it_is_told_and_never_overwrites_it() {
         "build.log",
         "dom-report.json",
         "dom-report.md",
+        "links.json",
+        "warnings.json",
     ] {
         assert!(dest.join(file).is_file(), "{file} was not kept");
     }
@@ -168,6 +173,7 @@ fn pages_keeps_its_build_where_it_is_told_and_never_overwrites_it() {
         Some(&dest),
         None,
         &ledger,
+        &expected_warnings,
     )
     .expect_err("refused");
     assert!(error.contains("already exists"), "{error}");

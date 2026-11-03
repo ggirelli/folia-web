@@ -51,7 +51,8 @@ Each mode crate depends on `folia-core` only, never on another mode.
   broken-link warnings. `coverage` classifies every row of the baseline's manifest from what
   Folia plans and writes, the checks' verdict on each output, and the ledger's coverage entries
   (plan v12, §5.4, A2.1). `links` checks that every internal `href` and `src` of the HTML Folia
-  writes resolves to a planned output (A2.8). `determinism` builds the site twice through
+  writes resolves to a planned output (A2.8), and `warnings` that every warning Folia gives is
+  one `parity/expected-warnings.toml` expects (A2.9). `determinism` builds the site twice through
   `builds`, as of one time, and compares the two builds byte for byte, and each with a recorded
   reference (A2.5).
 - **`parity/`**: tools that check Folia's output against the Jekyll site.
@@ -74,6 +75,8 @@ Each mode crate depends on `folia-core` only, never on another mode.
     workflow), which `scripts/baseline.sh` and the parity tools' checkout check both leave out,
     from this one list.
   - `check_date_shift.py`: checks that two baselines differ only by changed last-modified dates.
+  - `expected-warnings.toml`: the warnings Folia is expected to give, each with its decision
+    (A2.9).
   - `deviations.toml`: the deviation ledger; an entry may name the Markdown gates it explains
     (`markdown_gates`). `spike3-expected.txt`: the differences spike 3 expects, each traced to a
     ledger entry.
@@ -97,6 +100,8 @@ Each mode crate depends on `folia-core` only, never on another mode.
   - `ledger-negative.sh`: shows a DOM ledger entry holds only for the baseline record and files
     it was reviewed against, on copies of the site and baseline, that the templates hash pin
     refuses changed templates, and that a build whose source identity is unknown fails.
+  - `warnings-negative.sh`: shows the expected-warnings check fails on an unexpected warning, a
+    stale or missing entry and an ambiguous one, and refuses malformed files.
   - `links-negative.sh`: shows the link check fails on links to nothing planned, and on no other,
     and on a `<base>` element, on copies of the site.
   - `coverage-negative.sh`: shows the coverage report fails on waivers and removals no owner

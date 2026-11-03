@@ -361,6 +361,7 @@ just pages-negative BASELINE-B   # the check fails when it should
 just ledger-negative BASELINE-B  # a DOM entry holds only for its files; an unknown identity fails
 just coverage-negative BASELINE-B  # waivers and removals no owner approved fail
 just links-negative BASELINE-B     # links to nothing planned fail, and nothing else
+just warnings-negative BASELINE-B  # unexpected, stale and ambiguous warnings fail
 just evidence-provenance parity/evidence/<step>  # evidence built from a clean commit, on its own
 just build ../folia-out       # just build, into a directory outside the site
 ```
@@ -459,6 +460,32 @@ class. A known Jekyll-origin broken link is ledgered when a built page first has
 none does today, so the ledger has no link entries. The broken wiki-link of `coding/rust.md`
 (Q3l) is written as a `<span class="broken-link">`, with no `href`, by both Jekyll and Folia, so
 it is A2.9's expected warning, not a link.
+
+**Expected warnings** (plan v12, §5.4, A2.9; F10): every warning Folia gives must be listed in
+`parity/expected-warnings.toml` (`--expected-warnings`), and every entry there must match a
+warning, or the run fails. Each `[[warning]]` names an `id`, the `source` (the document, or
+`(site)`), the exact `message`, and the `decision` that makes it expected; where exact text
+cannot be used, a `pattern` (a regular expression the whole text must match) with a
+`pattern_reason`. The run fails on a warning no entry matches, an entry no warning matches
+(stale, or its warning gone), a warning two entries match and an entry two warnings match; a
+file with an unknown key, a missing or blank field, both or neither of `message` and `pattern`,
+a pattern that is not a regular expression or without its reason, or an `id` used twice, is
+refused before anything is built. `warnings.json` in the build's directory lists each warning
+with the entries that match it, and each entry with how many warnings it matches. The check
+that each broken link on a page built gives one warning, the number of Jekyll's broken-link
+spans, stays beside it.
+
+The file's one entry, `W-001`, is the broken wiki-link `[[First setup: rust]]` in
+`_digital_garden/topic/note.md`, kept by the owner's decision on Q3l (preserve, 2026-11-03).
+
+What it can see: the warnings of a build that succeeds, which Folia returns whole
+(`Built::warnings`; today only the garden's broken wiki-links give any). When a build fails,
+Folia returns its problems without the warnings collected so far, in three places: a note that
+fails drops its mode's warnings (`crates/garden/src/note.rs`), a mode that fails drops the other
+modes' (`build.rs`, the modes' loop), and a clash or an unplanned output drops them all
+(`build.rs`, and `folia build` prints problems only). A failed build fails `parity pages` before
+any warning is judged, so this does not let an unexpected warning pass; it only means a failed
+build's report lists no warnings, until plan v12's A1.4 makes diagnostics travel with output.
 
 **Coverage** (plan v12, §5.4, A2.1): every run gives each row of the baseline's manifest exactly
 one class, prints the counts, and writes `coverage.json` and `coverage.md` (every row, its class,

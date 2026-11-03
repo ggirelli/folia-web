@@ -210,6 +210,12 @@ ledger-negative label:
 links-negative label:
     scripts/links-negative.sh {{site}} {{baselines}}/{{label}} "$(mktemp -d)/links-negative"
 
+# Check the expected-warnings check fails on an unexpected warning, a stale or missing entry and an
+# ambiguous one, and refuses malformed files (copies the file, A2.9)
+[group('parity')]
+warnings-negative label:
+    scripts/warnings-negative.sh {{site}} {{baselines}}/{{label}} "$(mktemp -d)/warnings-negative"
+
 # Check the coverage report fails on waivers and removals no owner approved (copies the ledger)
 [group('parity')]
 coverage-negative label:

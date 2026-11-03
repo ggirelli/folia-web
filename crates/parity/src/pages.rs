@@ -18,6 +18,9 @@
 //! 7. **Links** (`links`, A2.8): every internal `href` and `src` of the HTML written resolves to a
 //!    planned output; this compares nothing with Jekyll, so it decides the run but no coverage
 //!    class.
+//! 8. **Expected warnings** (`warnings`, A2.9): every warning Folia gives is one
+//!    `parity/expected-warnings.toml` lists, and every entry there matches one; likewise not a
+//!    coverage check.
 //!
 //! Outputs Folia does not build yet are counted, not compared. The run fails, too, when the
 //! build's record cannot identify the site or the Folia source it was built from, a directory
@@ -41,6 +44,7 @@ use crate::document::{self, Report, Scope, Side, ledger};
 use crate::links;
 use crate::markdown::dom::{self, Node};
 use crate::routes::{check_checkout, short};
+use crate::warnings;
 
 /// Builds the site with Folia as of the baseline's build time, keeps the build in `out` (a new
 /// directory, `builds::keep`; by default a new one in the temporary directory), and checks what
@@ -65,8 +69,10 @@ pub fn run(
     out: Option<&Path>,
     expected_templates: Option<&str>,
     ledger_path: &Path,
+    expected_warnings: &Path,
 ) -> Result<bool, String> {
     let ledger = ledger::load(ledger_path)?;
+    let expected_warnings = warnings::load(expected_warnings)?;
     let coverage_ledger = coverage::load(ledger_path)?;
     let baseline = baseline::load(baseline_dir)?;
     check_checkout(site_dir, &baseline.commit, baseline.diff.as_deref())?;
@@ -148,6 +154,7 @@ pub fn run(
         &mut checks,
     )?;
     passed &= check_links(&kept.output, &kept.dir, &planned, &config.site.url)?;
+    passed &= check_expected_warnings(&expected_warnings, &built, &kept.dir)?;
     passed &= report_coverage(
         &baseline,
         &built,
@@ -739,6 +746,23 @@ fn check_links(
     let written: BTreeSet<String> = builds::manifest_paths(output)?.into_iter().collect();
     let report = links::check(output, &written, planned, site_url)?;
     links::write(&report, dir)?;
+    for line in report.lines() {
+        println!("{line}");
+    }
+    Ok(report.passed())
+}
+
+/// Checks that every warning of the build is expected, and every expected warning given (A2.9,
+/// `warnings`), beside the check that each broken link on a page built gives one warning
+/// (`garden::check_warnings`); writes `warnings.json` into the build's directory and prints the
+/// verdict.
+fn check_expected_warnings(
+    expected: &warnings::Expected,
+    built: &Built,
+    dir: &Path,
+) -> Result<bool, String> {
+    let report = expected.judge(&built.warnings);
+    report.write(dir)?;
     for line in report.lines() {
         println!("{line}");
     }

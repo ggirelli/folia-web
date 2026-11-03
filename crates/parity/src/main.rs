@@ -23,6 +23,7 @@ mod liquid;
 mod markdown;
 mod pages;
 mod routes;
+mod warnings;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -93,6 +94,9 @@ enum Command {
         /// The deviation ledger, whose `dom` entries judge the whole-document comparison
         #[arg(long, default_value = "parity/deviations.toml")]
         ledger: PathBuf,
+        /// The warnings Folia is expected to give (A2.9)
+        #[arg(long, default_value = "parity/expected-warnings.toml")]
+        expected_warnings: PathBuf,
     },
     /// Build the site twice as of the baseline's build time and compare the builds byte for byte,
     /// with each other and with a recorded reference (plan v12, §5.4, A2.5)
@@ -172,6 +176,7 @@ fn main() -> ExitCode {
             out,
             templates_sha256,
             ledger,
+            expected_warnings,
         } => pages::run(
             &site,
             &baseline,
@@ -179,6 +184,7 @@ fn main() -> ExitCode {
             out.as_deref(),
             templates_sha256.as_deref(),
             &ledger,
+            &expected_warnings,
         ),
         Command::Determinism {
             site,
