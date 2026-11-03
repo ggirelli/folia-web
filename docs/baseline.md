@@ -360,6 +360,7 @@ just pages BASELINE-B ../out/p1  # the same, keeping the build in a new director
 just pages-negative BASELINE-B   # the check fails when it should
 just ledger-negative BASELINE-B  # a DOM entry holds only for its files; an unknown identity fails
 just coverage-negative BASELINE-B  # waivers and removals no owner approved fail
+just links-negative BASELINE-B     # links to nothing planned fail, and nothing else
 just evidence-provenance parity/evidence/<step>  # evidence built from a clean commit, on its own
 just build ../folia-out       # just build, into a directory outside the site
 ```
@@ -431,6 +432,33 @@ the same way, in report only. The checks:
 
 So far Folia builds 4 pages, a stub, the note graph and the static files; the outputs it does not
 build yet are not compared, and the coverage report says which they are.
+
+**Links** (plan v12, §5.4, A2.8, which begins D1): every internal `href` and `src` in the HTML
+Folia writes must resolve to a planned route, a static file or a redirect source, or the run
+fails, naming the page, the element and attribute, the link and the path it resolves to; it needs
+only the route table, so a link to an output Folia plans but does not build yet resolves.
+
+- **Checked:** every element's `href` and `src`, template contents included, in every `.html`
+  (or `.htm`) file Folia writes: pages, redirect stubs, static HTML.
+- **Internal:** relative and root-relative links, and `http` or `https` links (or
+  protocol-relative ones) on the host of `site.url`. Another host (`www.ggirelli.info` included)
+  and another scheme (`mailto:`, `tel:`, `data:`, `javascript:`) are counted, not checked.
+- **Resolution:** against the page's URL, dot segments removed, query and fragment dropped, the
+  path percent-decoded; it resolves to a planned route's URL, or to a file GitHub Pages would
+  serve for it (the path, the path with `.html`, its `index.html`; only `index.html` for a path
+  ending in `/`). Paths are case-sensitive, as on GitHub Pages.
+- **Not checked yet (D1):** links within the page (only a fragment, a query, or nothing), so
+  whether an anchor exists; and links in generated outputs (feeds, sitemap).
+- **Problems:** a page with a `<base>` element (which changes every relative link), one that is not
+  UTF-8 and one Folia did not plan are reported and fail the run.
+
+`links.json` in the build's directory lists every link with its verdict (`resolves`, with the
+output and whether Folia builds it; `broken`; `external`; `same-page`). The check compares nothing
+with Jekyll, so it is not one of coverage's checks: a broken link fails the run, not a coverage
+class. A known Jekyll-origin broken link is ledgered when a built page first has one (Q3k, at C1);
+none does today, so the ledger has no link entries. The broken wiki-link of `coding/rust.md`
+(Q3l) is written as a `<span class="broken-link">`, with no `href`, by both Jekyll and Folia, so
+it is A2.9's expected warning, not a link.
 
 **Coverage** (plan v12, §5.4, A2.1): every run gives each row of the baseline's manifest exactly
 one class, prints the counts, and writes `coverage.json` and `coverage.md` (every row, its class,

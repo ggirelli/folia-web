@@ -204,6 +204,12 @@ pages-negative label:
 ledger-negative label:
     scripts/ledger-negative.sh {{site}} {{baselines}}/{{label}} "$(mktemp -d)/ledger-negative"
 
+# Check the route-level link check fails on links to nothing planned, and on no other (copies the
+# site, A2.8)
+[group('parity')]
+links-negative label:
+    scripts/links-negative.sh {{site}} {{baselines}}/{{label}} "$(mktemp -d)/links-negative"
+
 # Check the coverage report fails on waivers and removals no owner approved (copies the ledger)
 [group('parity')]
 coverage-negative label:

@@ -15,6 +15,9 @@
 //!    contents equals Jekyll's; its code blocks are its body's, highlighted as spike 1 does.
 //! 6. **The garden** (`garden`): the note graph has Jekyll's nodes and edges, and each broken
 //!    link on a page built gives one warning.
+//! 7. **Links** (`links`, A2.8): every internal `href` and `src` of the HTML written resolves to a
+//!    planned output; this compares nothing with Jekyll, so it decides the run but no coverage
+//!    class.
 //!
 //! Outputs Folia does not build yet are counted, not compared. The run fails, too, when the
 //! build's record cannot identify the site or the Folia source it was built from, a directory
@@ -35,6 +38,7 @@ use crate::builds::{self, Request};
 use crate::coverage::{self, Checks};
 use crate::document::assertions::{self, Output};
 use crate::document::{self, Report, Scope, Side, ledger};
+use crate::links;
 use crate::markdown::dom::{self, Node};
 use crate::routes::{check_checkout, short};
 
@@ -143,6 +147,7 @@ pub fn run(
         &waived,
         &mut checks,
     )?;
+    passed &= check_links(&kept.output, &kept.dir, &planned, &config.site.url)?;
     passed &= report_coverage(
         &baseline,
         &built,
@@ -721,6 +726,23 @@ fn print_judgement(report: &Report, json: &Path) -> bool {
         }
     }
     passed
+}
+
+/// Checks that every internal link of the HTML Folia wrote resolves to a planned output (A2.8,
+/// `links`), writes `links.json` into the build's directory, and prints the verdict.
+fn check_links(
+    output: &Path,
+    dir: &Path,
+    planned: &BTreeMap<String, String>,
+    site_url: &str,
+) -> Result<bool, String> {
+    let written: BTreeSet<String> = builds::manifest_paths(output)?.into_iter().collect();
+    let report = links::check(output, &written, planned, site_url)?;
+    links::write(&report, dir)?;
+    for line in report.lines() {
+        println!("{line}");
+    }
+    Ok(report.passed())
 }
 
 /// The files below `dir`, as paths relative to `root` with `/` separators.

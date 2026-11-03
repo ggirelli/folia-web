@@ -50,8 +50,10 @@ Each mode crate depends on `folia-core` only, never on another mode.
   documents' dates, tables of contents and code blocks, and `pages::garden` the note graph and the
   broken-link warnings. `coverage` classifies every row of the baseline's manifest from what
   Folia plans and writes, the checks' verdict on each output, and the ledger's coverage entries
-  (plan v12, §5.4, A2.1). `determinism` builds the site twice through `builds`, as of one time,
-  and compares the two builds byte for byte, and each with a recorded reference (A2.5).
+  (plan v12, §5.4, A2.1). `links` checks that every internal `href` and `src` of the HTML Folia
+  writes resolves to a planned output (A2.8). `determinism` builds the site twice through
+  `builds`, as of one time, and compares the two builds byte for byte, and each with a recorded
+  reference (A2.5).
 - **`parity/`**: tools that check Folia's output against the Jekyll site.
   - `jekyll/folia_dump.rb`: the passive Jekyll plugin that dumps Jekyll's intermediate results
     (see [parity baselines](baseline.md)). Nothing else may live in `jekyll/`, because Jekyll
@@ -95,6 +97,8 @@ Each mode crate depends on `folia-core` only, never on another mode.
   - `ledger-negative.sh`: shows a DOM ledger entry holds only for the baseline record and files
     it was reviewed against, on copies of the site and baseline, that the templates hash pin
     refuses changed templates, and that a build whose source identity is unknown fails.
+  - `links-negative.sh`: shows the link check fails on links to nothing planned, and on no other,
+    and on a `<base>` element, on copies of the site.
   - `coverage-negative.sh`: shows the coverage report fails on waivers and removals no owner
     approved, on a copy of the ledger.
   - `determinism-negative.sh`: shows the determinism check fails on a changed reference and

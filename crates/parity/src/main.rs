@@ -18,6 +18,7 @@ mod builds;
 mod coverage;
 mod determinism;
 mod document;
+mod links;
 mod liquid;
 mod markdown;
 mod pages;
