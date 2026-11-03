@@ -192,8 +192,11 @@ user, sees the source, this repository and the lockfile read-only, each at its o
 write only the baseline's new directory; Bundler and the gems stay in the container. The source
 is not the site's checkout but a fresh clone of its commit, made by the host's git, with every
 tracked file dated the commit's committer time: the images' git (2.39 and 2.47) cannot read
-filopoe's repository, which uses `extensions.relativeworktrees` (git 2.48), and the dates keep
-the clone's sitemap the same whenever it is made. The site itself is only read. An image that is
+filopoe's repository, which uses `extensions.relativeworktrees` (git 2.48). Dating the files
+makes every date a build takes from them the same whenever the clone is made; it does not fix the
+order of the sitemap's and the search index's entries, which can differ between clones on
+different filesystems ([reproducibility limits](#reproducibility-limits)). The site itself is
+only read. An image that is
 not pinned by digest, a lockfile whose SHA-256 is not the one named, an existing destination and
 one inside the site are refused before anything is built; so is a repository the image's git
 cannot read.
@@ -233,6 +236,19 @@ clone of the same commit differs in two ways, both existing Jekyll behavior:
   baselines from different checkouts reports `sitemap.xml` as changed.
 
 `parity/evidence/fresh-clone-BASELINE-A/` holds the comparison that shows both.
+
+`scripts/toolchain-compare.sh` dates every file of its clone by the commit, which removes the
+second difference but not the first. For builds of clones of one commit, then:
+
+- **Dates and content are stable:** the same entries with the same dates in every file, whenever
+  and wherever the clone is made.
+- **Entry order can differ across filesystems:** `sitemap.xml` and the Lunr index list pages in
+  the order the filesystem reads directories. A2.7's runs whose clones were on tmpfs and its run
+  whose clone was on ext4 differ in that order only, which `compare-builds.sh` reports as
+  *reordered*.
+- **On the same filesystem, builds are byte-identical:** four runs on one tmpfs gave identical
+  manifests, and a rebuild on the same ext4 filesystem as its original gave the original's
+  (`parity/evidence/a2-7-toolchain/`).
 
 ## Removing Liquid from the content (spike 3)
 

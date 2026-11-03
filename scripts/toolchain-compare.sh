@@ -126,8 +126,16 @@ fi
 ruby -rjson - "$out" "$at" "$commit" "${names[@]}" >"$out/toolchain-report.md" <<'EOF'
 out, at, commit, *names = ARGV
 records = names.to_h { [_1, JSON.parse(File.read(File.join(out, _1, "BASELINE.json")))] }
+# Each gem's version, without the platform suffix of a precompiled variant (`1.19.3-x86_64-linux-gnu`
+# is 1.19.3), with the platforms the lockfile lists it for.
 gems = ->(lock) {
-  File.read(lock).scan(/^    (\S+) \(([^)]+)\)$/).to_h { |name, version| [name, version] }
+  found = Hash.new { |hash, name| hash[name] = {versions: [], platforms: []} }
+  File.read(lock).scan(/^    (\S+) \(([^)]+)\)$/) do |name, spec|
+    version, platform = spec.split("-", 2)
+    found[name][:versions] |= [version]
+    found[name][:platforms] |= [platform || "ruby"]
+  end
+  found.transform_values { {version: _1[:versions].sort.join(" / "), platforms: _1[:platforms].sort} }
 }
 puts "# Toolchain comparison", ""
 puts "Plan v12, §5.4, A2.7 (Q17). Source `#{commit}` (`source/`, a fresh clone, files dated the"
@@ -144,9 +152,11 @@ end
 puts "", "## Lockfiles", ""
 names.each_cons(2).to_a.push([names.first, names.last]).uniq.each do |a, b|
   ga, gb = gems.(File.join(out, a, "Gemfile.lock")), gems.(File.join(out, b, "Gemfile.lock"))
-  changed = (ga.keys | gb.keys).sort.reject { ga[_1] == gb[_1] }
+  changed = (ga.keys | gb.keys).sort.reject { ga.dig(_1, :version) == gb.dig(_1, :version) }
+  platforms = (ga.keys & gb.keys).sort.reject { ga[_1][:platforms] == gb[_1][:platforms] }
   puts "- #{a} → #{b}: " + (changed.empty? ? "the same gem versions" :
-    changed.map { "`#{_1}` #{ga[_1] || "—"} → #{gb[_1] || "—"}" }.join(", "))
+    changed.map { "`#{_1}` #{ga.dig(_1, :version) || "—"} → #{gb.dig(_1, :version) || "—"}" }.join(", "))
+  platforms.each { puts "  - `#{_1}` platforms: #{ga[_1][:platforms].join(", ")} → #{gb[_1][:platforms].join(", ")}" }
 end
 identity = ->(r) {
   {
