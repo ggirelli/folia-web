@@ -30,12 +30,32 @@ This runs `scripts/baseline.sh ../filopoe ../folia-baselines/SITE-MAIN`, which:
    (stage a new file to include it). The paths in
    [`parity/site-exclusions.txt`](#the-approved-paths) are left out of all of this: a change
    there is not a change to the site;
-3. records the site and Folia commits, the tool versions and the build flags in `BASELINE.json`;
-4. builds the site with `JEKYLL_ENV=production bundle exec jekyll build --disable-disk-cache`,
+3. refuses a destination inside the site, or inside this repository, whose identity the record
+   names;
+4. records, in `BASELINE.json`, the site's commit and identity, Folia's commit and identity
+   (clean, changed or unknown, as the parity tools' build records say), the tools (Ruby, the
+   Bundler loaded and the `bundle` command's, Jekyll, git), the environment (the container, when
+   there is one, the OS, the machine), the lockfile, the build's flags and time, and the result;
+   it is written before the build and again with the result, so a build that stops says where;
+5. keeps the lockfile the build used, byte for byte, as `Gemfile.lock`, and fails if the build
+   changes it; with no lockfile, the gems could not be recorded, and it refuses;
+6. builds the site with `JEKYLL_ENV=production bundle exec jekyll build --disable-disk-cache`,
    loading the dump plugin from this repository;
-5. checks that the build left the site's working tree as it found it, that the manifest
+7. checks that the build left the site's working tree as it found it, that the manifest
    accounts for every built file, and that no date fell back to a file's mtime: such a date
-   depends on the checkout, not the commit, so the baseline would not be reproducible.
+   depends on the checkout, not the commit, so the baseline would not be reproducible; then
+   writes `sha256.txt`.
+
+Two options serve the toolchain comparison (below), and work on any baseline:
+
+- `--lockfile FILE --lockfile-sha256 SHA256` builds with exactly that lockfile: refused unless its
+  SHA-256 is the one given, it is put beside a copy of the site's Gemfile in a new directory
+  outside the site, and its gems are installed there with Bundler frozen, so a lockfile the
+  Gemfile does not take is refused, never resolved again (`bundle-install.log` keeps why).
+- `--at TIME` (`YYYY-MM-DDTHH:MM:SSZ`) pins Jekyll's `site.time`, which dates the feeds and
+  decides what is future-dated, with a configuration file (`jekyll-time.yml`) read after the
+  site's `_config.yml`. The parity tools then read the baseline as of that time, not as of when
+  it was built.
 
 The baseline directory holds:
 
@@ -47,8 +67,12 @@ The baseline directory holds:
 | `dump/content/_by_output/<output>.html` | the same, for pages that share a source (pagination) |
 | `dump/excerpt/<source>.html` | each document's rendered excerpt |
 | `dump/meta/<source>.json` | title, date, `last_modified_at` (resolved, its origin, and the front matter value), categories, tags |
-| `BASELINE.json` | what was built, and with what; `site.excluded` lists the approved paths left out of `site.status` and `site.diff` |
+| `BASELINE.json` | what was built, and with what (above); `site.excluded` lists the approved paths left out of `site.status` and `site.diff`; `result` is `null` while the build runs, then whether it finished, its stage if not, and the file counts |
+| `Gemfile.lock` | the lockfile the build used, byte for byte (`lockfile.sha256`) |
+| `sha256.txt` | one line per file of `site/` and `dump/`, `<sha256>  ./<path>`, sorted bytewise |
 | `site.diff` | for a build of uncommitted changes, those changes |
+| `jekyll-time.yml` | with `--at`, the configuration that pins Jekyll's time |
+| `bundle-install.log` | with `--lockfile`, what `bundle install` printed |
 | `build.log` | Jekyll's output |
 
 `last_modified_at_from` says where each date came from: `front_matter`, `git` (the last commit
@@ -125,6 +149,64 @@ change does, untracked files, other workflows and look-alike names (`content.yml
 stand-in for Jekyll, together with `--allow-dirty`'s refusal of untracked files and
 `baseline-verify`'s handling of existing labels, `--allow-dirty` and kept builds. It needs
 neither the site nor a baseline, so `just check` and CI run it.
+
+## Comparing toolchains (A2.7)
+
+```sh
+just toolchain-compare              # into a new ../folia-baselines/toolchain-* directory
+just toolchain-compare ../out/tc-1  # the same, into a new directory of your choice
+just toolchain-negative             # the container baselines refuse what they must
+```
+
+`scripts/toolchain-compare.sh` (plan v12, §5.4, A2.7; Q17) builds one commit of the site with
+each Jekyll toolchain of `parity/toolchain/environments.txt`, as of one pinned time
+(`BASELINE-B`'s build time, A0's), by one procedure, and compares the baselines with
+`compare-builds.sh`: each environment with the next, and the first with the last. The
+environments ([`parity/toolchain/`](https://github.com/ggirelli/folia/tree/main/parity/toolchain)
+says where each input comes from):
+
+| Name | Ruby | Lockfile |
+|-|-|-|
+| `ruby-3.3.8-local` | `ruby:3.3.8`, pinned by digest | the one `BASELINE-B` was built with |
+| `ruby-3.4.5-local` | `ruby:3.4.5`, pinned by digest (production's Ruby) | the same |
+| `ruby-3.4.5-production` | the same | production's, from its last successful deployment (run `PRODUCTION-RUN`) |
+
+What each comparison varies, and so what it can show:
+
+- **Control → Ruby 3.4.5, same lockfile:** Ruby and the operating system change together (Ruby
+  3.3.8 on Debian 12 to 3.4.5 on Debian 13, with the images' git); the gems and the Bundler the
+  lockfile selects (4.0.14 in both) do not. A difference, or its absence, belongs to the combined
+  Ruby/OS environment; Ruby is not isolated from the OS.
+- **Ruby 3.4.5, local → production lockfile:** the gem versions and the Bundler the lockfile is
+  bundled with (4.0.14 to 2.6.9) change together; Ruby and the image do not. A difference belongs
+  to production's dependency-resolution environment as a whole; the contributions of Bundler and
+  of each changed gem are not separated.
+
+The report says which recorded fields differ between the two builds of each comparison. A
+difference it lists is observed; which input caused it is an interpretation, and the report
+does not make it. Isolating each variable (a Bundler held still across lockfiles, one gem
+changed at a time) would need more environments, which A2.7 does not build.
+
+Each build runs in its image (`scripts/baseline-container.sh`): the container, run as the calling
+user, sees the source, this repository and the lockfile read-only, each at its own path, and can
+write only the baseline's new directory; Bundler and the gems stay in the container. The source
+is not the site's checkout but a fresh clone of its commit, made by the host's git, with every
+tracked file dated the commit's committer time: the images' git (2.39 and 2.47) cannot read
+filopoe's repository, which uses `extensions.relativeworktrees` (git 2.48), and the dates keep
+the clone's sitemap the same whenever it is made. The site itself is only read. An image that is
+not pinned by digest, a lockfile whose SHA-256 is not the one named, an existing destination and
+one inside the site are refused before anything is built; so is a repository the image's git
+cannot read.
+
+The run's directory keeps the clone (`source/`), each baseline, each comparison's output
+(`compare/<a>--<b>.txt`), for each file that differs its `diff -u` and its differing regions
+token by token (`parity/diff_regions.py`, readable for minified CSS and feeds written on a few
+long lines), and `toolchain-report.md`: the environments as recorded, the gem versions each pair
+of lockfiles differs in, and each comparison's files and their first region. A difference is a
+finding, not a failure; the run fails only if a build or a comparison cannot be made. When given
+`BASELINE-B` (the recipe does), it also compares that host build with the first environment, for
+information. A run takes about two minutes, needs the network for the gems, and keeps about
+900 MB; nothing is pruned.
 
 ## How the dump plugin works
 

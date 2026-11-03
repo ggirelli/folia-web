@@ -34,7 +34,8 @@ pub struct Row {
 pub struct Baseline {
     /// Every row of the manifest.
     pub rows: Vec<Row>,
-    /// When the build started, which decides what was future-dated.
+    /// The time the build was as of, which decides what was future-dated: the time Jekyll was
+    /// pinned to, or else when the build started.
     pub built_at: Timestamp,
     /// The site commit it was built from.
     pub commit: String,
@@ -46,6 +47,16 @@ pub struct Baseline {
 struct Record {
     created_at: String,
     site: SiteRecord,
+    #[serde(default)]
+    build: BuildRecord,
+}
+
+/// The build's flags; only its pinned time matters here.
+#[derive(Default, Deserialize)]
+struct BuildRecord {
+    /// The time Jekyll was pinned to (`scripts/baseline.sh --at`), when it was.
+    #[serde(default)]
+    time: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -86,14 +97,62 @@ pub fn load(dir: &Path) -> Result<Baseline, String> {
             serde_json::from_str(line).map_err(|e| format!("manifest.jsonl line {}: {e}", i + 1))
         })
         .collect::<Result<_, _>>()?;
-    let built_at = record
-        .created_at
+    // A pinned build is as of its pinned time; any other, as of when it started.
+    let (field, time) = match &record.build.time {
+        Some(time) => ("build.time", time),
+        None => ("created_at", &record.created_at),
+    };
+    let built_at = time
         .parse()
-        .map_err(|e| format!("BASELINE.json created_at: {e}"))?;
+        .map_err(|e| format!("BASELINE.json {field}: {e}"))?;
     Ok(Baseline {
         rows,
         built_at,
         commit: record.site.commit,
         diff,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Loads a baseline whose `BASELINE.json` is `record`, from a throwaway directory.
+    fn baseline(name: &str, record: &str) -> Result<Baseline, String> {
+        let dir =
+            std::env::temp_dir().join(format!("parity-baseline-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("dump")).unwrap();
+        std::fs::write(dir.join("BASELINE.json"), record).unwrap();
+        std::fs::write(dir.join("dump/manifest.jsonl"), "").unwrap();
+        let loaded = load(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        loaded
+    }
+
+    /// A baseline is as of when it was built, unless Jekyll's time was pinned.
+    #[test]
+    fn a_pinned_time_wins_over_the_build_start() {
+        let started =
+            r#"{"created_at": "2026-11-03T10:00:00Z", "site": {"commit": "c", "dirty": false}}"#;
+        assert_eq!(
+            baseline("started", started).unwrap().built_at.to_string(),
+            "2026-11-03T10:00:00Z"
+        );
+        let pinned = r#"{"created_at": "2026-11-03T10:00:00Z", "site": {"commit": "c", "dirty": false},
+            "build": {"time": "2026-10-25T14:43:51Z"}}"#;
+        assert_eq!(
+            baseline("pinned", pinned).unwrap().built_at.to_string(),
+            "2026-10-25T14:43:51Z"
+        );
+        let unpinned = r#"{"created_at": "2026-11-03T10:00:00Z", "site": {"commit": "c", "dirty": false},
+            "build": {"time": null}}"#;
+        assert_eq!(
+            baseline("unpinned", unpinned).unwrap().built_at.to_string(),
+            "2026-11-03T10:00:00Z"
+        );
+        let bad = r#"{"created_at": "2026-11-03T10:00:00Z", "site": {"commit": "c", "dirty": false},
+            "build": {"time": "yesterday"}}"#;
+        assert!(baseline("bad", bad).is_err_and(|e| e.starts_with("BASELINE.json build.time")));
+    }
 }

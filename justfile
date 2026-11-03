@@ -18,6 +18,10 @@ templates_sha256 := env("FOLIA_TEMPLATES_SHA256", "TEMPLATES-TREE-SHA256")
 # manifest), and the baseline it was built as of: its build time and site commit
 reference := env("FOLIA_REFERENCE", "parity/evidence/a0-reference/sha256.txt")
 reference_label := env("FOLIA_REFERENCE_LABEL", "BASELINE-B")
+# The Jekyll toolchains `just toolchain-compare` builds the site with (A2.7), and the time each
+# build is pinned to: BASELINE-B's build time, A0's
+toolchains := env("FOLIA_TOOLCHAINS", "parity/toolchain/environments.txt")
+toolchain_at := env("FOLIA_TOOLCHAIN_AT", "2026-10-25T14:43:51Z")
 
 # List recipes
 default:
@@ -125,6 +129,19 @@ baseline-verify label *flags:
 [group('parity')]
 baseline-negative:
     scripts/baseline-negative.sh "$(mktemp -d)/baseline-negative"
+
+# Build one commit of the reference site with each Jekyll toolchain (Ruby, Bundler, gems) in a
+# pinned container, as of one time, and compare the baselines (A2.7), keeping everything in `out`
+# (a new directory) or, by default, a new `toolchain-*` one beside the baselines
+[group('parity')]
+toolchain-compare out="":
+    scripts/toolchain-compare.sh {{site}} {{toolchains}} {{toolchain_at}} {{ if out == "" { "\"$(mktemp -u -d " + baselines + "/toolchain-$(date -u +%Y%m%dT%H%M%SZ)-XXXX)\"" } else { quote(out) } }} {{baselines}}/{{reference_label}}
+
+# Check the container baselines refuse what they must, in the real images (needs Docker and the
+# network; reads the site only)
+[group('parity')]
+toolchain-negative:
+    scripts/toolchain-negative.sh {{site}} {{toolchains}} "$(mktemp -d)/toolchain-negative"
 
 # Rewrite the Liquid in the reference site's Markdown (mode: check or write)
 [group('parity')]

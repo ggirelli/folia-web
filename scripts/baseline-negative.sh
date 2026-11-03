@@ -2,10 +2,14 @@
 # Shows that `scripts/baseline.sh` and `scripts/verify-baseline.sh` (plan v12, §5.4, A2.6) leave
 # out of the site's checkout check exactly the paths of `parity/site-exclusions.txt`, and refuse
 # every other change; that `verify-baseline.sh` works with an existing label without touching it,
-# passes `--allow-dirty` on, and keeps every build it makes, passing or failing. Every case runs on
-# a throwaway site repository under WORKDIR (none of the user's git configuration applies), with a
-# stand-in for Bundler and Jekyll on the PATH, so it needs neither the reference site nor its
-# gems; each must exit with the status and print the line stated, and leave the site as it was.
+# passes `--allow-dirty` on, and keeps every build it makes, passing or failing; and (A2.7) that a
+# baseline records its Folia and site identities, its lockfile (kept byte for byte) and its pinned
+# time, and refuses a missing, mismatched or incompatible lockfile, a destination inside the site
+# or Folia, and a build that changes the checkout or its lockfile. Every case runs on a throwaway
+# site repository under WORKDIR, with the scripts run from a throwaway, committed copy of Folia's
+# (so Folia's identity is known), none of the user's git configuration applying, and a stand-in
+# for Bundler and Jekyll on the PATH, so it needs neither the reference site nor its gems; each
+# must exit with the status and print the line stated, and leave the site as it was.
 #
 #   scripts/baseline-negative.sh WORKDIR
 #
@@ -15,7 +19,7 @@ set -euo pipefail
 [[ $# -eq 1 ]] || { echo "usage: $0 WORKDIR" >&2; exit 2; }
 work=$1
 [[ -e $work ]] && { echo "$work already exists" >&2; exit 1; }
-scripts=$(realpath "$(dirname "$0")")
+repo=$(realpath "$(dirname "$0")/..")
 mkdir -p "$work/bin" "$work/out"
 work=$(realpath "$work")
 
@@ -23,20 +27,43 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 export GIT_AUTHOR_NAME=test GIT_AUTHOR_EMAIL=test@example.org
 export GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.org
 
+# A committed copy of what the scripts use, so Folia's identity is clean and known.
+folia=$work/folia
+for file in scripts/baseline.sh scripts/verify-baseline.sh scripts/compare-builds.sh \
+  parity/check_dump.rb parity/same_entries.py parity/site-exclusions.txt parity/jekyll/folia_dump.rb; do
+  mkdir -p "$(dirname "$folia/$file")"
+  cp -p "$repo/$file" "$folia/$file"
+done
+git init -q -b main "$folia"
+git -C "$folia" add -A
+git -C "$folia" commit -q -m folia
+scripts=$folia/scripts
+
 # The stand-in: `bundle exec jekyll build` writes one page and, when FOLIA_DUMP is set, a manifest
-# that accounts for it. STUB_NO_PLUGIN_TEXT changes the page of a build without the plugin.
+# that accounts for it; its arguments go to stub-args.txt beside the destination. STUB_NO_PLUGIN_TEXT
+# changes the page of a build without the plugin; STUB_WRITE_SOURCE writes into the source and
+# STUB_CHANGE_LOCK into the lockfile; `bundle install` fails on a lockfile holding INCOMPATIBLE.
 cat >"$work/bin/bundle" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+lock=${BUNDLE_GEMFILE:-$PWD/Gemfile}.lock
 case "$*" in
   -v) echo "Bundler version stand-in" ;;
-  "exec ruby -v") echo "ruby stand-in" ;;
+  "exec ruby -e print RUBY_DESCRIPTION") printf 'ruby stand-in' ;;
+  "exec ruby -e print Bundler::VERSION") printf '9.9.9' ;;
+  "exec ruby -e print Bundler.default_lockfile") printf '%s' "$lock" ;;
   "exec jekyll -v") echo "jekyll stand-in" ;;
+  install)
+    if grep -q INCOMPATIBLE "$lock"; then echo "stand-in: the lockfile does not fit the Gemfile"; exit 1; fi
+    echo "stand-in: installed" ;;
   "exec jekyll build "*)
+    printf '%s\n' "$@" >"${BUNDLE_STUB_ARGS:-/dev/null}"
     shift 3
     while [[ $# -gt 0 ]]; do
-      case $1 in --destination) dest=$2; shift 2 ;; *) shift ;; esac
+      case $1 in --destination) dest=$2; shift 2 ;; --source) src=$2; shift 2 ;; *) shift ;; esac
     done
+    [[ -n ${STUB_WRITE_SOURCE:-} ]] && printf 'x\n' >"$src/written-by-the-build.md"
+    [[ -n ${STUB_CHANGE_LOCK:-} ]] && printf '# changed\n' >>"$lock"
     text=site
     [[ -z ${FOLIA_DUMP:-} ]] && text=${STUB_NO_PLUGIN_TEXT:-site}
     printf '<p>%s</p>\n' "$text" >"$dest/index.html"
@@ -52,12 +79,17 @@ chmod +x "$work/bin/bundle"
 export PATH="$work/bin:$PATH"
 
 cases=0
-# A new site repository with one commit, whose content workflow is tracked; prints its path.
+# A new site repository with one commit, whose content workflow is tracked, with a Gemfile and
+# a lockfile git ignores (as filopoe's); prints its path.
 site() {
   local s=$work/$1
   mkdir -p "$s/.github/workflows"
   printf 'About\n' >"$s/about.md"
   printf 'name: Content\n' >"$s/.github/workflows/content.yml"
+  printf 'title: Site\n' >"$s/_config.yml"
+  printf "source 'https://rubygems.org'\n" >"$s/Gemfile"
+  printf 'Gemfile.lock\n' >"$s/.gitignore"
+  printf 'GEM\n  specs:\n    jekyll (4.4.1)\n' >"$s/Gemfile.lock"
   git init -q -b main "$s"
   git -C "$s" add -A
   git -C "$s" commit -q -m site
@@ -207,4 +239,109 @@ d=$(find "$work/out" -maxdepth 1 -name 'fails.verify-*')
 [[ -d $work/out/fails/site && -d $d/run2/site && -d $d/no-plugin/site ]] || fail "verify-fails: a build was removed"
 grep -qF "changed site/index.html" "$d/check2.txt" || fail "verify-fails: check2.txt does not name the difference"
 
+# --- baseline.sh: provenance, lockfiles, pinned time (A2.7) ------------------------------------
+
+sha() { sha256sum "$1" | cut -d' ' -f1; }
+want() { [[ $(json "$1" "${@:2:$#-2}") == "${!#}" ]] || fail "$1: ${*:2:$#-2} is $(json "$1" "${@:2:$#-2}"), not ${!#}"; }
+
+# The record names Folia's commit and identity, the site's, the lockfile kept byte for byte, the
+# Bundler loaded, and a manifest of what was built.
+r=$work/out/clean/BASELINE.json
+want "$r" folia commit "\"$(git -C "$folia" rev-parse HEAD)\""
+want "$r" folia changes '{"state":"clean"}'
+want "$r" site changes '{"state":"clean"}'
+want "$r" lockfile sha256 "\"$(sha "$work/clean/Gemfile.lock")\""
+want "$r" lockfile installed false
+want "$r" tools bundler '"9.9.9"'
+want "$r" result ok true
+want "$r" result files 2
+want "$r" build time null
+cmp -s "$work/clean/Gemfile.lock" "$work/out/clean/Gemfile.lock" || fail "clean: the lockfile was not kept byte for byte"
+grep -qx "[0-9a-f]\{64\}  ./site/index.html" "$work/out/clean/sha256.txt" || fail "clean: sha256.txt does not list site/index.html"
+grep -qx "[0-9a-f]\{64\}  ./dump/manifest.jsonl" "$work/out/clean/sha256.txt" || fail "clean: sha256.txt does not list the dump"
+
+# A site change made with --allow-dirty is identified by its diff.
+want "$work/out/allow-dirty/BASELINE.json" site changes "{\"state\":\"changed\",\"sha256\":\"$(sha "$work/out/allow-dirty/site.diff")\"}"
+
+# Folia's own changes are recorded, never hidden.
+s=$(site folia-dirty)
+write "$folia" scratch.txt
+LINE="Built 1 files." run folia-dirty "$s" 0 "$scripts/baseline.sh" "$s" "$work/out/folia-dirty"
+rm "$folia/scratch.txt"
+want "$work/out/folia-dirty/BASELINE.json" folia changes '{"state":"changed"}'
+want "$work/out/folia-dirty/BASELINE.json" folia status '["?? scratch.txt"]'
+
+# No destination inside the site, or inside Folia, whose identity the record names.
+s=$(site places)
+LINE="is inside the site" run inside-site "$s" 1 "$scripts/baseline.sh" "$s" "$s/out"
+[[ ! -e $s/out ]] || fail "inside-site: wrote into the site"
+LINE="is inside the Folia repository" run inside-folia "$s" 1 "$scripts/baseline.sh" "$s" "$folia/out"
+[[ ! -e $folia/out ]] || fail "inside-folia: wrote into Folia"
+
+# A build whose bundle has no lockfile cannot record its gems: refused, its record kept.
+s=$(site no-lock)
+rm "$s/Gemfile.lock"
+LINE="No lockfile for the build's bundle" run no-lock "$s" 1 "$scripts/baseline.sh" "$s" "$work/out/no-lock"
+want "$work/out/no-lock/BASELINE.json" result '{"ok":false,"stage":"lockfile","files":null}'
+
+# --lockfile: exactly the lockfile given, by its SHA-256, installed and kept; anything else refused
+# before anything is written.
+s=$(site lockfile)
+printf 'GEM\n  specs:\n    jekyll (4.4.0)\n' >"$work/given.lock"
+given=$(sha "$work/given.lock")
+LINE="go together" run lock-alone "$s" 1 "$scripts/baseline.sh" --lockfile "$work/given.lock" "$s" "$work/out/lock-alone"
+LINE="does not exist" run lock-missing "$s" 1 "$scripts/baseline.sh" --lockfile "$work/none.lock" --lockfile-sha256 "$given" "$s" "$work/out/lock-missing"
+LINE="not the expected $(printf '0%.0s' {1..64})" run lock-sha256 "$s" 1 \
+  "$scripts/baseline.sh" --lockfile "$work/given.lock" --lockfile-sha256 "$(printf '0%.0s' {1..64})" "$s" "$work/out/lock-sha256"
+for name in lock-alone lock-missing lock-sha256; do [[ ! -e $work/out/$name ]] || fail "$name: wrote $work/out/$name"; done
+LINE="Built 1 files." run lock-given "$s" 0 "$scripts/baseline.sh" --lockfile "$work/given.lock" --lockfile-sha256 "$given" "$s" "$work/out/lock-given"
+r=$work/out/lock-given/BASELINE.json
+want "$r" lockfile sha256 "\"$given\""
+want "$r" lockfile installed true
+want "$r" lockfile source "\"$work/given.lock\""
+cmp -s "$work/given.lock" "$work/out/lock-given/Gemfile.lock" || fail "lock-given: the lockfile was not kept byte for byte"
+grep -q "stand-in: installed" "$work/out/lock-given/bundle-install.log" || fail "lock-given: no bundle-install.log"
+# One that does not fit the Gemfile is refused by the frozen install; the record says where.
+printf 'INCOMPATIBLE\n' >"$work/incompatible.lock"
+LINE="The lockfile does not install for the site's Gemfile" run lock-incompatible "$s" 1 \
+  "$scripts/baseline.sh" --lockfile "$work/incompatible.lock" --lockfile-sha256 "$(sha "$work/incompatible.lock")" "$s" "$work/out/lock-incompatible"
+want "$work/out/lock-incompatible/BASELINE.json" result stage '"bundle install"'
+grep -q "does not fit the Gemfile" "$work/out/lock-incompatible/bundle-install.log" || fail "lock-incompatible: the log was not kept"
+
+# --at pins Jekyll's time with a configuration after the site's, and records it.
+s=$(site pinned)
+LINE="Built 1 files." BUNDLE_STUB_ARGS=$work/pinned-args.txt \
+  run pinned "$s" 0 "$scripts/baseline.sh" --at 2026-10-25T14:43:51Z "$s" "$work/out/pinned"
+want "$work/out/pinned/BASELINE.json" build time '"2026-10-25T14:43:51Z"'
+[[ $(cat "$work/out/pinned/jekyll-time.yml") == "time: 2026-10-25T14:43:51Z" ]] || fail "pinned: jekyll-time.yml"
+grep -qxF "$s/_config.yml,$work/out/pinned/jekyll-time.yml" "$work/pinned-args.txt" || fail "pinned: Jekyll was not given both configurations"
+LINE="is not YYYY-MM-DDTHH:MM:SSZ" run pinned-bad "$s" 1 "$scripts/baseline.sh" --at 2026-10-25 "$s" "$work/out/pinned-bad"
+
+# A build that changes the checkout, or its lockfile, fails; the record says where. (These change
+# the site on purpose, so they are run without the snapshot check.)
+s=$(site writes)
+status=0; STUB_WRITE_SOURCE=1 "$scripts/baseline.sh" "$s" "$work/out/writes" >"$work/writes.txt" 2>&1 || status=$?
+cases=$((cases + 1))
+if [[ $status -ne 1 ]] || ! grep -qF "The build changed the site's working tree." "$work/writes.txt"; then
+  fail "writes: not refused (see $work/writes.txt)"
+fi
+want "$work/out/writes/BASELINE.json" result stage '"checkout"'
+s=$(site changes-lock)
+status=0; STUB_CHANGE_LOCK=1 "$scripts/baseline.sh" "$s" "$work/out/changes-lock" >"$work/changes-lock.txt" 2>&1 || status=$?
+cases=$((cases + 1))
+if [[ $status -ne 1 ]] || ! grep -qF "The build changed its lockfile" "$work/changes-lock.txt"; then
+  fail "changes-lock: not refused (see $work/changes-lock.txt)"
+fi
+want "$work/out/changes-lock/BASELINE.json" result stage '"lockfile"'
+
+# --empty-out takes only an empty directory.
+s=$(site empty-out)
+mkdir -p "$work/out/empty" "$work/out/not-empty"
+write "$work/out" not-empty/kept.txt
+kept=$(snapshot "$work/out/not-empty")
+LINE="is not an empty directory" run not-empty "$s" 1 "$scripts/baseline.sh" --empty-out "$s" "$work/out/not-empty"
+[[ $(snapshot "$work/out/not-empty") == "$kept" ]] || fail "not-empty: the directory changed"
+LINE="Built 1 files." run empty-out "$s" 0 "$scripts/baseline.sh" --empty-out "$s" "$work/out/empty"
+
+[[ -z $(git -C "$folia" status --porcelain --untracked-files=all) ]] || fail "the cases left Folia's copy changed"
 echo "ok: $cases cases; outputs kept in $work"

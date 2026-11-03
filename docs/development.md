@@ -63,6 +63,11 @@ Each mode crate depends on `folia-core` only, never on another mode.
   - `check_dump.rb`: checks that a dump accounts for every built file and that no date fell
     back to a file mtime.
   - `same_entries.py`: compares the sitemap or the Lunr index entry by entry.
+  - `diff_regions.py`: lists where two versions of a text file differ, token by token, for the
+    toolchain comparison's report.
+  - `toolchain/`: the toolchain comparison's pinned inputs (A2.7): the environments (images by
+    digest, lockfiles by SHA-256), the lockfile `BASELINE-B` was built with, and production's, with
+    its provenance.
   - `site-exclusions.txt`: the paths in the site that are Folia's (`_folia/`, the content lint's
     workflow), which `scripts/baseline.sh` and the parity tools' checkout check both leave out,
     from this one list.
@@ -71,10 +76,15 @@ Each mode crate depends on `folia-core` only, never on another mode.
     (`markdown_gates`). `spike3-expected.txt`: the differences spike 3 expects, each traced to a
     ledger entry.
   - `evidence/`: the reviewed outputs of each spike and rebaseline; from A2 on, each folder
-    also keeps its builds' records (`builds/<name>/build.json`, `sha256.txt`), built from a clean
-    Folia commit and committed on their own, as its child (plan v12, §5.4).
+    also keeps its builds' records (`builds/<name>/build.json`, `sha256.txt`) and its Jekyll
+    baselines' (`baselines/<name>/BASELINE.json`, `sha256.txt`, `Gemfile.lock`), built from a
+    clean Folia commit and committed on their own, as its child (plan v12, §5.4).
 - **`scripts/`**: the scripts behind the `just` recipes.
-  - `baseline.sh`: builds a baseline.
+  - `baseline.sh`: builds a baseline, recording its identities, tools and lockfile; with
+    `--lockfile` and `--at`, from exactly that lockfile and as of a pinned time.
+  - `baseline-container.sh`: builds one with `baseline.sh` in a Docker image pinned by digest.
+  - `toolchain-compare.sh`: builds one commit with each toolchain and compares them (A2.7);
+    `toolchain-negative.sh` shows the container baselines refuse what they must, in the images.
   - `compare-builds.sh`: compares two baselines.
   - `verify-baseline.sh`: runs the spike 0 acceptance checks on fresh builds, which it keeps;
     an existing baseline is left as it is. `baseline-negative.sh` shows both scripts refuse
@@ -89,8 +99,9 @@ Each mode crate depends on `folia-core` only, never on another mode.
     approved, on a copy of the ledger.
   - `determinism-negative.sh`: shows the determinism check fails on a changed reference and
     refuses an existing or misplaced directory, a malformed reference and other templates.
-  - `evidence-provenance.sh`: checks an evidence folder keeps its builds' records, made from one
-    clean Folia commit, and is (or can be) committed on its own, on that commit; it only reads.
+  - `evidence-provenance.sh`: checks an evidence folder keeps its builds' and baselines' records,
+    made from one clean Folia commit, and is (or can be) committed on its own, on that commit; it
+    only reads.
     `evidence-provenance-negative.sh` runs it on throwaway repositories, one per way of breaking
     the convention.
   - `check-file-length.sh`: enforces the 1,000-line limit.

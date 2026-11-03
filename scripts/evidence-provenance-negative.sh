@@ -51,6 +51,30 @@ build() {
 EOF
 }
 
+# Writes baselines/$3 (a Jekyll baseline's records, A2.7) into evidence folder $2 of repository
+# $1, naming Folia commit $4 (default: HEAD) with Folia changes $5 (default clean), site changes
+# $6 (default clean) and result $7 (default finished, 2 files).
+baseline() {
+  local r=$1 ev=$2 name=$3
+  local c=${4:-$(git -C "$r" rev-parse HEAD)}
+  local folia=${5:-'{"state":"clean"}'}
+  local site=${6:-'{"state":"clean"}'}
+  local result=${7:-'{"ok":true,"files":2,"site_files":1}'}
+  local dir=$r/$ev/baselines/$name
+  mkdir -p "$dir"
+  printf 'GEM\n  specs:\n    jekyll (4.4.1)\n' >"$dir/Gemfile.lock"
+  printf '%064d  ./dump/manifest.jsonl\n%064d  ./site/a.html\n' 7 8 >"$dir/sha256.txt"
+  cat >"$dir/BASELINE.json" <<EOF
+{"created_at":"2026-11-03T12:00:00Z",
+ "site":{"path":"/x/source","commit":"SITE-COMMIT-B","dirty":false,"status":[],"changes":$site},
+ "folia":{"path":"/x/folia","commit":"$c","status":[],"changes":$folia},
+ "lockfile":{"file":"Gemfile.lock","sha256":"$(sha256sum "$dir/Gemfile.lock" | cut -d' ' -f1)"},
+ "tools":{"ruby":"ruby 3.4.5","bundler":"2.6.9"},
+ "environment":{"container":{"image":"ruby:3.4.5@sha256:$(printf '%064d' 9)","platform":"linux/amd64"}},
+ "build":{"time":"2026-10-25T14:43:51Z"},"result":$result}
+EOF
+}
+
 snapshot() { (cd "$1" && find . -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum); }
 
 # Runs the checker on folder $3 of repository $2 for case $1; requires exit status $4 and a line
@@ -101,7 +125,7 @@ check site-unknown "$r" site 1 "FAILS: one: the site's identity is not known"
 build "$r" nohash one "" "" '{"state":"changed"}'
 check site-no-hash "$r" nohash 1 "FAILS: one: the site's changes have no SHA-256"
 build "$r" two one; build "$r" two other deadbeef
-check two-commits "$r" two 1 "FAILS: the builds name more than one Folia commit"
+check two-commits "$r" two 1 "FAILS: the builds and baselines name more than one Folia commit"
 
 r=$(repo files)
 mkdir -p "$r/empty/builds"
@@ -120,6 +144,43 @@ build "$r" twice one; printf '%064d  ./a.html\n%064d  ./a.html\n' 2 3 >"$r/twice
 check manifest-twice "$r" twice 1 "FAILS: one: sha256.txt lists a path twice"
 build "$r" count one; printf '%064d  ./a.html\n' 2 >"$r/count/builds/one/sha256.txt"
 check file-count "$r" count 1 "FAILS: one: build.json counts 2 files, sha256.txt lists 1"
+
+# Jekyll baselines (A2.7): their records, alone or with builds, by the same convention.
+r=$(repo baseline-only); c=$(git -C "$r" rev-parse HEAD)
+baseline "$r" only ruby
+check baseline-ready "$r" only 0 "ok: only is ready to be committed on its own, on $c"
+check baseline-identity "$r" only 0 "baselines/ruby: folia $c clean; site SITE-COMMIT-B clean"
+r=$(repo baselines)
+r2=$(repo build-and-baseline); c2=$(git -C "$r2" rev-parse HEAD)
+build "$r2" both one; baseline "$r2" both ruby
+check build-and-baseline "$r2" both 0 "ok: both is ready to be committed on its own, on $c2"
+baseline "$r" bdirty ruby "" '{"state":"changed"}'
+check baseline-folia-dirty "$r" bdirty 1 "FAILS: baselines/ruby: the Folia source is not clean"
+build "$r" bmixed one; baseline "$r" bmixed ruby deadbeef
+check baseline-other-commit "$r" bmixed 1 "FAILS: the builds and baselines name more than one Folia commit"
+baseline "$r" bnolock ruby; rm "$r/bnolock/baselines/ruby/Gemfile.lock"
+check baseline-no-lockfile "$r" bnolock 1 "FAILS: baselines/ruby: no Gemfile.lock"
+baseline "$r" block ruby; printf '# changed\n' >>"$r/block/baselines/ruby/Gemfile.lock"
+check baseline-lockfile-changed "$r" block 1 "FAILS: baselines/ruby: Gemfile.lock has the SHA-256"
+baseline "$r" bunfinished ruby "" "" "" null
+check baseline-unfinished "$r" bunfinished 1 "FAILS: baselines/ruby: the build did not finish"
+baseline "$r" bunknown ruby "" "" '{"state":"unknown","error":"git failed"}'
+check baseline-site-unknown "$r" bunknown 1 "FAILS: baselines/ruby: the site's identity is not known"
+diffsha=$(printf 'diff\n' | sha256sum | cut -d' ' -f1)
+baseline "$r" bnodiff ruby "" "" '{"state":"changed","sha256":"'"$diffsha"'"}'
+check baseline-no-diff "$r" bnodiff 1 "FAILS: baselines/ruby: the site was changed, and its site.diff is not kept"
+baseline "$r" bdiff ruby "" "" '{"state":"changed","sha256":"'"$diffsha"'"}'
+printf 'other\n' >"$r/bdiff/baselines/ruby/site.diff"
+check baseline-wrong-diff "$r" bdiff 1 "FAILS: baselines/ruby: site.diff is not the diff the record names"
+r2=$(repo baseline-diff)
+baseline "$r2" bdiff ruby "" "" '{"state":"changed","sha256":"'"$diffsha"'"}'
+printf 'diff\n' >"$r2/bdiff/baselines/ruby/site.diff"
+check baseline-diff "$r2" bdiff 0 "ok: bdiff is ready to be committed on its own"
+baseline "$r" bcount ruby "" "" "" '{"ok":true,"files":3}'
+check baseline-file-count "$r" bcount 1 "FAILS: baselines/ruby: the record counts 3 files, sha256.txt lists 2"
+r=$(repo baseline-committed); c=$(git -C "$r" rev-parse HEAD)
+baseline "$r" ev ruby; commit_all "$r" evidence; e=$(git -C "$r" rev-parse HEAD)
+check baseline-committed "$r" ev 0 "ok: ev was committed on its own in $e, on $c"
 
 # After the evidence commit.
 r=$(repo committed); c=$(git -C "$r" rev-parse HEAD)
