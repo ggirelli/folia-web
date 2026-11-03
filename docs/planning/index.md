@@ -5,7 +5,8 @@ version is current; older ones are kept to show how the design evolved.
 
 | Plan | Status |
 |-|-|
-| [Plan v11](plan.v11.md) | Current. The migration plan after step 3: the target architecture (listings built in Rust, structured outputs by Rust serializers, whole-document DOM parity with a deviations ledger), the roadmap to cutover (phases A to D), acceptance criteria F1–F16 and the open decisions. Revises v10 after its independent review. |
+| [Plan v12](plan.v12.md) | Current. Revises v11 after the A2.3 audit and the A2 acceptance review (2026-11-03): records the owner's decisions of that day (every stale ledger entry fails, Folia bound by its output manifest, HTML whitespace, an unknown source identity fails), the A2 checkpoints delivered and what of A2 remains, and corrects v11's stale statements. No architectural decision, phase or acceptance criterion changes. |
+| [Plan v11](plan.v11.md) | Superseded by v12. The migration plan after step 3: the target architecture (listings built in Rust, structured outputs by Rust serializers, whole-document DOM parity with a deviations ledger), the roadmap to cutover (phases A to D), acceptance criteria F1–F16 and the open decisions. Revises v10 after its independent review. |
 | [Plan v10](plan.v10.md) | Superseded by v11. First migration-wide plan after step 3, from the migration assessment; records the three architectural decisions. |
 | [Plan v9](plan.v9.md) | Superseded by v10. Records step 2 as committed, and step 3 of the slice, two garden notes and the note graph, built and checked locally, reviewed, with the review's fixes and its decisions. Its records of the spikes and slice steps 1 to 3 remain current by reference. |
 | [Plan v8](plan.v8.md) | Superseded by v9. Records step 2 of the slice, one post, built and checked locally and awaiting review, with its proposed choices. |
