@@ -76,7 +76,7 @@ pub fn run(
 
     let dest = match out {
         Some(out) => out.to_owned(),
-        None => fresh_temp_dir(),
+        None => builds::fresh_temp_dir("pages"),
     };
     let kept = builds::keep(&Request {
         site: site_dir,
@@ -723,15 +723,6 @@ fn print_judgement(report: &Report, json: &Path) -> bool {
     passed
 }
 
-/// A directory in the temporary directory that does not exist yet, for a build to keep.
-fn fresh_temp_dir() -> PathBuf {
-    let base = std::env::temp_dir();
-    (0..u32::MAX)
-        .map(|n| base.join(format!("folia-parity-pages-{}-{n}", std::process::id())))
-        .find(|dir| dir.symlink_metadata().is_err())
-        .expect("some name is free")
-}
-
 /// The files below `dir`, as paths relative to `root` with `/` separators.
 fn list_files(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
     let entries = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -749,4 +740,4 @@ fn list_files(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<(), Stri
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

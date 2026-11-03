@@ -7,6 +7,7 @@
 //! cargo run -p parity -- routes --site ../filopoe --baseline ../folia-baselines/BASELINE-A --config parity/filopoe.toml
 //! cargo run -p parity -- markdown --site ../filopoe --baseline ../folia-baselines/BASELINE-A
 //! cargo run -p parity -- pages --site ../filopoe --baseline ../folia-baselines/BASELINE-B --config parity/filopoe.toml
+//! cargo run -p parity -- determinism --site ../filopoe --baseline ../folia-baselines/BASELINE-B --config parity/filopoe.toml --reference parity/evidence/a0-reference/sha256.txt
 //! cargo run -p parity -- liquid --site ../filopoe --config parity/filopoe.toml
 //! ```
 //!
@@ -15,6 +16,7 @@
 mod baseline;
 mod builds;
 mod coverage;
+mod determinism;
 mod document;
 mod liquid;
 mod markdown;
@@ -91,6 +93,30 @@ enum Command {
         #[arg(long, default_value = "parity/deviations.toml")]
         ledger: PathBuf,
     },
+    /// Build the site twice as of the baseline's build time and compare the builds byte for byte,
+    /// with each other and with a recorded reference (plan v12, §5.4, A2.5)
+    Determinism {
+        /// The Jekyll site
+        #[arg(long)]
+        site: PathBuf,
+        /// A baseline made by scripts/baseline.sh from the same commit, whose build time pins
+        /// the builds'
+        #[arg(long)]
+        baseline: PathBuf,
+        /// Folia's configuration for the site
+        #[arg(long)]
+        config: PathBuf,
+        /// Keep both builds and the report in this new directory (default: a new one in the
+        /// temporary directory); it must not exist
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Require the templates to have this tree hash; nothing is built otherwise
+        #[arg(long)]
+        templates_sha256: Option<String>,
+        /// A recorded reference's manifest (`sha256.txt`'s format) to compare each build with
+        #[arg(long)]
+        reference: Option<PathBuf>,
+    },
     /// Compare two HTML files, or the HTML files of two output trees, as whole documents (plan
     /// v12, §5.1), and report every difference; exit 1 when there is any
     Dom {
@@ -153,6 +179,21 @@ fn main() -> ExitCode {
             templates_sha256.as_deref(),
             &ledger,
         ),
+        Command::Determinism {
+            site,
+            baseline,
+            config,
+            out,
+            templates_sha256,
+            reference,
+        } => determinism::run(&determinism::Options {
+            site: &site,
+            baseline: &baseline,
+            config: &config,
+            out: out.as_deref(),
+            expected_templates: templates_sha256.as_deref(),
+            reference: reference.as_deref(),
+        }),
         Command::Dom {
             expected,
             actual,

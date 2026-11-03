@@ -39,8 +39,8 @@ Each mode crate depends on `folia-core` only, never on another mode.
   redirect stubs. `build` is the pipeline (so far for `/about`, one post and two notes, plan v9,
   §12.2), `render` renders pages with MiniJinja from the site's templates (`_folia/templates` in
   the site), and `output` writes the destination whole or not at all.
-- **`crates/parity`**: the dev-only parity tool (`just routes`, `just markdown`, `just pages`), and
-  the content lint (`just liquid`).
+- **`crates/parity`**: the dev-only parity tool (`just routes`, `just markdown`, `just pages`,
+  `just determinism`), and the content lint (`just liquid`).
   It reads baselines as black boxes and calls only Folia's public API. `markdown` holds spike 1's
   check: `dom` (html5ever parsing and normalization), `liquid` (the template filters excerpts go
   through), `ledger` and `report`. `builds` builds the site at an explicit time into a new
@@ -50,7 +50,8 @@ Each mode crate depends on `folia-core` only, never on another mode.
   documents' dates, tables of contents and code blocks, and `pages::garden` the note graph and the
   broken-link warnings. `coverage` classifies every row of the baseline's manifest from what
   Folia plans and writes, the checks' verdict on each output, and the ledger's coverage entries
-  (plan v12, §5.4, A2.1).
+  (plan v12, §5.4, A2.1). `determinism` builds the site twice through `builds`, as of one time,
+  and compares the two builds byte for byte, and each with a recorded reference (A2.5).
 - **`parity/`**: tools that check Folia's output against the Jekyll site.
   - `jekyll/folia_dump.rb`: the passive Jekyll plugin that dumps Jekyll's intermediate results
     (see [parity baselines](baseline.md)). Nothing else may live in `jekyll/`, because Jekyll
@@ -86,6 +87,8 @@ Each mode crate depends on `folia-core` only, never on another mode.
     refuses changed templates, and that a build whose source identity is unknown fails.
   - `coverage-negative.sh`: shows the coverage report fails on waivers and removals no owner
     approved, on a copy of the ledger.
+  - `determinism-negative.sh`: shows the determinism check fails on a changed reference and
+    refuses an existing or misplaced directory, a malformed reference and other templates.
   - `evidence-provenance.sh`: checks an evidence folder keeps its builds' records, made from one
     clean Folia commit, and is (or can be) committed on its own, on that commit; it only reads.
     `evidence-provenance-negative.sh` runs it on throwaway repositories, one per way of breaking

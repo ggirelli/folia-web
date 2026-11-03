@@ -201,8 +201,23 @@ pub fn keep(request: &Request) -> Result<Kept, String> {
     })
 }
 
+/// A name for a new directory in the temporary directory, `folia-parity-<kind>-<pid>-<n>`, that
+/// does not exist yet ([`new_dir`] creates it, and refuses it if it appeared meanwhile).
+pub fn fresh_temp_dir(kind: &str) -> PathBuf {
+    let base = std::env::temp_dir();
+    (0..u32::MAX)
+        .map(|n| base.join(format!("folia-parity-{kind}-{}-{n}", std::process::id())))
+        .find(|dir| dir.symlink_metadata().is_err())
+        .expect("some name is free")
+}
+
 /// A fresh directory for `dest`, created after checking it is new and apart from `site`.
-fn new_dir(dest: &Path, site: &Path) -> Result<PathBuf, String> {
+///
+/// # Errors
+///
+/// Fails when `dest` exists (it is never overwritten), lies inside `site` or holds it, or
+/// cannot be created.
+pub fn new_dir(dest: &Path, site: &Path) -> Result<PathBuf, String> {
     let refuse = |reason: &str| format!("cannot keep a build in {}: {reason}", dest.display());
     if dest.symlink_metadata().is_ok() {
         return Err(refuse("it already exists, and is never overwritten"));

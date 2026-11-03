@@ -365,6 +365,56 @@ proposed or unapproved entry, an unknown class, an output that is no manifest ro
 does not meet its conditions or a removal of an output Folia writes or plans. The ledger holds no
 coverage entry today.
 
+## Checking determinism (A2.5)
+
+```sh
+just determinism                 # two builds and the reference agree
+just determinism ../out/det-1    # the same, keeping the run in a new directory of your choice
+just determinism-negative        # the check fails when it should
+```
+
+`parity determinism` (plan v12, §5.4, A2.5) builds the site twice with `folia::build`, as of one
+pinned time, into two new build directories, as `parity pages` keeps its build (`build-1/`,
+`build-2/`, each with `site/`, `sha256.txt`, `build.json` and `build.log`). The time is the
+baseline's build time, `BASELINE-B`'s by default, which is also the time the A0 reference was built
+as of; the site must be the baseline's commit, and the templates must have the expected tree
+hash, as for `just pages`. The run's directory, new (`--out DIR`, or a new
+`folia-parity-determinism-*` in the temporary directory), keeps both builds and the report
+(`determinism-report.json`, every difference in full, and `determinism-report.md`), whether the
+check passes or fails; nothing is deleted or overwritten. It compares:
+
+1. **The inputs**: every field of the two `build.json` records but the result (time, site and
+   Folia checkouts and identities, configuration, templates, compiler). If they differ, the builds
+   are *not comparable*, and the run fails without calling it nondeterminism.
+2. **The results**: summary, warnings, problems and file count. A difference is nondeterminism.
+3. **The outputs**: the two `site/` trees, recursively: every entry, directories and links
+   included (links are not followed), and every file byte for byte. A difference is
+   nondeterminism, reported with the path and, for a file, both sizes and SHA-256 and the first
+   differing byte and its line.
+4. **The reference** (`--reference`, A0's `parity/evidence/a0-reference/sha256.txt` in the
+   recipe): each build's manifest, path for path and hash for hash (plan v12, §4.2). A difference
+   is a Folia change, to be approved and recorded as a new reference, or fixed.
+
+Logs, absolute paths and the directories' names are diagnostics, and are not compared. An
+unknown source identity or a failed build fails the run, as in `just pages`. A run on
+`BASELINE-B` takes about 8 seconds and keeps about 330 MB; runs are never pruned, so remove old
+ones by hand.
+
+**What it shows, and what it does not.** `just determinism` shows *repeatability within one
+checkout*: the same Folia source and site checkout, built twice as of one time, give the same
+bytes, and those bytes are the reference's. It does not show *reproducibility across independent
+checkouts*: both builds read the same working trees, so whatever a checkout adds (file mtimes,
+untracked files Folia reads, the order a filesystem lists files in) is the same for both. That is
+F11's second half (plan v12, §8): building from two fresh clones of the final commits. The plan
+gives it to A2.5 but runs it at acceptance (§5.4, "At acceptance it also builds from two fresh
+clones"), so this recipe does not do it yet: it is deferred to the acceptance stage, and F11 is not
+met until it runs.
+
+`just determinism-negative` runs the check on the real site and baseline, which it only reads,
+with a reference changed once per kind of difference, and with a malformed reference, an existing
+directory, one inside the site and other templates; changes inside the builds themselves (a byte,
+an entry, a link, a result or an input) are shown by the unit tests, on throwaway sites.
+
 ## Reproducing from a clean checkout
 
 You need [just](https://just.systems), a stable Rust toolchain with `cargo-deny`, Ruby 3.3 with
@@ -419,6 +469,8 @@ just routes BASELINE-B
 just pages BASELINE-B                            # the vertical slice, with ../filopoe/_folia
 just pages-negative BASELINE-B
 just ledger-negative BASELINE-B
+just determinism                              # A2.5: two builds and the A0 reference agree
+just determinism-negative
 ```
 
 The slice's templates are in `filopoe/_folia/templates`, uncommitted in the local checkout until

@@ -104,7 +104,7 @@ fn the_main_content_is_compared_as_a_tree() {
 
 /// A fixture site with a baseline of it beside: Jekyll's `about.html`, its manifest row and
 /// build record, so that `run` checks the build Folia makes.
-fn baseline(fixture: &crate::builds::tests::Fixture) -> PathBuf {
+pub(crate) fn baseline(fixture: &crate::builds::tests::Fixture) -> PathBuf {
     let head = fixture.git(&["rev-parse", "HEAD"]);
     fixture.write(
         "baseline/BASELINE.json",
@@ -179,7 +179,7 @@ fn pages_keeps_its_build_where_it_is_told_and_never_overwrites_it() {
 
 #[test]
 fn the_default_build_directory_is_new() {
-    let dir = fresh_temp_dir();
+    let dir = crate::builds::fresh_temp_dir("pages");
     assert!(dir.starts_with(std::env::temp_dir()));
     assert!(dir.symlink_metadata().is_err());
 }

@@ -14,6 +14,10 @@ baselines := env("FOLIA_BASELINES", "../folia-baselines")
 # The tree hash of the templates the pages check expects in the site's _folia/templates: filopoe's
 # `folia/templates` at TEMPLATES-COMMIT-B (the `templates.tree_sha256` of a build's build.json)
 templates_sha256 := env("FOLIA_TEMPLATES_SHA256", "TEMPLATES-TREE-SHA256")
+# The recorded reference `just determinism` compares Folia's builds with (plan v12, §4.2: A0's
+# manifest), and the baseline it was built as of: its build time and site commit
+reference := env("FOLIA_REFERENCE", "parity/evidence/a0-reference/sha256.txt")
+reference_label := env("FOLIA_REFERENCE_LABEL", "BASELINE-B")
 
 # List recipes
 default:
@@ -153,6 +157,19 @@ markdown label *flags:
 [group('parity')]
 pages label out="":
     cargo run --quiet --locked -p parity -- pages --site {{site}} --baseline {{baselines}}/{{label}} --config parity/filopoe.toml --templates-sha256 {{templates_sha256}} {{ if out == "" { "" } else { "--out " + quote(out) } }}
+
+# Build the site twice as of the reference's baseline time and compare the builds byte for byte,
+# with each other and with the reference (A2.5), keeping both builds and the report in `out` (a
+# new directory) or, by default, a new one in the temporary directory
+[group('parity')]
+determinism out="":
+    cargo run --quiet --locked -p parity -- determinism --site {{site}} --baseline {{baselines}}/{{reference_label}} --config parity/filopoe.toml --templates-sha256 {{templates_sha256}} --reference {{reference}} {{ if out == "" { "" } else { "--out " + quote(out) } }}
+
+# Check the determinism check fails on a changed reference and refuses what it must (reads the
+# site and baseline only)
+[group('parity')]
+determinism-negative:
+    scripts/determinism-negative.sh {{site}} {{baselines}}/{{reference_label}} {{reference}} {{templates_sha256}} "$(mktemp -d)/determinism-negative"
 
 # Check the reference site's Markdown has no Liquid outside code (content lint)
 [group('parity')]
