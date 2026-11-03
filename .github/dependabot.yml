@@ -1,0 +1,16 @@
+# Dependabot (security updates are enabled in the repository's settings; alerts stay on for every
+# manifest). The one entry below only keeps Dependabot away from the evidence folders: their
+# Gemfile.lock files are verbatim records of the builds evidence reports on (plan v12, §5.4, Q26),
+# never installed, never to be changed, so a security update there can only fail. Everything else
+# is scanned and updated as before: Cargo, the root Gemfile.lock, the workflows.
+version: 2
+updates:
+  - package-ecosystem: bundler
+    directory: "/"
+    schedule:
+      interval: weekly
+    # No version-update pull requests (there were none before this file): security updates have
+    # their own limit and are not affected.
+    open-pull-requests-limit: 0
+    exclude-paths:
+      - "parity/evidence/**"

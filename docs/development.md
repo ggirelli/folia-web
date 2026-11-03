@@ -110,7 +110,8 @@ Each mode crate depends on `folia-core` only, never on another mode.
     the convention.
   - `check-file-length.sh`: enforces the 1,000-line limit.
   - `slice-boundary.sh`: checks a step of the vertical slice keeps out of the other step's mode.
-- **`.github/`**: the CI and docs workflows and the pull request template.
+- **`.github/`**: the CI and docs workflows, the pull request template, and the Dependabot
+  configuration, which keeps Dependabot out of `parity/evidence/` (its lockfiles are records).
 - **`docs/`**: this documentation, and the versioned plans in `docs/planning/`.
 - **`assets/brand/`**: logos and the banner.
 
