@@ -62,6 +62,9 @@ Each mode crate depends on `folia-core` only, never on another mode.
   - `check_dump.rb`: checks that a dump accounts for every built file and that no date fell
     back to a file mtime.
   - `same_entries.py`: compares the sitemap or the Lunr index entry by entry.
+  - `site-exclusions.txt`: the paths in the site that are Folia's (`_folia/`, the content lint's
+    workflow), which `scripts/baseline.sh` and the parity tools' checkout check both leave out,
+    from this one list.
   - `check_date_shift.py`: checks that two baselines differ only by changed last-modified dates.
   - `deviations.toml`: the deviation ledger; an entry may name the Markdown gates it explains
     (`markdown_gates`). `spike3-expected.txt`: the differences spike 3 expects, each traced to a
@@ -72,7 +75,10 @@ Each mode crate depends on `folia-core` only, never on another mode.
 - **`scripts/`**: the scripts behind the `just` recipes.
   - `baseline.sh`: builds a baseline.
   - `compare-builds.sh`: compares two baselines.
-  - `verify-baseline.sh`: runs the spike 0 acceptance checks.
+  - `verify-baseline.sh`: runs the spike 0 acceptance checks on fresh builds, which it keeps;
+    an existing baseline is left as it is. `baseline-negative.sh` shows both scripts refuse
+    changes outside the approved paths, on throwaway repositories with a stand-in for Jekyll
+    (part of `just check`).
   - `markdown-negative.sh`, `pages-negative.sh`: show the Markdown and page checks fail when
     they should.
   - `ledger-negative.sh`: shows a DOM ledger entry holds only for the baseline record and files

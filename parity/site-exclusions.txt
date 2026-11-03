@@ -1,0 +1,12 @@
+# Paths in the reference site that are Folia's, and that neither Jekyll nor Folia's discovery
+# reads as part of the site, so changes there do not change a baseline (plan v12, §5.4, A2.6).
+# The one list both the parity tools (`crates/parity/src/routes.rs`) and `scripts/baseline.sh`
+# leave out of their checks of the site's checkout. One path per line, relative to the site's
+# root, matched literally: a directory covers what is below it, a file only itself, so any other
+# change still counts. '#' starts a comment.
+
+# Folia's templates and configuration (plan v6, §14 Q5).
+_folia
+# The workflow that runs the content lint (plan v7, §7.2). Only this file: another workflow is a
+# change like any other.
+.github/workflows/content.yml

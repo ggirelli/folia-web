@@ -305,18 +305,23 @@ fn report(title: &str, jekyll_count: usize, detail: &str, differing: &[String]) 
     false
 }
 
-/// Paths in the site that are Folia's, and that neither Jekyll nor Folia's discovery reads as
-/// part of the site, so changes there do not change a baseline; the checkout check leaves them
-/// out. Each is named exactly, so any other change still counts.
-///
-/// - `_folia`: Folia's templates and configuration (plan v6, §14 Q5).
-/// - `.github/workflows/content.yml`: the workflow that runs the content lint (plan v7, §7.2).
-///   Only this file: another workflow is a change like any other.
-const FOLIA_PATHS: [&str; 2] = ["_folia", ".github/workflows/content.yml"];
+/// `parity/site-exclusions.txt`: the paths in the site that are Folia's, and that neither Jekyll
+/// nor Folia's discovery reads as part of the site, so changes there do not change a baseline.
+/// The checkout check leaves them out, and so does `scripts/baseline.sh`, from this one file
+/// (plan v12, §5.4, A2.6). Each is matched literally, so any other change still counts.
+const SITE_EXCLUSIONS: &str = include_str!("../../../parity/site-exclusions.txt");
+
+/// The paths of `SITE_EXCLUSIONS`, without its comments and blank lines.
+fn folia_paths() -> impl Iterator<Item = &'static str> {
+    SITE_EXCLUSIONS
+        .lines()
+        .map(|line| line.split('#').next().unwrap_or_default().trim())
+        .filter(|path| !path.is_empty())
+}
 
 /// The site checkout must be the commit the baseline was built from, with no changes, or with
 /// exactly the uncommitted changes it was built with (`diff`) and no untracked files. Changes
-/// to `FOLIA_PATHS` do not count.
+/// to the paths of `parity/site-exclusions.txt` do not count.
 pub fn check_checkout(site_dir: &Path, commit: &str, diff: Option<&str>) -> Result<(), String> {
     let git = |args: &[&str]| {
         Command::new("git")
@@ -336,7 +341,9 @@ pub fn check_checkout(site_dir: &Path, commit: &str, diff: Option<&str>) -> Resu
             short(commit)
         ));
     }
-    let outside_folia = FOLIA_PATHS.map(|path| format!(":(exclude,literal){path}"));
+    let outside_folia: Vec<String> = folia_paths()
+        .map(|path| format!(":(exclude,literal){path}"))
+        .collect();
     let pathspec = |args: &[&'static str]| {
         let mut all: Vec<&str> = args.to_vec();
         all.extend(["--", "."]);
@@ -431,6 +438,25 @@ mod tests {
         }
     }
 
+    /// The shared list names exactly the approved paths, each a plain relative path that a
+    /// literal pathspec matches as written (`scripts/baseline.sh` reads the same file).
+    #[test]
+    fn the_shared_list_names_the_approved_paths() {
+        assert_eq!(
+            folia_paths().collect::<Vec<_>>(),
+            ["_folia", ".github/workflows/content.yml"]
+        );
+        for path in folia_paths() {
+            assert!(
+                !path.starts_with('/')
+                    && !path.ends_with('/')
+                    && !path.contains(char::is_whitespace)
+                    && !path.split('/').any(|part| part == ".." || part == "."),
+                "{path}"
+            );
+        }
+    }
+
     #[test]
     fn changes_below_folia_do_not_count() {
         let repo = Repo::new("folia");
@@ -494,6 +520,23 @@ mod tests {
             check_checkout(&repo.0, head.trim(), Some(&diff))
                 .is_err_and(|e| e.ends_with("which the baseline's diff cannot vouch for"))
         );
+    }
+
+    /// `scripts/baseline.sh --allow-dirty` refuses untracked files but builds staged ones, and
+    /// writes `site.diff` with the shared list's pathspec: the checkout check accepts that diff.
+    #[test]
+    fn a_staged_new_file_is_part_of_the_diff() {
+        let repo = Repo::new("staged");
+        repo.write("new.md", "New");
+        repo.git(&["add", "new.md"]);
+        repo.write("_folia/templates/page.html", "");
+        let mut args = vec!["diff".to_owned(), "--binary".into(), "HEAD".into()];
+        args.extend(["--".into(), ".".into()]);
+        args.extend(folia_paths().map(|path| format!(":(exclude,literal){path}")));
+        let diff = repo.git(&args.iter().map(String::as_str).collect::<Vec<_>>());
+        assert!(diff.contains("new.md") && !diff.contains("_folia"));
+        let head = repo.git(&["rev-parse", "HEAD"]);
+        assert_eq!(check_checkout(&repo.0, head.trim(), Some(&diff)), Ok(()));
     }
 
     #[test]

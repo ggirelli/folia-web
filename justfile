@@ -21,7 +21,7 @@ default:
 
 # Run every check
 [group('checks')]
-check: file-length fmt-check clippy test doc deny lint-sh lint-md lint-rb lint-py docs-build
+check: file-length fmt-check clippy test doc deny lint-sh lint-md lint-rb lint-py baseline-negative docs-build
 
 # Check no source file exceeds 1,000 lines
 [group('checks')]
@@ -109,10 +109,18 @@ baseline label *flags:
 compare a b expected="":
     scripts/compare-builds.sh {{baselines}}/{{a}} {{baselines}}/{{b}} {{expected}}
 
-# Build a baseline and run the spike 0 checks
+# Run the spike 0 checks on fresh builds, keeping them: the first becomes the baseline `label`
+# if it does not exist yet; an existing one is left as it is
 [group('parity')]
-baseline-verify label:
-    scripts/verify-baseline.sh {{site}} {{baselines}} {{label}}
+baseline-verify label *flags:
+    scripts/verify-baseline.sh {{flags}} {{site}} {{baselines}} {{label}}
+
+# Check the baseline scripts refuse changes outside the approved paths, never touch an existing
+# baseline and keep every build (throwaway repositories, a stand-in for Jekyll; part of `check`,
+# as it needs neither the site nor a baseline)
+[group('parity')]
+baseline-negative:
+    scripts/baseline-negative.sh "$(mktemp -d)/baseline-negative"
 
 # Rewrite the Liquid in the reference site's Markdown (mode: check or write)
 [group('parity')]

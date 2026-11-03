@@ -21,10 +21,15 @@ just baseline SITE-MAIN
 
 This runs `scripts/baseline.sh ../filopoe ../folia-baselines/SITE-MAIN`, which:
 
-1. refuses to build a site with uncommitted changes, unless `--allow-dirty` is given
-   (`just baseline my-label --allow-dirty`); then it saves them as `site.diff`
-   (`git diff --binary HEAD`);
-2. refuses to overwrite an existing baseline;
+1. refuses to overwrite an existing baseline;
+2. refuses to build a site with uncommitted changes, untracked files included, unless
+   `--allow-dirty` is given (`just baseline my-label --allow-dirty`); then it saves them as
+   `site.diff` (`git diff --binary HEAD`). `--allow-dirty` is for changes to tracked files, such
+   as a source fix verified before it is committed: it still refuses untracked files, which
+   `site.diff` cannot record and the parity tools refuse, so the baseline could not be used
+   (stage a new file to include it). The paths in
+   [`parity/site-exclusions.txt`](#the-approved-paths) are left out of all of this: a change
+   there is not a change to the site;
 3. records the site and Folia commits, the tool versions and the build flags in `BASELINE.json`;
 4. builds the site with `JEKYLL_ENV=production bundle exec jekyll build --disable-disk-cache`,
    loading the dump plugin from this repository;
@@ -42,13 +47,13 @@ The baseline directory holds:
 | `dump/content/_by_output/<output>.html` | the same, for pages that share a source (pagination) |
 | `dump/excerpt/<source>.html` | each document's rendered excerpt |
 | `dump/meta/<source>.json` | title, date, `last_modified_at` (resolved, its origin, and the front matter value), categories, tags |
+| `BASELINE.json` | what was built, and with what; `site.excluded` lists the approved paths left out of `site.status` and `site.diff` |
+| `site.diff` | for a build of uncommitted changes, those changes |
+| `build.log` | Jekyll's output |
 
 `last_modified_at_from` says where each date came from: `front_matter`, `git` (the last commit
 touching the file), or `mtime` (no commit touches it). Jekyll uses front matter only for documents;
 for pages the git date always wins (plan v3, §2.6).
-| `BASELINE.json` | what was built, and with what |
-| `site.diff` | for a build of uncommitted changes, those changes |
-| `build.log` | Jekyll's output |
 
 Each manifest row has these fields:
 
@@ -80,14 +85,46 @@ starting a comment.
 ## Verifying the harness
 
 ```sh
-just baseline-verify SITE-MAIN
+just baseline-verify BASELINE-B                 # an existing label: left as it is
+just baseline-verify my-label                # a new label: the first build becomes the baseline
+just baseline-verify my-label --allow-dirty  # a site with uncommitted changes
 ```
 
-This builds the baseline and runs the spike 0 acceptance checks against two throwaway builds:
+`scripts/verify-baseline.sh` runs the spike 0 acceptance checks on fresh builds of the site:
 
 1. a second run gives byte-identical dumps and the same normalized site;
 2. a build without the plugin gives the same normalized site;
 3. the manifest accounts for every built file.
+
+Every build goes to a new directory, and nothing is removed or overwritten:
+
+- **A new label:** the first build is made at `../folia-baselines/<label>` and kept as the
+  baseline.
+- **An existing label:** the baseline is neither read nor written, so the command works with
+  the labels this page documents. The first build is made in the verification directory instead,
+  as `run1/`, and the checks compare the fresh builds with each other, not with the existing
+  baseline.
+
+The verification directory, `../folia-baselines/<label>.verify-XXXXXX`, is new on every run. It
+keeps the other builds (`run2/`, `no-plugin/`), each with its `BASELINE.json` and `build.log`, and
+each comparison's output (`check1.txt`, `check2.txt`), whether the checks pass or fail; its path is
+printed. A build that fails keeps its directory too. Each run keeps two or three builds (about
+180 MB each for `filopoe`); remove old verification directories by hand. `--allow-dirty` is
+passed to every build, and the checks are otherwise the same.
+
+### The approved paths
+
+`parity/site-exclusions.txt` lists the paths in the site that are Folia's, and that neither
+Jekyll nor Folia's discovery reads as part of the site: `_folia/` (Folia's templates and
+configuration) and `.github/workflows/content.yml` (the content lint's workflow). It is the one
+list that `scripts/baseline.sh` and the parity tools' checkout check (below) read, so the two
+cannot disagree. Each path is matched literally: a directory covers what is below it, a file only
+itself. A change to these paths, tracked or untracked, does not make the site dirty; any other
+change does, untracked files, other workflows and look-alike names (`content.yml.bak`,
+`_foliage/`) included. `just baseline-negative` shows this on throwaway repositories, with a
+stand-in for Jekyll, together with `--allow-dirty`'s refusal of untracked files and
+`baseline-verify`'s handling of existing labels, `--allow-dirty` and kept builds. It needs
+neither the site nor a baseline, so `just check` and CI run it.
 
 ## How the dump plugin works
 
@@ -185,10 +222,9 @@ configuration in `parity/filopoe.toml`, and compares the plan with the baseline'
 Folia itself refuses a plan where two outputs share a URL or an output file. The tool refuses a
 site checkout that is not the commit the baseline was built from (with exactly the changes in
 its `site.diff`, if it has one, and no untracked files), and uses the baseline's
-build time to decide what was future-dated. Changes below `_folia/`, Folia's own templates and
-configuration in the site, do not count, nor do changes to `.github/workflows/content.yml`, the
-content lint's workflow: neither Jekyll nor Folia's discovery reads them. Any other file counts,
-other workflows included.
+build time to decide what was future-dated. Changes to [the approved paths](#the-approved-paths)
+(`_folia/` and `.github/workflows/content.yml`) do not count, as for `baseline.sh`: neither
+Jekyll nor Folia's discovery reads them. Any other file counts, other workflows included.
 
 ## Checking Markdown (spike 1)
 
@@ -363,7 +399,9 @@ unset FOLIA_SITE
 
 **The rebaseline and spike 2** use `SITE-COMMIT-A`, the commit that applied the rewrite, and **spike
 1** uses `SITE-COMMIT-B`, which adds the D-002 source fix on top of it. Until they are published to
-the site's repository they exist only in the local checkout, and these steps need them:
+the site's repository they exist only in the local checkout, and these steps need them (where the
+baselines already exist, `just baseline-verify` leaves them as they are and verifies into new
+directories, as described above):
 
 ```sh
 git -C ../filopoe checkout SITE-COMMIT-A
