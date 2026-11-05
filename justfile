@@ -16,8 +16,10 @@ baselines := env("FOLIA_BASELINES", "../folia-baselines")
 templates_sha256 := env("FOLIA_TEMPLATES_SHA256", "TEMPLATES-TREE-SHA256")
 # The recorded reference `just determinism` compares Folia's builds with (plan v12, §4.2: A0's
 # manifest), and the baseline it was built as of: its build time and site commit
-reference := env("FOLIA_REFERENCE", "parity/evidence/a0-reference/sha256.txt")
-reference_label := env("FOLIA_REFERENCE_LABEL", "BASELINE-B")
+a0_reference := "parity/evidence/a0-reference/sha256.txt"
+a0_label := "BASELINE-B"
+reference := env("FOLIA_REFERENCE", a0_reference)
+reference_label := env("FOLIA_REFERENCE_LABEL", a0_label)
 # The Jekyll toolchains `just toolchain-compare` builds the site with (A2.7), and the time each
 # build is pinned to: BASELINE-B's build time, A0's
 toolchains := env("FOLIA_TOOLCHAINS", "parity/toolchain/environments.txt")
@@ -29,7 +31,7 @@ default:
 
 # Run every check
 [group('checks')]
-check: file-length fmt-check clippy test doc deny lint-sh lint-md lint-rb lint-py baseline-negative docs-build
+check: file-length fmt-check clippy test doc deny lint-sh lint-md lint-rb lint-py baseline-negative accept-negative docs-build
 
 # Check no source file exceeds 1,000 lines
 [group('checks')]
@@ -177,15 +179,19 @@ pages label out="":
 
 # Build the site twice as of the reference's baseline time and compare the builds byte for byte,
 # with each other and with the reference (A2.5), keeping both builds and the report in `out` (a
-# new directory) or, by default, a new one in the temporary directory
+# new directory) or, by default, a new one in the temporary directory. The reference must be the
+# baseline's: A0's for BASELINE-B by default; for another baseline, FOLIA_REFERENCE with
+# FOLIA_REFERENCE_LABEL naming that baseline, or nothing is built
 [group('parity')]
 determinism out="":
+    scripts/determinism-reference.sh {{reference_label}} {{a0_label}} {{a0_reference}} >/dev/null
     cargo run --quiet --locked -p parity -- determinism --site {{site}} --baseline {{baselines}}/{{reference_label}} --config parity/filopoe.toml --templates-sha256 {{templates_sha256}} --reference {{reference}} {{ if out == "" { "" } else { "--out " + quote(out) } }}
 
 # Check the determinism check fails on a changed reference and refuses what it must (reads the
 # site and baseline only)
 [group('parity')]
 determinism-negative:
+    scripts/determinism-reference.sh {{reference_label}} {{a0_label}} {{a0_reference}} >/dev/null
     scripts/determinism-negative.sh {{site}} {{baselines}}/{{reference_label}} {{reference}} {{templates_sha256}} "$(mktemp -d)/determinism-negative"
 
 # Check the reference site's Markdown has no Liquid outside code (content lint)
@@ -220,6 +226,22 @@ warnings-negative label:
 [group('parity')]
 coverage-negative label:
     scripts/coverage-negative.sh {{site}} {{baselines}}/{{label}} "$(mktemp -d)/coverage-negative"
+
+# Run every check built so far against a baseline, in order, and write one evidence folder with
+# each criterion's status (pass, fail or pending) and every input used (A2.10, F12), into `out` (a
+# new directory) or, by default, a new `accept-*` one beside the baselines. Determinism compares
+# with A0's reference for BASELINE-B only; for another baseline, set FOLIA_REFERENCE to its reference
+# and FOLIA_REFERENCE_LABEL to its label, or the determinism check is refused
+[group('parity')]
+accept label out="":
+    scripts/accept.sh {{site}} {{baselines}} {{label}} {{ if out == "" { "\"$(mktemp -u -d " + baselines + "/accept-" + label + "-$(date -u +%Y%m%dT%H%M%SZ)-XXXX)\"" } else { quote(out) } }} {{a0_label}} {{a0_reference}}
+
+# Check the acceptance runner fails when a check fails, records a tree with changes as no
+# evidence and refuses what it must (a throwaway repository, a stand-in for the checks; part of
+# `check`)
+[group('parity')]
+accept-negative:
+    scripts/accept-negative.sh "$(mktemp -d)/accept-negative"
 
 # Check an evidence folder keeps its builds' records, made from one clean Folia commit, and is
 # (or can be) committed on its own on that commit (plan v12, Q26)

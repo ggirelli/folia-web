@@ -62,3 +62,5 @@ jobs:
       - run: just lint-py
       # Needs git and Ruby only (a stand-in replaces Jekyll), so it runs here, beside lint-rb
       - run: just baseline-negative
+      # Needs git and Python only (a stand-in replaces the checks)
+      - run: just accept-negative

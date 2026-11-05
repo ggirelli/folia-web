@@ -362,6 +362,7 @@ just ledger-negative BASELINE-B  # a DOM entry holds only for its files; an unkn
 just coverage-negative BASELINE-B  # waivers and removals no owner approved fail
 just links-negative BASELINE-B     # links to nothing planned fail, and nothing else
 just warnings-negative BASELINE-B  # unexpected, stale and ambiguous warnings fail
+just accept BASELINE-B             # every check built so far, into one evidence folder (A2.10)
 just evidence-provenance parity/evidence/<step>  # evidence built from a clean commit, on its own
 just build ../folia-out       # just build, into a directory outside the site
 ```
@@ -548,6 +549,13 @@ check passes or fails; nothing is deleted or overwritten. It compares:
    recipe): each build's manifest, path for path and hash for hash (plan v12, §4.2). A difference
    is a Folia change, to be approved and recorded as a new reference, or fixed.
 
+The reference must be the baseline's own (`scripts/determinism-reference.sh`, which
+`just determinism`, `just determinism-negative` and `just accept` share): A0's for `BASELINE-B`, the
+default; for another baseline, `FOLIA_REFERENCE` with `FOLIA_REFERENCE_LABEL` naming that
+baseline, which declares the reference its own (a reference does not record its baseline). A
+reference without that declaration, a label without a reference, or a reference that is not a
+file is refused before anything is built; A0's reference is never used for another baseline.
+
 Logs, absolute paths and the directories' names are diagnostics, and are not compared. An
 unknown source identity or a failed build fails the run, as in `just pages`. A run on
 `BASELINE-B` takes about 8 seconds and keeps about 330 MB; runs are never pruned, so remove old
@@ -567,6 +575,92 @@ met until it runs.
 with a reference changed once per kind of difference, and with a malformed reference, an existing
 directory, one inside the site and other templates; changes inside the builds themselves (a byte,
 an entry, a link, a result or an input) are shown by the unit tests, on throwaway sites.
+
+## Running acceptance (A2.10)
+
+```sh
+just accept BASELINE-B                # every check built so far, into a new accept-* beside the baselines
+just accept BASELINE-B ../out/acc-1   # the same, into a new directory of your choice
+just accept-negative               # the runner fails and refuses when it should (part of `just check`)
+```
+
+`just accept` (plan v12, §5.4, A2.10; F12) is the skeleton of the acceptance command: it runs every
+check built so far against one baseline, in order, and writes one evidence folder. It grows with
+each step, and is completed in D3. `scripts/accept.sh` runs the recipes as they are, each reading
+the same site and baseline: `just routes`, `just markdown` (with its full report), `just pages` and
+`just determinism`. Every check runs, whether an earlier one failed or not; none of their logic is
+repeated. The directory must be new, outside Folia's repository and the site; nothing is
+overwritten. Before anything runs, the baseline's exact `Gemfile.lock` is found and checked against
+the SHA-256 its `BASELINE.json` records: the baseline's own (A2.7), or, for a baseline that predates
+kept lockfiles, `parity/toolchain/local-<label>.Gemfile.lock` (`BASELINE-B`'s); if neither is known,
+the run is refused. The directory holds:
+
+| Path | What it is |
+|-|-|
+| `work/` | the kept builds, whole (`pages`, `determinism`: about 490 MB on `BASELINE-B`) |
+| `evidence/accept.json`, `accept.md` | the verdict: each criterion of §8, in parts, with its status, source check, plan reference and why; the inputs; the checks' exit statuses |
+| `evidence/transcripts/<check>.txt` | each check's command, Folia's commit and the time, its output and exit status |
+| `evidence/builds/<name>/` | each build's `build.json` and `sha256.txt`, verbatim, as `just evidence-provenance` reads them |
+| `evidence/reports/` | the checks' reports: coverage, DOM, links, warnings, determinism, Markdown |
+| `evidence/inputs/` | the configuration, the deviation ledger, the expected warnings and the site exclusions |
+| `evidence/lockfiles/` | Folia's `Cargo.lock` and the baseline's `Gemfile.lock`, verbatim, with their SHA-256 in `accept.json` |
+| `evidence/baseline/BASELINE.json` | the baseline's record: its site commit, build time and toolchain |
+| `evidence/folia-before.txt`, `folia-after.txt` | Folia's commit and `git status` around the run |
+| `evidence/toolchain.txt` | rustc, cargo, just, Python and git versions |
+| `evidence/reference.txt`, `inputs/reference-sha256.txt` | the determinism reference chosen and how, and a copy; or why there is none |
+
+**The determinism reference** must be the baseline's own, and is chosen fail-closed, by
+`scripts/determinism-reference.sh`, as for `just determinism`. For
+`BASELINE-B`, A0's (`parity/evidence/a0-reference/sha256.txt`) by default. For any other baseline,
+only one configured and declared its own: `FOLIA_REFERENCE` naming the manifest and
+`FOLIA_REFERENCE_LABEL` the baseline's label (the reference does not record its baseline, so the
+declaration is the mapping). Without one, with a reference declared another baseline's, or one
+that is not a file, the determinism check is refused, not run: its transcript and `accept.json`
+say what is missing, F11 fails and the run exits 1, while the other checks still run. A0's
+reference is never used for another baseline.
+
+Each criterion (F1 to F16) is judged in parts. A part is `pass` when it is implemented and its check
+passed, `fail` when it is implemented and its check failed, and `pending` when it cannot be judged
+yet, because a later step or acceptance itself must come first: the outputs not built yet (F1 needs
+0; F4, F5, F8's dates and F13 apply to every output, and are checked only on those Folia builds, so
+each has a pending part for the rest; F6 has one part per §5.1 assertion, pending only for the
+outputs of that assertion's own scope not built yet, so `rel-me` and `h-card`, which apply to `/`
+alone, have not run, and an assertion that should have run on a built output and did not fails; F10
+judges the warnings this build gives, and Folia warns about a note's broken wiki-link only when it
+builds the note, so the warnings of the notes not built yet are pending), the claimed class and
+removals (F3), CSS and source maps (F4, C5), the generated outputs (F7, C2 to C5), the enforced
+Rouge floor (F8: measured and reported, not enforced), A3 (F9), the builds from two fresh clones
+(F11's reproducibility across checkouts, D3; its builds twice in one tree are judged now), the
+manual parts (F5's review of the ledger's entries, which `just accept` neither does nor records;
+F12's pushed inputs; F14; F16) and the production comparison (F15, which needs its own
+authorization, Q19). A criterion is `fail` if any part fails, `pending` if any is pending, and
+`pass` only if every part passes: a criterion can have parts that pass and parts pending, and is
+then pending; nothing pending is ever shown as passed. The route-level link check (A2.8) is
+mandatory and gates the run (its failure fails it), but plan v12 maps it to none of §8's criteria,
+so it is listed apart, under *Other checks*, as `required` and `gates_run` with no criterion. Where
+the plan's wording leaves a part's reading open (F6's `h-entry`: §5.1's "entry pages", which the
+check reads as every page Jekyll gives an `h-entry`; F10: whether it covers the warnings of the
+outputs not built yet), the part says so (`ambiguity`), and `accept.md` lists it under *Readings
+open for the owner*.
+
+The run exits 0 when every check passed and nothing failed, even while criteria are pending;
+`final_acceptance` is true only when every criterion passes, so it is false until D3. It exits 1
+when a check or a part failed, and 2 when it refused to run. A run from a Folia tree with
+changes runs every check and records the changed paths, but has `evidence_eligible: false`, and
+`accept.md` says it is not evidence: it is diagnostic, whatever its verdict. A run is eligible
+only when Folia was a clean commit before and after it and every build recorded that commit,
+clean, with a known site identity; its `evidence/` folder is then committed by Q26's convention,
+on its own, as that commit's only child, and must pass `just evidence-provenance`.
+
+`just accept-negative` runs the runner from a throwaway committed copy, on throwaway baselines,
+with a stand-in for the checks: a passing run (every check in order, with A0's reference;
+pending criteria and parts pending; both lockfiles kept and verified; the records accepted by
+the provenance check), another baseline with its configured reference, and without one (no
+reference, one undeclared or declared another's, a label without a reference, a missing file,
+and A0's baseline declared another's: the determinism check refused, never A0's reference used),
+a failing check, a failing criterion and a failing link verdict alone (exit 1, every check still
+run), a tree with changes (no evidence), and the refusals (an existing or misplaced directory,
+an unknown or mismatched lockfile).
 
 ## Reproducing from a clean checkout
 

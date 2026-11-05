@@ -74,6 +74,9 @@ Each mode crate depends on `folia-core` only, never on another mode.
   - `site-exclusions.txt`: the paths in the site that are Folia's (`_folia/`, the content lint's
     workflow), which `scripts/baseline.sh` and the parity tools' checkout check both leave out,
     from this one list.
+  - `accept.py`: the acceptance runner's verdict (A2.10): it finds and verifies the baseline's
+    lockfile, and judges each criterion of plan v12, §8, from what the checks left, into
+    `accept.json` and `accept.md`.
   - `check_date_shift.py`: checks that two baselines differ only by changed last-modified dates.
   - `expected-warnings.toml`: the warnings Folia is expected to give, each with its decision
     (A2.9).
@@ -108,6 +111,13 @@ Each mode crate depends on `folia-core` only, never on another mode.
     approved, on a copy of the ledger.
   - `determinism-negative.sh`: shows the determinism check fails on a changed reference and
     refuses an existing or misplaced directory, a malformed reference and other templates.
+  - `accept.sh`: the acceptance runner behind `just accept` (A2.10): runs every check built so far
+    against a baseline, in order, into one evidence folder. `accept-negative.sh` shows it fails,
+    refuses and records a tree with changes as it should, from a throwaway copy with a stand-in
+    for the checks (part of `just check`).
+  - `determinism-reference.sh`: chooses the determinism reference, fail-closed: A0's for
+    `BASELINE-B`, another baseline's only when configured and declared its own (`just determinism`,
+    `just determinism-negative`, `just accept`).
   - `evidence-provenance.sh`: checks an evidence folder keeps its builds' and baselines' records,
     made from one clean Folia commit, and is (or can be) committed on its own, on that commit; it
     only reads.
