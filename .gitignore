@@ -12,3 +12,21 @@
 # Ruby tools, installed by `just lint-rb`.
 /vendor
 /.bundle
+
+# A site's parity inputs and evidence belong to its owner, outside this repository
+# (docs/development.md); these keep the reference site's from being added again.
+/parity/evidence/
+/parity/toolchain/
+/parity/filopoe.toml
+/parity/deviations.toml
+/parity/expected-warnings.toml
+/parity/spike3-expected.txt
+/parity/codemods/deliquify.py
+# Private environment pins (FOLIA_CONFIG, FOLIA_A0_LABEL, ...), if kept beside the checkout.
+/.env
+/pins.env
+# Python bytecode.
+__pycache__/
+# Jujutsu conflict materialisations.
+/.jjconflict-*/
+/JJ-CONFLICT-README

@@ -1,6 +1,6 @@
 //! Code blocks, written in the markup kramdown gives Rouge's output, highlighted with syntect.
 //!
-//! syntect names tokens with `TextMate` scopes; the site's stylesheet (`_sass/_highlight.scss`) styles
+//! syntect names tokens with `TextMate` scopes; the site's syntax stylesheet styles
 //! Rouge's Pygments short classes (`k`, `nf`, `s2`, …). Each token is given the Pygments class of
 //! the first rule below that its scopes match, so the stylesheet keeps working. The rules follow
 //! what Rouge emits for the languages the site uses.

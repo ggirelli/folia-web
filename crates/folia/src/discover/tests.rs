@@ -43,6 +43,7 @@ fn config(exclude: &[&str]) -> Config {
             description: "A site.".into(),
         },
         authors: std::collections::BTreeMap::new(),
+        slice: crate::config::Slice::default(),
     }
 }
 

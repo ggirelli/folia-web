@@ -151,14 +151,14 @@ mod tests {
             "_micro/bookmarks/2025-06-16-sample_bookmark_entry.md",
             "",
         ));
-        assert_eq!(url, "/bookmarks/2025-06-16-internet-resiliency-club");
+        assert_eq!(url, "/bookmarks/2025-06-16-sample-bookmark-entry");
     }
 
     #[test]
     fn notes_live_under_micro() {
         assert_eq!(
             first_url(entry("_micro/notes/2026-04-08-sample-note.md", "")),
-            "/micro/2026-04-08-finished"
+            "/micro/2026-04-08-sample-note"
         );
     }
 

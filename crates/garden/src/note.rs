@@ -1,8 +1,8 @@
 //! Notes' pages (plan v9, §12.2 step 3): each note's entry, with its body, dates and backlinks,
 //! the page [`NOTE_TEMPLATE`] renders, and the note graph.
 //!
-//! Links are resolved across every note of the garden, as the site's Jekyll plugin
-//! (`_plugins/wiki_links.rb`) did, so a note's backlinks and the graph are whole even
+//! Links are resolved across every note of the garden, as the site's Jekyll wiki-link
+//! plugin did, so a note's backlinks and the graph are whole even
 //! when only some notes' pages are built: those of notes not in the slice, and of notes dated
 //! after the build, which Jekyll did not write but its plugin still saw. Every wiki-link counts,
 //! repeats included: a note linking twice to another is two of its backlinks and two edges of

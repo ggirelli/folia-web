@@ -4,14 +4,17 @@
 //! shares code with what it checks beyond calling Folia's public API.
 //!
 //! ```sh
-//! cargo run -p parity -- routes --site ../filopoe --baseline ../folia-baselines/BASELINE-A --config parity/filopoe.toml
-//! cargo run -p parity -- markdown --site ../filopoe --baseline ../folia-baselines/BASELINE-A
-//! cargo run -p parity -- pages --site ../filopoe --baseline ../folia-baselines/BASELINE-B --config parity/filopoe.toml
-//! cargo run -p parity -- determinism --site ../filopoe --baseline ../folia-baselines/BASELINE-B --config parity/filopoe.toml --reference parity/evidence/a0-reference/sha256.txt
-//! cargo run -p parity -- liquid --site ../filopoe --config parity/filopoe.toml
+//! cargo run -p parity -- routes --site SITE --baseline BASELINES/LABEL --config CONFIG
+//! cargo run -p parity -- markdown --site SITE --baseline BASELINES/LABEL --ledger LEDGER
+//! cargo run -p parity -- pages --site SITE --baseline BASELINES/LABEL --config CONFIG --ledger LEDGER --expected-warnings WARNINGS
+//! cargo run -p parity -- determinism --site SITE --baseline BASELINES/LABEL --config CONFIG --reference REFERENCE
+//! cargo run -p parity -- liquid --site SITE --config CONFIG
 //! ```
 //!
 //! `liquid` is the exception: a content lint for the site, which needs no baseline.
+//!
+//! The configuration, the ledgers and the reference are the site's, kept by its owner, not in
+//! Folia's repository.
 
 mod baseline;
 mod builds;
@@ -60,7 +63,7 @@ enum Command {
         #[arg(long)]
         baseline: PathBuf,
         /// The deviation ledger
-        #[arg(long, default_value = "parity/deviations.toml")]
+        #[arg(long)]
         ledger: PathBuf,
         /// Only this source, such as `pages/profile.md`
         #[arg(long)]
@@ -92,10 +95,10 @@ enum Command {
         #[arg(long)]
         templates_sha256: Option<String>,
         /// The deviation ledger, whose `dom` entries judge the whole-document comparison
-        #[arg(long, default_value = "parity/deviations.toml")]
+        #[arg(long)]
         ledger: PathBuf,
         /// The warnings Folia is expected to give (A2.9)
-        #[arg(long, default_value = "parity/expected-warnings.toml")]
+        #[arg(long)]
         expected_warnings: PathBuf,
     },
     /// Build the site twice as of the baseline's build time and compare the builds byte for byte,

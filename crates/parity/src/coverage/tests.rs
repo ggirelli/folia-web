@@ -526,19 +526,6 @@ fn the_report_is_deterministic_and_every_row_is_in_the_markdown() {
 }
 
 #[test]
-fn the_ledger_names_its_owner_and_holds_no_waiver_or_removal() {
-    let ledger = load(Path::new(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../parity/deviations.toml"
-    )))
-    .unwrap();
-    assert_eq!(ledger.owners, ["Project owner (GG)"]);
-    assert!(ledger.problems.is_empty(), "{:?}", ledger.problems);
-    assert!(ledger.entries.is_empty());
-    assert!(ledger.waived().is_empty());
-}
-
-#[test]
 fn a_route_check_alone_is_no_comparison() {
     let mut site = Site::new();
     site.checks = Checks::default();

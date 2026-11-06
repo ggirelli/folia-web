@@ -1,7 +1,7 @@
 //! Wiki-links: `[[Target]]` and `[[Target|text]]`.
 //!
-//! They are replaced in the source, before parsing, by the HTML the site's Jekyll plugin
-//! (`_plugins/wiki_links.rb`) wrote: a link with the class `internal-link`, or a
+//! They are replaced in the source, before parsing, by the HTML the site's Jekyll wiki-link
+//! plugin wrote: a link with the class `internal-link`, or a
 //! `broken-link` span when nothing matches. The text is left as written, so Markdown and
 //! typography in it apply as they did. Code is skipped the way the plugin's regular expression
 //! skips it: fenced blocks and code spans, found without parsing.

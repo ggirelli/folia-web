@@ -159,11 +159,11 @@ just toolchain-negative             # the container baselines refuse what they m
 ```
 
 `scripts/toolchain-compare.sh` (plan v12, §5.4, A2.7; Q17) builds one commit of the site with
-each Jekyll toolchain of `parity/toolchain/environments.txt`, as of one pinned time
-(`BASELINE-B`'s build time, A0's), by one procedure, and compares the baselines with
+each Jekyll toolchain of the environments file (`FOLIA_TOOLCHAINS`, kept with the site's private
+inputs, which say where each input comes from), as of one pinned time (`FOLIA_TOOLCHAIN_AT`: the
+reference baseline's build time, A0's), by one procedure, and compares the baselines with
 `compare-builds.sh`: each environment with the next, and the first with the last. The
-environments ([`parity/toolchain/`](https://github.com/ggirelli/folia/tree/main/parity/toolchain)
-says where each input comes from):
+environments of the reference site's comparison:
 
 | Name | Ruby | Lockfile |
 |-|-|-|
@@ -189,17 +189,16 @@ changed at a time) would need more environments, which A2.7 does not build.
 
 Each build runs in its image (`scripts/baseline-container.sh`): the container, run as the calling
 user, sees the source, this repository and the lockfile read-only, each at its own path, and can
-write only the baseline's new directory; Bundler and the gems stay in the container. The source
-is not the site's checkout but a fresh clone of its commit, made by the host's git, with every
-tracked file dated the commit's committer time: the images' git (2.39 and 2.47) cannot read
-filopoe's repository, which uses `extensions.relativeworktrees` (git 2.48). Dating the files
-makes every date a build takes from them the same whenever the clone is made; it does not fix the
-order of the sitemap's and the search index's entries, which can differ between clones on
-different filesystems ([reproducibility limits](#reproducibility-limits)). The site itself is
-only read. An image that is
-not pinned by digest, a lockfile whose SHA-256 is not the one named, an existing destination and
-one inside the site are refused before anything is built; so is a repository the image's git
-cannot read.
+write only the baseline's new directory; Bundler and the gems stay in the container. The source is
+not the site's checkout but a fresh clone of its commit, made by the host's git, with every tracked
+file dated the commit's committer time: the images' git (2.39 and 2.47) cannot read a site
+repository that uses newer git extensions, such as `extensions.relativeworktrees` (git 2.48). Dating
+the files makes every date a build takes from them the same whenever the clone is made; it does not
+fix the order of the sitemap's and the search index's entries, which can differ between clones on
+different filesystems ([reproducibility limits](#reproducibility-limits)). The site itself is only
+read. An image that is not pinned by digest, a lockfile whose SHA-256 is not the one named, an
+existing destination and one inside the site are refused before anything is built; so is a
+repository the image's git cannot read.
 
 The run's directory keeps the clone (`source/`), each baseline, each comparison's output
 (`compare/<a>--<b>.txt`), for each file that differs its `diff -u` and its differing regions
@@ -235,7 +234,7 @@ clone of the same commit differs in two ways, both existing Jekyll behavior:
   by their mtime, which in a clone is the checkout time. This is not normalized: comparing
   baselines from different checkouts reports `sitemap.xml` as changed.
 
-`parity/evidence/fresh-clone-BASELINE-A/` holds the comparison that shows both.
+The site's private evidence holds the comparison that shows both.
 
 `scripts/toolchain-compare.sh` dates every file of its clone by the commit, which removes the
 second difference but not the first. For builds of clones of one commit, then:
@@ -248,22 +247,20 @@ second difference but not the first. For builds of clones of one commit, then:
   *reordered*.
 - **On the same filesystem, builds are byte-identical:** four runs on one tmpfs gave identical
   manifests, and a rebuild on the same ext4 filesystem as its original gave the original's
-  (`parity/evidence/a2-7-toolchain/`).
+  (A2.7's evidence, kept with the site's).
 
 ## Removing Liquid from the content (spike 3)
 
 ```sh
-just deliquify check                      # print the rewrite as a diff
-just deliquify write                      # apply it to the reference site
-just baseline deliquified --allow-dirty   # build the uncommitted result
-just compare SITE-MAIN deliquified parity/spike3-expected.txt
-just check-d001 SITE-MAIN deliquified       # the expected differences are D-001 only
+just baseline deliquified --allow-dirty            # build the uncommitted result of the rewrite
+just compare BEFORE deliquified EXPECTED           # EXPECTED: the site's spike 3 list
+just check-d001 BEFORE deliquified EXPECTED        # the expected differences are D-001 only
 ```
 
-`parity/codemods/deliquify.py` rewrites only the constructs in plan §10, in the 15 files listed in
-the script, and fails with the file and line on any other Liquid. The expected differences are
-listed in `parity/spike3-expected.txt`, and the deviation they come from in
-`parity/deviations.toml`.
+The rewrite was a one-off codemod for the reference site: it rewrote only the constructs in plan
+§10, in the files it listed, and failed with the file and line on any other Liquid. It, the list
+of the expected differences and the deviation they come from (in the site's deviation ledger) are
+kept with the site's private inputs; `parity/codemods/check_d001.py` is generic.
 
 ### Keeping Liquid out (content lint)
 
@@ -271,8 +268,8 @@ Folia does not run Liquid, but Jekyll still does, so new Liquid in the prose of 
 would work in Jekyll and show as written in Folia. The content lint (plan v7, §7.2) fails on it:
 
 ```sh
-just liquid                                # the reference site, ../filopoe or $FOLIA_SITE
-cargo run --locked -p parity -- liquid --site SITE --config parity/filopoe.toml
+just liquid                                # the reference site, $FOLIA_SITE, with $FOLIA_CONFIG
+cargo run --locked -p parity -- liquid --site SITE --config CONFIG
 ```
 
 - **Checked:** the body of every Markdown document Folia discovers. Not front matter, excluded
@@ -288,28 +285,25 @@ cargo run --locked -p parity -- liquid --site SITE --config parity/filopoe.toml
 - **Reported** as `file:line:column`, with lines counted from the top of the file. The lint exits
   1 if it finds any, and 2 if it cannot check (configuration, discovery or reading).
 
-The reference site passes at its local `SITE-COMMIT-B`. Its public `main`, `SITE-MAIN`, still has the
-Liquid spike 3 removed (in `SITE-COMMIT-A`, not yet published), and fails with 363 findings.
-
 The exemption keeps code examples right for Folia, which shows them as written. Jekyll runs Liquid
 inside code too, so until the switch a Liquid example in code may still need `{% raw %}` to show
 as intended on the Jekyll site. The lint neither asks for that nor adds it.
 
-`filopoe`'s `content` workflow runs the same command on Markdown changes, with Folia checked out
-at a pinned commit beside the site. From a `filopoe` checkout with Folia next to it:
+A site's `content` workflow can run the same command on Markdown changes, with Folia checked out
+at a pinned commit beside the site:
 
 ```sh
-cargo run --locked --manifest-path ../folia/Cargo.toml -p parity -- liquid --site . --config ../folia/parity/filopoe.toml
+cargo run --locked --manifest-path ../folia/Cargo.toml -p parity -- liquid --site . --config CONFIG
 ```
 
 ## Checking routes (spike 2)
 
 ```sh
-just routes BASELINE-A
+just routes LABEL
 ```
 
 The parity tool (`crates/parity`) has Folia plan every output of the reference site, from the
-configuration in `parity/filopoe.toml`, and compares the plan with the baseline's manifest:
+site's configuration (`FOLIA_CONFIG`), and compares the plan with the baseline's manifest:
 
 1. every authored output: the multiset of (source, URL, output file);
 2. the classification of each source: post, micro entry, garden note, page or static file;
@@ -327,12 +321,9 @@ Jekyll nor Folia's discovery reads them. Any other file counts, other workflows 
 ## Checking Markdown (spike 1)
 
 ```sh
-just markdown BASELINE-B --report spike1.txt              # every Markdown document of the site
-just markdown BASELINE-B --doc pages/profile.md --dump out  # one document, both sides' HTML
-just markdown-negative BASELINE-B                         # the check fails when it should
+just markdown LABEL --report spike1.txt              # every Markdown document of the site
+just markdown LABEL --doc SOURCE --dump out          # one document, both sides' HTML
 ```
-
-`BASELINE-B` is `filopoe` at `SITE-COMMIT-B`, the D-002 source fix committed on top of `SITE-COMMIT-A`.
 
 The parity tool renders each Markdown document of the reference site (and each document's
 excerpt) with Folia, and compares it with the HTML kramdown made in the baseline's dump. Both
@@ -342,7 +333,7 @@ text. The gates are those of plan v5, §10: heading IDs, link targets and attrib
 structure, the excerpt values templates show (computed with the same Liquid filters), and code
 text, with the agreement of token classes with Rouge's reported per language.
 
-A failure counts as explained only when an entry of `parity/deviations.toml` names the source
+A failure counts as explained only when an entry of the deviation ledger names the source
 and the gate (`markdown_gates`), and passes the entry's own check (`markdown_check`) if it has
 one: D-003's `resolved excerpt` requires that the note's excerpt has wiki-links, that Jekyll's
 excerpt differs from Jekyll's body, and that Folia's excerpt values equal those of Jekyll's body.
@@ -355,15 +346,10 @@ and `<source>.folia.html` for each document or excerpt that differs.
 ## Checking pages (vertical slice)
 
 ```sh
-just pages BASELINE-B            # build with Folia and compare what it writes
-just pages BASELINE-B ../out/p1  # the same, keeping the build in a new directory of your choice
-just pages-negative BASELINE-B   # the check fails when it should
-just ledger-negative BASELINE-B  # a DOM entry holds only for its files; an unknown identity fails
-just coverage-negative BASELINE-B  # waivers and removals no owner approved fail
-just links-negative BASELINE-B     # links to nothing planned fail, and nothing else
-just warnings-negative BASELINE-B  # unexpected, stale and ambiguous warnings fail
-just accept BASELINE-B             # every check built so far, into one evidence folder (A2.10)
-just evidence-provenance parity/evidence/<step>  # evidence built from a clean commit, on its own
+just pages LABEL              # build with Folia and compare what it writes
+just pages LABEL ../out/p1    # the same, keeping the build in a new directory of your choice
+just accept LABEL             # every check built so far, into one evidence folder (A2.10)
+just evidence-provenance DIR  # evidence built from a clean commit, on its own
 just build ../folia-out       # just build, into a directory outside the site
 ```
 
@@ -401,7 +387,7 @@ configuration; which untracked files count follows the ignore files, the user's
 
 The pages built are also compared with Jekyll's as whole documents (plan v12, §5.1), and the
 comparison decides the check: every difference must be explained by an accepted `dom` entry of
-the deviation ledger (`parity/deviations.toml`, `--ledger`; §5.2), no such entry may explain
+the deviation ledger (`--ledger`, `FOLIA_LEDGER`; §5.2), no such entry may explain
 nothing, and the hard document assertions (robots, canonical, title, description, `lang`,
 `rel="me"` and the h-card on `/`, h-entry, redirect stubs) must hold; a page that cannot be read
 as UTF-8 fails its assertions as a `read` failure. A `dom` entry is bound to the baseline's
@@ -463,7 +449,8 @@ none does today, so the ledger has no link entries. The broken wiki-link of `cod
 it is A2.9's expected warning, not a link.
 
 **Expected warnings** (plan v12, §5.4, A2.9; F10): every warning Folia gives must be listed in
-`parity/expected-warnings.toml` (`--expected-warnings`), and every entry there must match a
+the site's expected warnings (`--expected-warnings`, `FOLIA_EXPECTED_WARNINGS`), and every
+entry there must match a
 warning, or the run fails. Each `[[warning]]` names an `id`, the `source` (the document, or
 `(site)`), the exact `message`, and the `decision` that makes it expected; where exact text
 cannot be used, a `pattern` (a regular expression the whole text must match) with a
@@ -476,8 +463,8 @@ with the entries that match it, and each entry with how many warnings it matches
 that each broken link on a page built gives one warning, the number of Jekyll's broken-link
 spans, stays beside it.
 
-The file's one entry, `W-001`, is the broken wiki-link `[[First setup: rust]]` in
-`_digital_garden/topic/note.md`, kept by the owner's decision on Q3l (preserve, 2026-11-03).
+The reference site's file has one entry, `W-001`: a broken wiki-link in a garden note, kept by
+the owner's decision on Q3l (preserve, 2026-11-03).
 
 What it can see: the warnings of a build that succeeds, which Folia returns whole
 (`Built::warnings`; today only the garden's broken wiki-links give any). When a build fails,
@@ -545,16 +532,16 @@ check passes or fails; nothing is deleted or overwritten. It compares:
    included (links are not followed), and every file byte for byte. A difference is
    nondeterminism, reported with the path and, for a file, both sizes and SHA-256 and the first
    differing byte and its line.
-4. **The reference** (`--reference`, A0's `parity/evidence/a0-reference/sha256.txt` in the
+4. **The reference** (`--reference`, A0's recorded manifest, `FOLIA_A0_REFERENCE`, in the
    recipe): each build's manifest, path for path and hash for hash (plan v12, §4.2). A difference
    is a Folia change, to be approved and recorded as a new reference, or fixed.
 
-The reference must be the baseline's own (`scripts/determinism-reference.sh`, which
-`just determinism`, `just determinism-negative` and `just accept` share): A0's for `BASELINE-B`, the
-default; for another baseline, `FOLIA_REFERENCE` with `FOLIA_REFERENCE_LABEL` naming that
-baseline, which declares the reference its own (a reference does not record its baseline). A
-reference without that declaration, a label without a reference, or a reference that is not a
-file is refused before anything is built; A0's reference is never used for another baseline.
+The reference must be the baseline's own (`scripts/determinism-reference.sh`, which `just
+determinism`, `just determinism-negative` and `just accept` share): A0's for `FOLIA_A0_LABEL`, the
+default; for another baseline, `FOLIA_REFERENCE` with `FOLIA_REFERENCE_LABEL` naming that baseline,
+which declares the reference its own (a reference does not record its baseline). A reference without
+that declaration, a label without a reference, or a reference that is not a file is refused before
+anything is built; A0's reference is never used for another baseline.
 
 Logs, absolute paths and the directories' names are diagnostics, and are not compared. An
 unknown source identity or a failed build fails the run, as in `just pages`. A run on
@@ -579,8 +566,8 @@ an entry, a link, a result or an input) are shown by the unit tests, on throwawa
 ## Running acceptance (A2.10)
 
 ```sh
-just accept BASELINE-B                # every check built so far, into a new accept-* beside the baselines
-just accept BASELINE-B ../out/acc-1   # the same, into a new directory of your choice
+just accept LABEL                # every check built so far, into a new accept-* beside the baselines
+just accept LABEL ../out/acc-1   # the same, into a new directory of your choice
 just accept-negative               # the runner fails and refuses when it should (part of `just check`)
 ```
 
@@ -592,7 +579,7 @@ the same site and baseline: `just routes`, `just markdown` (with its full report
 repeated. The directory must be new, outside Folia's repository and the site; nothing is
 overwritten. Before anything runs, the baseline's exact `Gemfile.lock` is found and checked against
 the SHA-256 its `BASELINE.json` records: the baseline's own (A2.7), or, for a baseline that predates
-kept lockfiles, `parity/toolchain/local-<label>.Gemfile.lock` (`BASELINE-B`'s); if neither is known,
+kept lockfiles, `FOLIA_TOOLCHAIN_DIR/local-<label>.Gemfile.lock`; if neither is known,
 the run is refused. The directory holds:
 
 | Path | What it is |
@@ -611,7 +598,7 @@ the run is refused. The directory holds:
 
 **The determinism reference** must be the baseline's own, and is chosen fail-closed, by
 `scripts/determinism-reference.sh`, as for `just determinism`. For
-`BASELINE-B`, A0's (`parity/evidence/a0-reference/sha256.txt`) by default. For any other baseline,
+`FOLIA_A0_LABEL`, A0's (`FOLIA_A0_REFERENCE`) by default. For any other baseline,
 only one configured and declared its own: `FOLIA_REFERENCE` naming the manifest and
 `FOLIA_REFERENCE_LABEL` the baseline's label (the reference does not record its baseline, so the
 declaration is the mapping). Without one, with a reference declared another baseline's, or one
@@ -660,72 +647,4 @@ reference, one undeclared or declared another's, a label without a reference, a 
 and A0's baseline declared another's: the determinism check refused, never A0's reference used),
 a failing check, a failing criterion and a failing link verdict alone (exit 1, every check still
 run), a tree with changes (no evidence), and the refusals (an existing or misplaced directory,
-an unknown or mismatched lockfile).
-
-## Reproducing from a clean checkout
-
-You need [just](https://just.systems), a stable Rust toolchain with `cargo-deny`, Ruby 3.3 with
-Bundler, [uv](https://docs.astral.sh/uv/) and Node.js. Baselines stay outside both repositories,
-in `../folia-baselines`.
-
-```sh
-git clone https://github.com/ggirelli/folia.git && cd folia
-just check                                    # needs neither the site nor a baseline
-git clone https://github.com/OWNER/SITE-REPO.git ../filopoe
-(cd ../filopoe && bundle config set --local path vendor/bundle && bundle install)
-```
-
-`filopoe` does not track its `Gemfile.lock`; each baseline records the lock file's SHA-256 in
-`BASELINE.json`, and the reference baselines used Jekyll 4.4.1 on Ruby 3.3.8.
-
-**Spikes 0 and 3** start from the site before the Liquid rewrite, commit `SITE-MAIN`. Build them
-from a separate clone at that commit, so the main checkout is untouched:
-
-```sh
-git clone ../filopoe ../filopoe-SITE-MAIN && git -C ../filopoe-SITE-MAIN checkout SITE-MAIN
-cp ../filopoe/Gemfile.lock ../filopoe-SITE-MAIN/   # untracked, so a clone lacks it
-(cd ../filopoe-SITE-MAIN && bundle config set --local path ../filopoe/vendor/bundle)
-export FOLIA_SITE=../filopoe-SITE-MAIN
-just baseline-verify SITE-MAIN                  # spike 0
-just deliquify check && just deliquify write  # spike 3: review, then apply the rewrite
-just baseline deliquified --allow-dirty
-just compare SITE-MAIN deliquified parity/spike3-expected.txt
-just check-d001 SITE-MAIN deliquified
-unset FOLIA_SITE
-```
-
-**The rebaseline and spike 2** use `SITE-COMMIT-A`, the commit that applied the rewrite, and **spike
-1** uses `SITE-COMMIT-B`, which adds the D-002 source fix on top of it. Until they are published to
-the site's repository they exist only in the local checkout, and these steps need them (where the
-baselines already exist, `just baseline-verify` leaves them as they are and verifies into new
-directories, as described above):
-
-```sh
-git -C ../filopoe checkout SITE-COMMIT-A
-just baseline-verify BASELINE-A
-just check-date-shift deliquified BASELINE-A     # the rebaseline moved only dates
-just routes BASELINE-A                           # spike 2
-just markdown BASELINE-A                         # before the D-002 fix: fails on D-002
-
-git -C ../filopoe checkout SITE-COMMIT-B
-just baseline-verify BASELINE-B
-just check-date-shift BASELINE-A BASELINE-B         # the fix moved one date and nothing else
-just markdown BASELINE-B                         # spike 1
-just markdown-negative BASELINE-B
-just routes BASELINE-B
-just pages BASELINE-B                            # the vertical slice, with ../filopoe/_folia
-just pages-negative BASELINE-B
-just ledger-negative BASELINE-B
-just determinism                              # A2.5: two builds and the A0 reference agree
-just determinism-negative
-```
-
-The slice's templates are in `filopoe/_folia/templates`, uncommitted in the local checkout until
-they are reviewed.
-
-The D-002 fix was first verified uncommitted, as `BASELINE-A-d002`: on `SITE-COMMIT-A`, apply the change,
-then `just baseline BASELINE-A-d002 --allow-dirty` and `just compare BASELINE-A BASELINE-A-d002`. `parity`
-accepts that baseline only for a checkout with exactly its recorded changes (`site.diff`).
-
-Baselines of the same commit from different checkouts can differ in page order and static-file
-dates (see the reproducibility limits above); route parity does not depend on either.
+a site input not set, an unknown or mismatched lockfile).

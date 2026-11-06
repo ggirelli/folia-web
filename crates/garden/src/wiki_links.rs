@@ -1,5 +1,5 @@
-//! Which note a wiki-link names, by the rules of the site's Jekyll plugin
-//! (`_plugins/wiki_links.rb`): its title first, then its file name with `-` read as a
+//! Which note a wiki-link names, by the rules of the site's Jekyll wiki-link
+//! plugin: its title first, then its file name with `-` read as a
 //! space, both ignoring case and surrounding whitespace. When two notes share a key, the later
 //! one wins.
 

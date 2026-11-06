@@ -151,11 +151,11 @@ mod tests {
     #[test]
     fn a_doc_id_names_its_parts() {
         let id = DocId::new("_posts/2021/2021-08-08-sample-post.md");
-        assert_eq!(id.file_name(), "2021-08-08-webmentions.md");
+        assert_eq!(id.file_name(), "2021-08-08-sample-post.md");
         assert_eq!(id.dir(), "_posts/2021");
         assert_eq!(id.extension(), ".md");
-        assert_eq!(id.stem(), "2021-08-08-webmentions");
-        assert_eq!(id.below("_posts"), Some("2021/2021-08-08-webmentions.md"));
+        assert_eq!(id.stem(), "2021-08-08-sample-post");
+        assert_eq!(id.below("_posts"), Some("2021/2021-08-08-sample-post.md"));
         assert_eq!(id.below("_micro"), None);
     }
 

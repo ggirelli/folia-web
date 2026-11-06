@@ -312,7 +312,11 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(problems.len(), 2);
-        assert!(problems[0].message.contains("pages/profile.md, me/about.md"));
+        assert!(
+            problems[0]
+                .message
+                .contains("pages/profile.md, me/about.md")
+        );
     }
 
     #[test]

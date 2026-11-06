@@ -5,6 +5,12 @@
 #
 #   scripts/accept.sh SITE BASELINES LABEL OUT A0_LABEL A0_REFERENCE
 #
+# The site's own inputs are kept by its owner, outside Folia's repository, and named by the
+# environment: FOLIA_CONFIG (Folia's configuration for the site), FOLIA_LEDGER (the deviation
+# ledger), FOLIA_EXPECTED_WARNINGS (the expected warnings) and, for a baseline that keeps no
+# Gemfile.lock, FOLIA_TOOLCHAIN_DIR (where `local-LABEL.Gemfile.lock` is). Without one that the
+# run needs, nothing runs.
+#
 # The checks are the `just` recipes, run as they are, with FOLIA_SITE and FOLIA_BASELINES set to
 # SITE and BASELINES, and FOLIA_REFERENCE_LABEL to LABEL, so that each reads the same site and
 # baseline:
@@ -31,7 +37,8 @@
 #                                  `just evidence-provenance` reads them
 #     reports/                     the checks' reports (coverage, DOM, links, warnings,
 #                                  determinism, Markdown)
-#     inputs/                      the configuration and the ledgers the checks read
+#     inputs/                      the configuration (as folia.toml) and the ledgers the checks
+#                                  read
 #     lockfiles/                   Folia's Cargo.lock and the baseline's exact Gemfile.lock
 #     baseline/BASELINE.json       the baseline's record: its commit, time and toolchain
 #     folia-before.txt, folia-after.txt  Folia's commit and `git status`, around the run
@@ -39,7 +46,7 @@
 #     reference.txt, inputs/reference-sha256.txt  the determinism reference chosen, and a copy
 #
 # The baseline's Gemfile.lock is the one it keeps, or for a baseline that predates kept lockfiles
-# `parity/toolchain/local-LABEL.Gemfile.lock`, checked against the SHA-256 its BASELINE.json
+# `FOLIA_TOOLCHAIN_DIR/local-LABEL.Gemfile.lock`, checked against the SHA-256 its BASELINE.json
 # records (`parity/accept.py lockfile`); if neither is known, nothing runs.
 #
 # A run from a Folia tree with changes runs every check, and records the changed paths; it is
@@ -61,6 +68,15 @@ top=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 cd "$top"
 baseline=$baselines/$label
 [[ -f $baseline/BASELINE.json ]] || refuse "$baseline is not a baseline (no BASELINE.json)"
+# The site's inputs (above), as absolute paths, so that every check reads the same files.
+for input in FOLIA_CONFIG FOLIA_LEDGER FOLIA_EXPECTED_WARNINGS; do
+  [[ -n ${!input:-} ]] || refuse "$input is not set: the site's inputs are kept outside Folia's repository"
+  [[ -f ${!input} ]] || refuse "$input is ${!input}, which is not a file"
+  export "$input=$(realpath "${!input}")"
+done
+toolchain_dir=${FOLIA_TOOLCHAIN_DIR:-}
+[[ -f $baseline/Gemfile.lock || -n $toolchain_dir ]] ||
+  refuse "FOLIA_TOOLCHAIN_DIR is not set, and $baseline keeps no Gemfile.lock"
 [[ -e $out ]] && refuse "$out already exists; a run never writes into an existing directory"
 abs=$(realpath -m "$out")
 for inside in "$top" "$(realpath -m "$site")"; do
@@ -76,7 +92,7 @@ else
   missing=$found
 fi
 
-gemfile_lock=$(python3 -I parity/accept.py lockfile "$baseline" "$label" parity/toolchain) ||
+gemfile_lock=$(python3 -I parity/accept.py lockfile "$baseline" "$label" "${toolchain_dir:-.}") ||
   refuse "the baseline's lockfile is not known, so the run would not be reproducible (F12)"
 
 # Folia's commit, then `git status` (ignored files aside): the identity Q26 asks of the source.
@@ -89,8 +105,10 @@ evidence=$abs/evidence
 work=$abs/work
 mkdir -p "$evidence"/{transcripts,builds,reports/pages,reports/determinism,inputs,lockfiles,baseline} "$work"
 folia_state >"$evidence/folia-before.txt"
-cp -p parity/filopoe.toml parity/deviations.toml parity/expected-warnings.toml \
-  parity/site-exclusions.txt "$evidence/inputs/"
+cp -p "$FOLIA_CONFIG" "$evidence/inputs/folia.toml"
+cp -p "$FOLIA_LEDGER" "$evidence/inputs/deviations.toml"
+cp -p "$FOLIA_EXPECTED_WARNINGS" "$evidence/inputs/expected-warnings.toml"
+cp -p parity/site-exclusions.txt "$evidence/inputs/"
 cp -p Cargo.lock "$evidence/lockfiles/Cargo.lock"
 cp -p "$gemfile_lock" "$evidence/lockfiles/Gemfile.lock"
 cp -p "$baseline/BASELINE.json" "$evidence/baseline/BASELINE.json"

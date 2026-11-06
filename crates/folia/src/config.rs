@@ -29,6 +29,25 @@ pub struct Config {
     /// The site's authors, by the key a document's `author` names.
     #[serde(default)]
     pub authors: BTreeMap<String, Author>,
+    /// The documents the vertical slice builds (plan v9, §12.2); none unless the site names them.
+    #[serde(default)]
+    pub slice: Slice,
+}
+
+/// The documents the vertical slice builds, by source path relative to the site root. The site
+/// names them, so that the build set is the site's, not Folia's.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Slice {
+    /// The pages the slice builds, such as `pages/profile.md`.
+    #[serde(default)]
+    pub pages: Vec<String>,
+    /// The posts the slice builds.
+    #[serde(default)]
+    pub posts: Vec<String>,
+    /// The notes the slice builds.
+    #[serde(default)]
+    pub notes: Vec<String>,
 }
 
 /// Where templates live unless the configuration says otherwise: in the site, next to the
@@ -116,6 +135,18 @@ mod tests {
         assert_eq!(config.templates_dir, "_folia/templates");
         assert_eq!(config.site.url, "https://example.com");
         assert!(config.authors.is_empty());
+        assert_eq!(config.slice, Slice::default());
+    }
+
+    #[test]
+    fn the_slice_is_read_from_the_configuration() {
+        let config: Config = toml::from_str(
+            "time-zone = \"UTC\"\n[roots]\nblog = \"b\"\nmicro = \"m\"\ngarden = \"g\"\n[site]\nurl = \"u\"\ntitle = \"t\"\ndescription = \"d\"\n[slice]\npages = [\"p.md\"]\nnotes = [\"g/a.md\", \"g/b.md\"]\n",
+        )
+        .unwrap();
+        assert_eq!(config.slice.pages, ["p.md"]);
+        assert_eq!(config.slice.posts, Vec::<String>::new());
+        assert_eq!(config.slice.notes, ["g/a.md", "g/b.md"]);
     }
 
     #[test]

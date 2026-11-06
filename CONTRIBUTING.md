@@ -7,8 +7,9 @@ that one site, and it is [fully vibe coded](DISCLAIMER.md).
 
 You need [just](https://just.systems), a Rust toolchain with `cargo-deny`, Ruby with Bundler
 (for the Jekyll reference builds), [uv](https://docs.astral.sh/uv/) (for the docs, shellcheck and
-Ruff), Node.js (for markdownlint), and a checkout of the reference Jekyll site next to this
-repository (`../filopoe`, or set `FOLIA_SITE`).
+Ruff) and Node.js (for markdownlint); the parity recipes also need a checkout of the reference
+Jekyll site (`FOLIA_SITE`) and its owner's private inputs (see
+[A site's private inputs](docs/development.md#a-sites-private-inputs)).
 The linters are pinned in the justfile and fetched on first use; nothing needs installing globally.
 
 ```sh

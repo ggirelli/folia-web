@@ -43,7 +43,7 @@ build() {
   mkdir -p "$r/$ev/builds/$name"
   printf '%064d  ./a.html\n%064d  ./b.txt\n' 2 3 >"$r/$ev/builds/$name/sha256.txt"
   cat >"$r/$ev/builds/$name/build.json" <<EOF
-{"at":"2026-10-25T14:43:51Z","site":{"path":"/x/site","commit":"SITE-COMMIT-B","status":[],"changes":$site},
+{"at":"2026-10-25T14:43:51Z","site":{"path":"/x/site","commit":"0123abcd","status":[],"changes":$site},
  "config":{"path":"c.toml","sha256":"$(printf '%064d' 4)"},
  "templates":{"path":"/x/t","files":30,"tree_sha256":"$(printf '%064d' 5)"},
  "folia":{"path":"/x/folia","commit":"$c","status":[],"changes":$folia},
@@ -66,7 +66,7 @@ baseline() {
   printf '%064d  ./dump/manifest.jsonl\n%064d  ./site/a.html\n' 7 8 >"$dir/sha256.txt"
   cat >"$dir/BASELINE.json" <<EOF
 {"created_at":"2026-11-03T12:00:00Z",
- "site":{"path":"/x/source","commit":"SITE-COMMIT-B","dirty":false,"status":[],"changes":$site},
+ "site":{"path":"/x/source","commit":"0123abcd","dirty":false,"status":[],"changes":$site},
  "folia":{"path":"/x/folia","commit":"$c","status":[],"changes":$folia},
  "lockfile":{"file":"Gemfile.lock","sha256":"$(sha256sum "$dir/Gemfile.lock" | cut -d' ' -f1)"},
  "tools":{"ruby":"ruby 3.4.5","bundler":"2.6.9"},
@@ -98,7 +98,7 @@ commit_all() { git -C "$1" add -A && git -C "$1" commit -q -m "$2"; }
 r=$(repo ready); c=$(git -C "$r" rev-parse HEAD)
 build "$r" ev one; build "$r" ev two
 check ready "$r" ev 0 "ok: ev is ready to be committed on its own, on $c"
-check ready-identity "$r" ev 0 "one: folia $c clean; site SITE-COMMIT-B changed"
+check ready-identity "$r" ev 0 "one: folia $c clean; site 0123abcd changed"
 check usage "$r" - 2 "usage:"
 check not-a-dir "$r" nowhere 2 "nowhere is not a directory"
 
@@ -149,7 +149,7 @@ check file-count "$r" count 1 "FAILS: one: build.json counts 2 files, sha256.txt
 r=$(repo baseline-only); c=$(git -C "$r" rev-parse HEAD)
 baseline "$r" only ruby
 check baseline-ready "$r" only 0 "ok: only is ready to be committed on its own, on $c"
-check baseline-identity "$r" only 0 "baselines/ruby: folia $c clean; site SITE-COMMIT-B clean"
+check baseline-identity "$r" only 0 "baselines/ruby: folia $c clean; site 0123abcd clean"
 r=$(repo baselines)
 r2=$(repo build-and-baseline); c2=$(git -C "$r2" rev-parse HEAD)
 build "$r2" both one; baseline "$r2" both ruby

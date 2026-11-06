@@ -30,13 +30,10 @@ fn a_post_url_keeps_the_case_of_its_file_name() {
         &clock(),
     )
     .unwrap();
-    assert_eq!(
-        outputs[0].route.url(),
-        "/blog/2023/05/13/May-train-trip-pt1"
-    );
+    assert_eq!(outputs[0].route.url(), "/blog/2023/05/13/Sample-Trip-pt1");
     assert_eq!(
         outputs[0].route.output_path(),
-        "blog/2023/05/13/May-train-trip-pt1.html"
+        "blog/2023/05/13/Sample-Trip-pt1.html"
     );
     assert_eq!(
         outputs[0].source,
@@ -166,13 +163,13 @@ fn categories_are_counted_in_the_order_posts_first_use_them() {
     );
 }
 
-const WEBMENTIONS: &str = "_posts/2021/2021-08-08-sample-post.md";
+const SAMPLE_POST: &str = "_posts/2021/2021-08-08-sample-post.md";
 
-fn webmentions() -> SourceDoc {
+fn sample_post() -> SourceDoc {
     SourceDoc {
         body: "Intro.\n\n### One *a*\n\n#### Two\n\n### Three\n".into(),
         ..post(
-            WEBMENTIONS,
+            SAMPLE_POST,
             "title: \"Webmentions: letting Disqus go\"\nauthor: gg\ncover:\n  path: /c.webp\n  position: behind\n  unsplash: lunarts\ncategories: [code, announcement]\ntags: [webmentions, blog]\nlast_modified_at: 2021-08-24\ntoc:\n  enabled: true\n  position: left\nsyndications:\n  x-twitter: https://x\n  github: https://g\n",
         )
     }
@@ -181,7 +178,7 @@ fn webmentions() -> SourceDoc {
 fn build_one(docs: &[SourceDoc]) -> Result<ModeOutput, Vec<Diagnostic>> {
     build(
         docs,
-        &[WEBMENTIONS],
+        &[SAMPLE_POST],
         &folia_core::content::LastCommits::default(),
         &clock(),
     )
@@ -192,15 +189,18 @@ use folia_core::publish::ModeOutput;
 #[test]
 fn a_post_is_built_with_its_dates_and_what_its_template_shows() {
     let docs = [
-        post("_posts/2021/2021-07-12-sample-theme.md", "title: A new skin!"),
-        webmentions(),
+        post(
+            "_posts/2021/2021-07-12-sample-theme.md",
+            "title: A new skin!",
+        ),
+        sample_post(),
         post("_posts/2021/2021-08-17-sample-speed.md", ""),
     ];
     let output = build_one(&docs).unwrap();
     let ([entry], [page]) = (&output.entries[..], &output.pages[..]) else {
         panic!("one entry and one page")
     };
-    assert_eq!(entry.route.url(), "/blog/2021/08/08/webmentions");
+    assert_eq!(entry.route.url(), "/blog/2021/08/08/sample-post");
     assert_eq!(
         clock().xmlschema(entry.published.unwrap()),
         "2021-08-08T00:00:00+02:00"
@@ -223,9 +223,9 @@ fn a_post_is_built_with_its_dates_and_what_its_template_shows() {
     assert_eq!(context["tags"][0]["name"], "blog");
     assert_eq!(
         context["previous"],
-        serde_json::json!({"url": "/blog/2021/07/12/new-skin", "title": "A new skin!"})
+        serde_json::json!({"url": "/blog/2021/07/12/sample-theme", "title": "A new skin!"})
     );
-    assert_eq!(context["next"]["title"], "Speed Up Ggplot");
+    assert_eq!(context["next"]["title"], "Sample Speed");
     assert_eq!(
         context["toc"],
         serde_json::json!({"placement": "left", "title": null, "entries": [
@@ -258,7 +258,7 @@ fn a_post_is_built_with_its_dates_and_what_its_template_shows() {
 
 #[test]
 fn a_post_without_a_toc_or_cover_has_none_and_the_default_cover() {
-    let output = build_one(&[post(WEBMENTIONS, "title: T")]).unwrap();
+    let output = build_one(&[post(SAMPLE_POST, "title: T")]).unwrap();
     let context = &output.pages[0].context;
     assert_eq!(context["toc"], serde_json::Value::Null);
     assert_eq!(context["cover"]["position"], "after_title");
@@ -267,7 +267,7 @@ fn a_post_without_a_toc_or_cover_has_none_and_the_default_cover() {
 
 #[test]
 fn only_the_posts_asked_for_are_built_and_the_first_has_no_previous() {
-    let docs = [webmentions(), post("_posts/2020/2020-01-01-other.md", "")];
+    let docs = [sample_post(), post("_posts/2020/2020-01-01-other.md", "")];
     let output = build(
         &docs,
         &["_posts/2020/2020-01-01-other.md"],
@@ -279,7 +279,7 @@ fn only_the_posts_asked_for_are_built_and_the_first_has_no_previous() {
     assert_eq!(output.pages[0].context["previous"], serde_json::Value::Null);
     assert_eq!(
         output.pages[0].context["next"]["url"],
-        "/blog/2021/08/08/webmentions"
+        "/blog/2021/08/08/sample-post"
     );
     assert_eq!(
         output.entries[0].modified.unwrap().from,
@@ -317,7 +317,7 @@ fn front_matter_the_template_cannot_show_is_not_built_yet() {
         ),
     ];
     for (front, message) in cases {
-        let problems = build_one(&[post(WEBMENTIONS, front)]).unwrap_err();
-        assert_eq!(problems[0].to_string(), format!("{WEBMENTIONS}: {message}"));
+        let problems = build_one(&[post(SAMPLE_POST, front)]).unwrap_err();
+        assert_eq!(problems[0].to_string(), format!("{SAMPLE_POST}: {message}"));
     }
 }

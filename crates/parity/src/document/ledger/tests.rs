@@ -5,7 +5,7 @@ use super::*;
 use crate::builds::Hashed;
 use crate::document::{FileReport, Side, Status as FileStatus, compare_documents};
 
-const EXPECTED_BUILD: &str = "BASELINE-RECORD-SHA256";
+const EXPECTED_BUILD: &str = "0000000000000000000000000000000000000000000000000000000000005e1f";
 
 /// Jekyll's head: the description over several lines, as Liquid captures write it.
 const JEKYLL: &str = "<!DOCTYPE html><html lang=\"en\"><head><title>A | S</title>\
@@ -109,7 +109,7 @@ fn entry_reviewed(
     text
 }
 
-const ACCEPTED: &str = "status = \"accepted\"\naccepted = \"2026-11-01\"\naccepted_by = \"Project owner (GG)\"\ndecision = \"A2.3 step review\"\nfollow_up_status = \"none\"\nexpected_build = \"BASELINE-RECORD-SHA256\"";
+const ACCEPTED: &str = "status = \"accepted\"\naccepted = \"2026-11-01\"\naccepted_by = \"Owner\"\ndecision = \"review\"\nfollow_up_status = \"none\"\nexpected_build = \"0000000000000000000000000000000000000000000000000000000000005e1f\"";
 const DESCRIPTION: (&str, &str) = (
     "html[1]/head[1]/meta[1]@content",
     EQUAL_AFTER_COLLAPSE_AND_TRIM,
@@ -523,13 +523,10 @@ fn an_entry_that_is_not_well_formed_fails() {
     let report = report(EXPECTED_BUILD, &[("a.html", JEKYLL, FOLIA)]);
     for (fields, problem) in [
         (
-            ACCEPTED.replace("accepted_by = \"Project owner (GG)\"\n", ""),
+            ACCEPTED.replace("accepted_by = \"Owner\"\n", ""),
             "accepted_by",
         ),
-        (
-            ACCEPTED.replace("decision = \"A2.3 step review\"\n", ""),
-            "decision",
-        ),
+        (ACCEPTED.replace("decision = \"review\"\n", ""), "decision"),
         (
             ACCEPTED.replace(
                 "follow_up_status = \"none\"",
@@ -700,15 +697,6 @@ fn entries_of_other_checks_are_not_read_but_their_ids_are_unique() {
 }
 
 #[test]
-fn the_repository_ledger_is_well_formed() {
-    let ledger =
-        load(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../parity/deviations.toml"))
-            .unwrap();
-    assert_eq!(ledger.problems, Vec::<String>::new());
-    assert!(ledger.entries.iter().any(|entry| entry.id == "D-004"));
-}
-
-#[test]
 fn a_listed_output_that_was_not_compared_makes_the_entry_stale() {
     // The entry lists a.html and b.html; only a.html was built and compared (b.html is missing).
     let report = report(EXPECTED_BUILD, &[("a.html", JEKYLL, FOLIA)]);
@@ -825,45 +813,6 @@ fn a_no_break_space_does_not_satisfy_the_collapse_and_trim_kind() {
         &report,
     );
     assert!(applied.passed, "{applied:?}");
-}
-
-#[test]
-fn the_repository_ledger_s_d_004_has_exactly_its_approved_scope() {
-    // Approved by the project owner (2026-11-01, re-accepted 2026-11-03): four outputs, two
-    // attributes, one kind, baseline BASELINE-B's record. Anything broader must fail here.
-    let ledger =
-        load(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../parity/deviations.toml"))
-            .unwrap();
-    let d004: Vec<&Entry> = ledger.entries.iter().filter(|e| e.id == "D-004").collect();
-    let [entry] = d004.as_slice() else {
-        panic!("D-004 is listed once")
-    };
-    assert_eq!(entry.status, Status::Accepted);
-    assert_eq!(entry.expected_build, EXPECTED_BUILD);
-    assert_eq!(
-        entry.outputs.keys().map(String::as_str).collect::<Vec<_>>(),
-        [
-            "about.html",
-            "blog/2021/08/08/webmentions.html",
-            "dg/coding/index.html",
-            "dg/coding/rust.html",
-        ]
-    );
-    assert_eq!(
-        entry.matches,
-        [
-            (
-                "html[1]/head[1]/meta[3]@content".to_owned(),
-                Condition::EqualAfterCollapseAndTrim
-            ),
-            (
-                "html[1]/head[1]/meta[7]@content".to_owned(),
-                Condition::EqualAfterCollapseAndTrim
-            ),
-        ]
-    );
-    // The only DOM entry: no other deviation is accepted by the DOM comparison.
-    assert_eq!(ledger.entries.len(), 1);
 }
 
 #[test]

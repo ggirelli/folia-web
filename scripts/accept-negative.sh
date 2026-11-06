@@ -13,8 +13,8 @@
 # output; the standalone `just determinism` and `determinism-negative` refuse, before building, a
 # reference not declared the baseline's; it keeps both lockfiles, verified, and build records
 # `scripts/evidence-provenance.sh` accepts; and it refuses, exit 2 and nothing written, an existing
-# or misplaced output directory and a baseline whose lockfile is unknown or differs from its
-# record.
+# or misplaced output directory, a site input that is not set and a baseline whose lockfile is
+# unknown or differs from its record.
 #
 # Every case runs the runner from a throwaway, committed copy of what it uses (so Folia's identity
 # is known), none of the user's git configuration applying, on throwaway baselines, with a
@@ -43,7 +43,6 @@ fail() { echo "$1" >&2; exit 1; }
 # A committed copy of what the runner uses, so Folia's identity is clean and known.
 folia=$work/folia
 for file in scripts/accept.sh scripts/evidence-provenance.sh scripts/determinism-reference.sh parity/accept.py \
-  parity/filopoe.toml parity/deviations.toml parity/expected-warnings.toml \
   parity/site-exclusions.txt Cargo.lock; do
   mkdir -p "$(dirname "$folia/$file")"
   cp -p "$repo/$file" "$folia/$file"
@@ -51,6 +50,13 @@ done
 mkdir -p "$folia/parity/toolchain"
 printf 'GEM\n  specs:\n    jekyll (4.4.1)\n' >"$folia/parity/toolchain/local-old.Gemfile.lock"
 printf 'notes\n' >"$folia/NOTES.md"
+# Stand-ins for the site's inputs, which its owner keeps outside Folia's repository.
+mkdir -p "$work/inputs"
+printf 'time-zone = "UTC"\n' >"$work/inputs/folia.toml"
+printf 'owners = ["Owner"]\n' >"$work/inputs/deviations.toml"
+: >"$work/inputs/expected-warnings.toml"
+export FOLIA_CONFIG=$work/inputs/folia.toml FOLIA_LEDGER=$work/inputs/deviations.toml \
+  FOLIA_EXPECTED_WARNINGS=$work/inputs/expected-warnings.toml FOLIA_TOOLCHAIN_DIR=$folia/parity/toolchain
 # A stand-in for A0's reference, the baseline `old`'s, and another baseline's, outside the copy.
 mkdir -p "$folia/parity/evidence/a0-reference" "$work/refs"
 printf '%064d  ./a.html\n' 1 >"$folia/parity/evidence/a0-reference/sha256.txt"
@@ -66,7 +72,7 @@ sum() { sha256sum "$1" | cut -d' ' -f1; }
 baselines=$work/baselines
 record() {
   mkdir -p "$baselines/$1"
-  printf '{"created_at":"2026-10-25T14:43:51Z","site":{"commit":"SITE-COMMIT-B","gemfile_lock_sha256":%s},"lockfile":%s,"tools":{"ruby":"ruby stand-in"}}\n' \
+  printf '{"created_at":"2026-10-25T14:43:51Z","site":{"commit":"0123abcd","gemfile_lock_sha256":%s},"lockfile":%s,"tools":{"ruby":"ruby stand-in"}}\n' \
     "$2" "$3" >"$baselines/$1/BASELINE.json"
 }
 record old "\"$(sum "$folia/parity/toolchain/local-old.Gemfile.lock")\"" null
@@ -100,7 +106,7 @@ record() {
   else state="{\"state\":\"changed\",\"sha256\":\"$(printf '%064d' 9)\"}"; fi
   printf '%064d  ./a.html\n%064d  ./b.css\n' 1 2 >"$dir/sha256.txt"
   cat >"$dir/build.json" <<JSON
-{"at":"2026-10-25T14:43:51Z","site":{"path":"/x/site","commit":"SITE-COMMIT-B","status":[],"changes":{"state":"changed","sha256":"$(printf '%064d' 3)"}},
+{"at":"2026-10-25T14:43:51Z","site":{"path":"/x/site","commit":"0123abcd","status":[],"changes":{"state":"changed","sha256":"$(printf '%064d' 3)"}},
  "config":{"path":"parity/filopoe.toml","sha256":"$(printf '%064d' 4)"},
  "templates":{"path":"/x/t","files":30,"tree_sha256":"$(printf '%064d' 5)"},
  "folia":{"path":"$PWD","commit":"$(git rev-parse HEAD)","status":[],"changes":$state},
@@ -308,7 +314,12 @@ run_case inside old "$folia/out" 2 "is inside $folia"
 run_case in-site old "$work/site/out" 2 "is inside $work/site"
 run_case mismatch mismatch "" 2 "has the SHA-256" "the baseline's lockfile is not known"
 run_case unknown unknown "" 2 "the lockfile the baseline was built with is not known"
-for name in inside in-site mismatch unknown; do
+for input in FOLIA_CONFIG FOLIA_LEDGER FOLIA_EXPECTED_WARNINGS; do
+  (unset "$input"; run_case "unset-$input" old "" 2 "$input is not set")
+done
+FOLIA_TOOLCHAIN_DIR='' run_case unset-toolchain old "" 2 "FOLIA_TOOLCHAIN_DIR is not set"
+for name in inside in-site mismatch unknown unset-FOLIA_CONFIG unset-FOLIA_LEDGER \
+  unset-FOLIA_EXPECTED_WARNINGS unset-toolchain; do
   [[ ! -e $work/$name.log ]] || fail "$name: a check ran"
 done
 [[ ! -e $folia/out && ! -e $work/site/out && ! -e $work/out/mismatch && ! -e $work/out/unknown ]] ||
@@ -322,9 +333,10 @@ expect built 'all(part("F6", n)["status"] == "pass" for n in ["`robots`", "`h-ca
 expect built 'part("F6", "`description`")["status"] == "pass" and part("F1", "not built yet")["status"] == "pass"'
 expect built 'part("F10", "the warnings of the outputs")["status"] == "pass"'
 
-# 18. to 23. The standalone recipes (the repository's justfile, run by the real `just` in the
-# copy, with a stand-in for cargo): A0's reference for BASELINE-B by default; another baseline's
-# only when configured and declared its own; otherwise refused before anything is built.
+# 18. to 24. The standalone recipes (the repository's justfile, run by the real `just` in the
+# copy, with a stand-in for cargo): A0's reference for FOLIA_A0_LABEL by default; another
+# baseline's only when configured and declared its own; otherwise, or with no A0 baseline or
+# templates hash set, refused before anything is built.
 mkdir -p "$work/recipe-bin"
 printf '#!/usr/bin/env bash\necho "cargo $*" >>"$CARGO_LOG"\n' >"$work/recipe-bin/cargo"
 chmod +x "$work/recipe-bin/cargo"
@@ -342,10 +354,14 @@ recipe() {
 }
 (
   unset FOLIA_REFERENCE FOLIA_REFERENCE_LABEL
-  recipe recipe-a0 0 "/BASELINE-B " "--reference $a0 "
+  templates=$(printf '%064d' 0)
+  export FOLIA_A0_LABEL=old FOLIA_A0_REFERENCE=$a0 FOLIA_TEMPLATES_SHA256=$templates
+  recipe recipe-a0 0 "/old " "--reference '$a0' "
+  FOLIA_A0_LABEL='' FOLIA_A0_REFERENCE='' recipe recipe-no-a0 2 "no baseline is named"
+  FOLIA_TEMPLATES_SHA256='' recipe recipe-no-templates 2 "FOLIA_TEMPLATES_SHA256 is not set"
   FOLIA_REFERENCE_LABEL=other recipe recipe-label-only 2 "no reference is configured for other"
-  FOLIA_REFERENCE=$work/refs/kept.txt recipe recipe-undeclared 2 "FOLIA_REFERENCE_LABEL (unset) does not declare it BASELINE-B's"
-  FOLIA_REFERENCE=$work/refs/kept.txt FOLIA_REFERENCE_LABEL=other recipe recipe-declared 0 "/other " "--reference $work/refs/kept.txt "
+  FOLIA_REFERENCE=$work/refs/kept.txt recipe recipe-undeclared 2 "FOLIA_REFERENCE_LABEL (unset) does not declare it old's"
+  FOLIA_REFERENCE=$work/refs/kept.txt FOLIA_REFERENCE_LABEL=other recipe recipe-declared 0 "/other " "--reference '$work/refs/kept.txt' "
   FOLIA_REFERENCE=$work/refs/none.txt FOLIA_REFERENCE_LABEL=other recipe recipe-not-a-file 2 "is not a file"
   FOLIA_REFERENCE_LABEL=other recipe_name=determinism-negative recipe recipe-negative 2 "no reference is configured for other"
 )

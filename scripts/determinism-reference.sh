@@ -19,6 +19,8 @@ a0_label=$2
 a0_reference=$3
 declared=${FOLIA_REFERENCE_LABEL:-}
 none() { echo "$1" >&2; exit 2; }
+[[ -n $label ]] ||
+  none "no baseline is named: set FOLIA_A0_LABEL and FOLIA_A0_REFERENCE, or FOLIA_REFERENCE and FOLIA_REFERENCE_LABEL"
 
 if [[ -n ${FOLIA_REFERENCE:-} ]]; then
   [[ $declared == "$label" ]] ||

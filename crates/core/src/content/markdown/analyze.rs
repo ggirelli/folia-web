@@ -1,7 +1,7 @@
 //! Facts about a rendered document that its page shows besides its body (plan v7, §5.3): its
 //! headings, and the table of contents built from them.
 //!
-//! The site's templates built the TOC with `_includes/toc.html` (jekyll-toc 1.1.0),
+//! The site's templates built the TOC with an include using jekyll-toc 1.1.0,
 //! which splits the rendered HTML on `<h`. [`toc`] gives the same tree from the headings:
 //!
 //! - only headings from `min_level` to `max_level` count, and none with the class `no_toc`;

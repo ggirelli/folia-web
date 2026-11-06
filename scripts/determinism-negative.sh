@@ -7,17 +7,18 @@
 # Changes in the builds themselves (a byte, an entry, a link, a result, an input) are shown by
 # the unit tests, which build throwaway sites.
 #
-#   scripts/determinism-negative.sh SITE BASELINE REFERENCE TEMPLATES_SHA256 WORKDIR
+#   scripts/determinism-negative.sh SITE CONFIG BASELINE REFERENCE TEMPLATES_SHA256 WORKDIR
 #
 # WORKDIR must not exist; it is kept, with each case's output (<case>.out) and the builds.
 set -euo pipefail
 
-[[ $# -eq 5 ]] || { echo "usage: $0 SITE BASELINE REFERENCE TEMPLATES_SHA256 WORKDIR" >&2; exit 2; }
+[[ $# -eq 6 ]] || { echo "usage: $0 SITE CONFIG BASELINE REFERENCE TEMPLATES_SHA256 WORKDIR" >&2; exit 2; }
 site=$1
-baseline=$2
-reference=$3
-templates=$4
-work=$5
+config=$2
+baseline=$3
+reference=$4
+templates=$5
+work=$6
 [[ -e $work ]] && { echo "$work already exists" >&2; exit 1; }
 mkdir -p "$work"
 work=$(realpath "$work")
@@ -31,7 +32,7 @@ check() {
   local name=$1 want=$2 status=0 line
   shift 2
   cargo run --quiet --locked -p parity -- determinism --site "$site" --baseline "$baseline" \
-    --config parity/filopoe.toml "$@" >"$work/$name.out" 2>&1 || status=$?
+    --config "$config" "$@" >"$work/$name.out" 2>&1 || status=$?
   cases=$((cases + 1))
   [[ $status -eq $want ]] || fail "$name: exit $status, expected $want (see $work/$name.out)"
   while IFS= read -r line; do

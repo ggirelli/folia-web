@@ -1,9 +1,9 @@
 //! The build pipeline (plan v6, §11), so far for the vertical slice (plan v9, §12.2).
 //!
 //! 1. Plan every output of the site, and check the route table (`site::plan`).
-//! 2. Build the slice's pages ([`SLICE_PAGES`]) with the pages mode, its posts ([`SLICE_POSTS`])
-//!    with the blog mode, and its notes ([`SLICE_NOTES`]), with the note graph, with the garden
-//!    mode, dated with their last commits.
+//! 2. Build the slice's pages ([`Slice::pages`]) with the pages mode, its posts
+//!    ([`Slice::posts`]) with the blog mode, and its notes ([`Slice::notes`]), with the note graph,
+//!    with the garden mode, dated with their last commits. The site's configuration names them.
 //! 3. Assemble the site index templates show: the site's identity and authors, the build's year,
 //!    and the blog's categories.
 //! 4. Check every page's template, then render each page.
@@ -26,21 +26,11 @@ use jiff::Timestamp;
 use serde_json::json;
 
 use crate::config::Config;
+#[cfg(doc)]
+use crate::config::Slice;
 use crate::output::{self, Content};
 use crate::render::Renderer;
 use crate::site::{Site, plan, redirect_stub};
-
-/// The pages the vertical slice builds.
-pub const SLICE_PAGES: [&str; 1] = ["pages/profile.md"];
-
-/// The posts the vertical slice builds.
-pub const SLICE_POSTS: [&str; 1] = ["_posts/2021/2021-08-08-sample-post.md"];
-
-/// The notes the vertical slice builds.
-pub const SLICE_NOTES: [&str; 2] = [
-    "_digital_garden/topic/index.md",
-    "_digital_garden/topic/note.md",
-];
 
 /// What a build wrote.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -168,9 +158,12 @@ fn build_documents(
     site: &Site,
     clock: &SiteClock,
 ) -> Result<ModeOutput, Vec<Diagnostic>> {
+    let slice = &config.slice;
+    let only_posts: Vec<&str> = slice.posts.iter().map(String::as_str).collect();
+    let only_notes: Vec<&str> = slice.notes.iter().map(String::as_str).collect();
     let pages: Vec<SourceDoc> = documents(site, Mode::Pages)
         .iter()
-        .filter(|doc| SLICE_PAGES.contains(&doc.id.as_str()))
+        .filter(|doc| slice.pages.iter().any(|page| page == doc.id.as_str()))
         .cloned()
         .collect();
     let posts = documents(site, Mode::Blog);
@@ -182,13 +175,13 @@ fn build_documents(
             posts
                 .iter()
                 .map(|doc| &doc.id)
-                .filter(|id| SLICE_POSTS.contains(&id.as_str())),
+                .filter(|id| only_posts.contains(&id.as_str())),
         )
         .chain(
             notes
                 .iter()
                 .map(|doc| &doc.id)
-                .filter(|id| SLICE_NOTES.contains(&id.as_str())),
+                .filter(|id| only_notes.contains(&id.as_str())),
         );
     let commits = LastCommits::read(root, dated).map_err(|e| vec![Diagnostic::site(e)])?;
 
@@ -196,8 +189,8 @@ fn build_documents(
     let mut problems = Vec::new();
     for built in [
         folia_pages::build(&pages, &commits, clock),
-        folia_blog::build(posts, &SLICE_POSTS, &commits, clock),
-        folia_garden::build(notes, &config.roots.garden, &SLICE_NOTES, &commits, clock),
+        folia_blog::build(posts, &only_posts, &commits, clock),
+        folia_garden::build(notes, &config.roots.garden, &only_notes, &commits, clock),
     ] {
         match built {
             Ok(built) => {

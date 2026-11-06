@@ -71,7 +71,7 @@ fn a_note_keeps_its_path_case_and_underscores() {
         &clock(),
     )
     .unwrap();
-    assert_eq!(outputs[0].route.url(), "/dg/tracking/chat_control");
+    assert_eq!(outputs[0].route.url(), "/dg/watch/topic_note");
 }
 
 #[test]
@@ -82,8 +82,8 @@ fn an_index_note_keeps_index_in_its_url() {
         &clock(),
     )
     .unwrap();
-    assert_eq!(outputs[0].route.url(), "/dg/coding/index");
-    assert_eq!(outputs[0].route.output_path(), "dg/coding/index.html");
+    assert_eq!(outputs[0].route.url(), "/dg/topic/index");
+    assert_eq!(outputs[0].route.output_path(), "dg/topic/index.html");
 }
 
 fn routed(docs: &[SourceDoc], clock: &SiteClock) -> Vec<String> {
@@ -297,7 +297,7 @@ fn a_note_dated_by_its_file_name_is_ordered_by_that_date_and_an_undated_one_last
     let built = build(&docs, ROOT, &only, &LastCommits::default(), &clock()).unwrap();
     assert_eq!(
         node_ids(&built),
-        ["/dg/quotes/2014-02-13-a", "/dg/b", "/dg/index"]
+        ["/dg/quotes/2014-02-13-a", "/dg/b", "/dg/home"]
     );
 }
 

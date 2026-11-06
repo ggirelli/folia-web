@@ -5,7 +5,7 @@
 # the container, with its log and record kept), a destination that exists or lies inside the site,
 # a site whose repository the image's git cannot read, and an environments file whose lockfile is
 # not the one it names. SITE is only read: by the host's git, to clone it, and by the images' git
-# (which cannot read filopoe's repository format, the last case but one); nothing is ever written
+# (which cannot read the site's repository format, the last case but one); nothing is ever written
 # into it. Needs Docker, and the network for the gems.
 #
 #   scripts/toolchain-negative.sh SITE ENVIRONMENTS WORKDIR

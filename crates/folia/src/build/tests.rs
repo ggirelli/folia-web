@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use super::*;
-use crate::config::{Author, Identity, Roots};
+use crate::config::{Author, Identity, Roots, Slice};
 
 /// A throwaway site, committed to its own repository on 2026-01-04 at 13:36:24 in Stockholm,
 /// with an output directory next to it; removed when dropped.
@@ -134,8 +134,19 @@ fn config() -> Config {
         )]
         .into_iter()
         .collect(),
+        slice: Slice {
+            pages: vec!["pages/profile.md".into()],
+            posts: vec![SLICE_POST.into()],
+            notes: vec![
+                "_digital_garden/topic/index.md".into(),
+                "_digital_garden/topic/note.md".into(),
+            ],
+        },
     }
 }
+
+/// The post the slice builds.
+const SLICE_POST: &str = "_posts/2021/2021-08-08-sample-post.md";
 
 #[test]
 fn the_slice_builds_its_page_its_stub_and_the_static_files() {
@@ -180,7 +191,7 @@ fn the_slice_builds_its_post_with_its_dates_contents_and_neighbours() {
         ],
     );
     fixture.write(
-        SLICE_POSTS[0],
+        SLICE_POST,
         "---\ntitle: Webmentions\nauthor: gg\ntoc:\n  enabled: true\n  position: left\n---\n### One\n\n#### Two\n",
     );
     fixture.write(
@@ -193,10 +204,10 @@ fn the_slice_builds_its_post_with_its_dates_contents_and_neighbours() {
     assert!(
         built
             .pages
-            .contains(&Route::html("/blog/2021/08/08/webmentions").unwrap())
+            .contains(&Route::html("/blog/2021/08/08/sample-post").unwrap())
     );
     assert_eq!(
-        fixture.read("blog/2021/08/08/webmentions.html"),
+        fixture.read("blog/2021/08/08/sample-post.html"),
         "Webmentions by GG, 08 Aug 2021 (2026-01-04T13:36:24+01:00): left #one \
          after B, before Later\
          <main><h3 id=\"one\">One</h3>\n\n<h4 id=\"two\">Two</h4>\n</main>"
@@ -204,7 +215,7 @@ fn the_slice_builds_its_post_with_its_dates_contents_and_neighbours() {
     let entry = built
         .entries
         .iter()
-        .find(|entry| entry.doc.as_str() == SLICE_POSTS[0])
+        .find(|entry| entry.doc.as_str() == SLICE_POST)
         .unwrap();
     assert_eq!(
         entry.published,
@@ -287,8 +298,8 @@ fn the_slice_writes_its_notes_and_the_graph_and_returns_the_warnings() {
         built.pages,
         [
             Route::html("/about").unwrap(),
-            Route::html("/dg/coding/index").unwrap(),
-            Route::html("/dg/coding/rust").unwrap(),
+            Route::html("/dg/topic/index").unwrap(),
+            Route::html("/dg/topic/note").unwrap(),
         ]
     );
     assert_eq!(
@@ -297,17 +308,17 @@ fn the_slice_writes_its_notes_and_the_graph_and_returns_the_warnings() {
     );
     assert_eq!(
         fixture.read("assets/json/notes_graph.json"),
-        r#"{"nodes":[{"id":"/dg/coding/index","path":"/dg/coding/index","label":"Coding"},{"id":"/dg/coding/rust","path":"/dg/coding/rust","label":"Rust"},{"id":"/dg/later","path":"/dg/later","label":"Later"}],"edges":[{"source":"/dg/coding/rust","target":"/dg/coding/index"},{"source":"/dg/coding/index","target":"/dg/coding/rust"},{"source":"/dg/later","target":"/dg/coding/rust"},{"source":"/dg/coding/index","target":"/dg/later"}]}"#
+        r#"{"nodes":[{"id":"/dg/topic/index","path":"/dg/topic/index","label":"Coding"},{"id":"/dg/topic/note","path":"/dg/topic/note","label":"Rust"},{"id":"/dg/later","path":"/dg/later","label":"Later"}],"edges":[{"source":"/dg/topic/note","target":"/dg/topic/index"},{"source":"/dg/topic/index","target":"/dg/topic/note"},{"source":"/dg/later","target":"/dg/topic/note"},{"source":"/dg/topic/index","target":"/dg/later"}]}"#
     );
     assert_eq!(
-        fixture.read("dg/coding/rust.html"),
+        fixture.read("dg/topic/note.html"),
         "Rust: Coding Later <main><p>See <span class=\"broken-link\">First setup: \
-         rust</span> and <a href=\"/dg/coding/index\" class=\"internal-link\">Coding</a>.</p>\n</main>"
+         rust</span> and <a href=\"/dg/topic/index\" class=\"internal-link\">Coding</a>.</p>\n</main>"
     );
     // The note dated after the build is linked to, but its page is not written.
     assert!(
         fixture
-            .read("dg/coding/index.html")
+            .read("dg/topic/index.html")
             .contains("href=\"/dg/later\"")
     );
     assert!(!fixture.dest().join("dg/later.html").exists());

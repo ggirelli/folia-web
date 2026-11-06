@@ -1,7 +1,7 @@
 //! The `folia` command: builds the site.
 //!
 //! ```sh
-//! cargo run -p folia -- build --site ../filopoe --config parity/filopoe.toml --dest ../folia-out
+//! cargo run -p folia -- build --site path/to/site --config path/to/folia.toml --dest path/to/out
 //! ```
 
 use std::path::PathBuf;

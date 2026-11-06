@@ -5,8 +5,8 @@
 #
 #   scripts/toolchain-compare.sh SITE ENVIRONMENTS TIME OUT [HOST_BASELINE]
 #
-# ENVIRONMENTS (parity/toolchain/environments.txt) has one line per environment: a name, a Docker
-# image pinned by digest, a lockfile and its SHA-256. TIME (`YYYY-MM-DDTHH:MM:SSZ`) pins Jekyll's
+# ENVIRONMENTS (a site-specific file) has one line per environment: a name, a Docker image
+# pinned by digest, a lockfile and its SHA-256. TIME (`YYYY-MM-DDTHH:MM:SSZ`) pins Jekyll's
 # time in every build. OUT must not exist. It receives:
 #
 #   source/          a fresh clone of SITE at its HEAD, every tracked file dated the commit's
@@ -18,8 +18,8 @@
 #   compare/<a>--<b>/<path>.regions.txt   where it differs, token by token (parity/diff_regions.py)
 #   toolchain-report.md    the environments, the lockfiles' differences and each comparison
 #
-# HOST_BASELINE, when given (`BASELINE-B`), is compared with the first environment too, for
-# information: it was built on the host, from SITE itself, unpinned.
+# HOST_BASELINE, when given (a host-built baseline), is compared with the first environment too,
+# for information: it was built on the host, from SITE itself, unpinned.
 #
 # A difference between environments is a finding, not a failure: the run exits 0 when every build
 # succeeded and every comparison ran, and 1 otherwise; nothing it wrote is ever removed.

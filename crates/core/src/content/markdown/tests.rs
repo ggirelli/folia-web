@@ -1,6 +1,6 @@
-//! Rendering tests on real snippets of the reference site. The expected HTML is what the site's
+//! Rendering tests on snippets shaped like real site content. The expected HTML is what the site's
 //! kramdown (2.5.2, GFM input, Jekyll's options) makes of the same snippet, with wiki-links
-//! replaced as the site's plugin replaces them; each test names where its snippet comes from.
+//! replaced as the site's plugin replaces them; each test names the classes its snippet covers.
 
 use super::*;
 
@@ -39,7 +39,7 @@ fn a_wiki_link_becomes_a_link_or_a_broken_link() {
     );
 }
 
-/// 1a: `_posts/2014/2014-04-14-third-sample.md`, `_digital_garden/sayings.md`
+/// 1a: from a post and a garden note
 #[test]
 fn heading_ids_keep_letters_of_any_script() {
     assert_eq!(
@@ -51,7 +51,7 @@ fn heading_ids_keep_letters_of_any_script() {
     );
 }
 
-/// 1a: `_posts/2022/2022-09-25-sample-week.md` (the repeat is added)
+/// 1a: from a post (the repeat is added)
 #[test]
 fn emoji_headings_lose_the_emoji_and_repeats_are_numbered() {
     assert_eq!(
@@ -63,7 +63,7 @@ fn emoji_headings_lose_the_emoji_and_repeats_are_numbered() {
     );
 }
 
-/// 1b, 1g: `_posts/2022/2022-09-03-sample-palette.md`
+/// 1b, 1g: from a post
 #[test]
 fn span_ials_set_attributes_on_links_and_emphasis() {
     assert_eq!(
@@ -75,7 +75,7 @@ fn span_ials_set_attributes_on_links_and_emphasis() {
     );
 }
 
-/// 1b, 1c: `pages/making-of.md`
+/// 1b, 1c: from a page
 #[test]
 fn a_span_ial_may_wrap_and_shortcut_references_resolve() {
     assert_eq!(
@@ -87,7 +87,7 @@ fn a_span_ial_may_wrap_and_shortcut_references_resolve() {
     );
 }
 
-/// 1b: `_digital_garden/web/index.md`, `_posts/2021/2021-08-08-sample-post.md`
+/// 1b: from a garden note and a post
 #[test]
 fn block_ials_apply_to_the_next_block_after_a_blank_line() {
     assert_eq!(
@@ -99,7 +99,7 @@ fn block_ials_apply_to_the_next_block_after_a_blank_line() {
     );
 }
 
-/// lists: `_digital_garden/tips/index.md`
+/// lists: from a garden note
 #[test]
 fn a_list_item_gets_a_paragraph_when_a_blank_line_follows() {
     assert_eq!(
@@ -111,7 +111,7 @@ fn a_list_item_gets_a_paragraph_when_a_blank_line_follows() {
     );
 }
 
-/// 1d: `_posts/2014/2014-01-29-second-sample.md`
+/// 1d: from a post
 #[test]
 fn quotes_and_dashes_become_typographic() {
     assert_eq!(
@@ -123,7 +123,7 @@ fn quotes_and_dashes_become_typographic() {
     );
 }
 
-/// 1g: `_posts/2013/2013-06-09-first-sample.md`
+/// 1g: from a post
 #[test]
 fn inline_html_without_a_span_content_model_keeps_its_source() {
     assert_eq!(
@@ -135,7 +135,7 @@ fn inline_html_without_a_span_content_model_keeps_its_source() {
     );
 }
 
-/// 1g: `_posts/2015/2015-12-13-sample-sketch.md`
+/// 1g: from another post
 #[test]
 fn a_line_starting_with_inline_html_is_a_paragraph() {
     assert_eq!(
@@ -147,7 +147,7 @@ fn a_line_starting_with_inline_html_is_a_paragraph() {
     );
 }
 
-/// `_digital_garden/shelf/quotes/2014-06-01-sample-quote.md`
+/// from a garden note
 #[test]
 fn a_single_tilde_is_text() {
     assert_eq!(
@@ -156,7 +156,7 @@ fn a_single_tilde_is_text() {
     );
 }
 
-/// 1h: `_digital_garden/home.md` (the broken link is added)
+/// 1h: from the garden's index (the broken link is added)
 #[test]
 fn a_wiki_link_with_an_ial_and_a_broken_one() {
     assert_eq!(
@@ -168,7 +168,7 @@ fn a_wiki_link_with_an_ial_and_a_broken_one() {
     );
 }
 
-/// 1f: `_posts/2022/2022-08-27-sample-setup.md`, shortened. Rouge's tokens differ; the
+/// 1f: from a post, shortened. Rouge's tokens differ; the
 /// markup around them and the code text do not.
 #[test]
 fn a_fenced_block_gets_rouges_markup_and_pygments_classes() {
@@ -190,7 +190,7 @@ fn a_fenced_block_gets_rouges_markup_and_pygments_classes() {
     assert_eq!(text, "sudo apt install ruby-full # Ruby\n");
 }
 
-/// 1f: `_posts/2020/2020-01-26-sample-code.md`, two lines, the second shortened. Rouge names every
+/// 1f: from a post, two lines, the second shortened. Rouge names every
 /// call `nf`, `self` a plain name and `in` an operator word.
 #[test]
 fn python_calls_and_operator_words_get_rouges_classes() {
@@ -213,7 +213,7 @@ fn python_calls_and_operator_words_get_rouges_classes() {
     );
 }
 
-/// 1f: `_digital_garden/topic/deep/tool.md`, the first two lines of its TOML block.
+/// 1f: from a garden note, the first two lines of its TOML block.
 #[test]
 fn a_toml_block_gets_rouges_classes() {
     assert_eq!(
@@ -228,7 +228,7 @@ fn a_toml_block_gets_rouges_classes() {
     );
 }
 
-/// 1f: `_posts/2021/2021-08-08-sample-post.md`, the first line of its first block. Rouge gives
+/// 1f: from a post, the first line of its first block. Rouge gives
 /// tag delimiters the tag's class, and `=` the attribute's.
 #[test]
 fn html_tag_delimiters_get_the_tag_class() {
@@ -247,7 +247,7 @@ fn html_tag_delimiters_get_the_tag_class() {
     );
 }
 
-/// 1e: `_posts/2017/2017-01-13-sample-tools.md`, shortened.
+/// 1e: from a post, shortened.
 #[test]
 fn an_excerpt_ends_at_the_marker() {
     let body = "I bought a new set of brush markers from TOUCH, the cool gray set.\n\n<!--more-->\n\nMore.\n";
@@ -259,9 +259,9 @@ fn an_excerpt_ends_at_the_marker() {
 
 // D-003: garden excerpts resolve wiki-links as the body does. Jekyll's excerpts kept them as
 // written; for a note without `<!--more-->` the excerpt is the body, so the expected HTML is
-// Jekyll's own body HTML for the note (the baseline's `content/` dump).
+// Jekyll's own body HTML for the note.
 
-/// 1e, 1h: `_digital_garden/shelf/reading-list.md`, whole. Jekyll's excerpt made each
+/// 1e, 1h: a garden note, whole. Jekyll's excerpt made each
 /// `[[Title|text]]` item a table row.
 #[test]
 fn a_garden_excerpt_resolves_wiki_links_as_the_body_does() {
@@ -271,7 +271,7 @@ fn a_garden_excerpt_resolves_wiki_links_as_the_body_does() {
     assert_eq!(to_html(body, Some(&Garden)), expected);
 }
 
-/// 1e, 1h: `_digital_garden/topic/sub/index.md`, whole: a broken link, a link whose text is
+/// 1e, 1h: a garden note, whole: a broken link, a link whose text is
 /// code, and a reference link.
 #[test]
 fn a_garden_excerpt_shows_no_wiki_link_markup() {
@@ -307,8 +307,7 @@ fn an_excerpt_keeps_wiki_links_in_code() {
 }
 
 /// 1b, 1d, 1e: excerpts without wiki-links are the same with or without a resolver, and as
-/// before D-003 (`_digital_garden/web/index.md`,
-/// `_posts/2014/2014-01-29-second-sample.md`, `_posts/2017/2017-01-13-sample-tools.md`).
+/// before D-003 (from a garden note and two posts).
 #[test]
 fn an_excerpt_without_wiki_links_does_not_change() {
     let cases = [

@@ -20,7 +20,7 @@ part passes; `final_acceptance` is true only when every criterion passes. The ru
 `evidence_eligible` only when the Folia tree was a clean commit before and after it and every
 build recorded that commit, clean, with a known site identity: what Q26 requires of a build. A
 run that is not eligible is diagnostic, whatever its verdict; one that is still has to pass
-`just evidence-provenance` once it is copied into `parity/evidence/`.
+`just evidence-provenance` once it is committed as evidence (Q26).
 
 Checks that plan v12 maps to none of §8's criteria (A2.8's links) are `other_checks`: mandatory,
 gating the run, counted toward no criterion. `reference` records the determinism reference
@@ -326,7 +326,7 @@ def ledger_final(run: Run):
 
 def record_written(run: Run):
     needed = [
-        "inputs/filopoe.toml",
+        "inputs/folia.toml",
         "lockfiles/Cargo.lock",
         "lockfiles/Gemfile.lock",
         "baseline/BASELINE.json",

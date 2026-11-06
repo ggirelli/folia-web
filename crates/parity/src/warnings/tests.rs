@@ -19,23 +19,6 @@ fn exact(id: &str, source: &str, message: &str) -> String {
     entry(id, source, &format!("message = {message:?}"))
 }
 
-/// The repository's own file parses, and expects exactly the Q3l warning `BASELINE-B` gives.
-#[test]
-fn the_shipped_file_expects_the_preserved_broken_wiki_link() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/expected-warnings.toml");
-    let expected = load(&path).unwrap();
-    let report = expected.judge(&[warning(RUST, BROKEN)]);
-    assert!(report.passed(), "{:?}", report.lines());
-    assert_eq!(report.entries.len(), 1);
-    assert!(report.entries[0].decision.starts_with("Q3l: preserve"));
-    assert_eq!(
-        report.lines(),
-        [
-            "ok: expected warnings: 1 warnings, 1 expected warnings; each warning is expected by one entry, and each entry matches one warning (see warnings.json)."
-        ]
-    );
-}
-
 #[test]
 fn an_unexpected_warning_fails_naming_it() {
     let expected = parse(&exact("W-001", RUST, BROKEN)).unwrap();

@@ -16,6 +16,9 @@ garden = "_digital_garden"
 url = "https://example.org"
 title = "Example"
 description = "A site."
+
+[slice]
+pages = ["pages/profile.md"]
 "#;
 
 /// The page template shows the build's year, so a page tells which time it was built as of.
@@ -731,7 +734,7 @@ fn a_submodule_clean_or_dirty_staged_or_committed_is_unknown() {
 fn a_repository_without_submodule_entries_is_identified_even_with_a_gitmodules_file() {
     let fixture = Fixture::new("no-submodule");
     assert_eq!(changes(&fixture.site()), Changes::Clean);
-    // A `.gitmodules` that names no gitlink (as `filopoe`'s does) is a file like any other.
+    // A `.gitmodules` that names no gitlink (as a site's may) is a file like any other.
     fixture.write(
         "site/.gitmodules",
         "[submodule \"gone\"]\n\tpath = gone\n\turl = https://example.org/gone.git\n",

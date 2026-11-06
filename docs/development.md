@@ -52,25 +52,20 @@ Each mode crate depends on `folia-core` only, never on another mode.
   Folia plans and writes, the checks' verdict on each output, and the ledger's coverage entries
   (plan v12, §5.4, A2.1). `links` checks that every internal `href` and `src` of the HTML Folia
   writes resolves to a planned output (A2.8), and `warnings` that every warning Folia gives is
-  one `parity/expected-warnings.toml` expects (A2.9). `determinism` builds the site twice through
+  one the site's expected-warnings file expects (A2.9). `determinism` builds the site twice through
   `builds`, as of one time, and compares the two builds byte for byte, and each with a recorded
   reference (A2.5).
 - **`parity/`**: tools that check Folia's output against the Jekyll site.
   - `jekyll/folia_dump.rb`: the passive Jekyll plugin that dumps Jekyll's intermediate results
     (see [parity baselines](baseline.md)). Nothing else may live in `jekyll/`, because Jekyll
     loads every Ruby file there.
-  - `filopoe.toml`: Folia's configuration for the reference site, until it moves to the site's
-    `_folia/folia.toml`.
-  - `codemods/deliquify.py`: the spike 3 rewrite of the Liquid in the reference site's
-    Markdown; `codemods/check_d001.py` checks that its only output change is D-001.
+  - `codemods/check_d001.py`: checks that the only output change of spike 3's rewrite of the
+    Liquid in the site's Markdown is D-001.
   - `check_dump.rb`: checks that a dump accounts for every built file and that no date fell
     back to a file mtime.
   - `same_entries.py`: compares the sitemap or the Lunr index entry by entry.
   - `diff_regions.py`: lists where two versions of a text file differ, token by token, for the
     toolchain comparison's report.
-  - `toolchain/`: the toolchain comparison's pinned inputs (A2.7): the environments (images by
-    digest, lockfiles by SHA-256), the lockfile `BASELINE-B` was built with, and production's, with
-    its provenance.
   - `site-exclusions.txt`: the paths in the site that are Folia's (`_folia/`, the content lint's
     workflow), which `scripts/baseline.sh` and the parity tools' checkout check both leave out,
     from this one list.
@@ -78,15 +73,6 @@ Each mode crate depends on `folia-core` only, never on another mode.
     lockfile, and judges each criterion of plan v12, §8, from what the checks left, into
     `accept.json` and `accept.md`.
   - `check_date_shift.py`: checks that two baselines differ only by changed last-modified dates.
-  - `expected-warnings.toml`: the warnings Folia is expected to give, each with its decision
-    (A2.9).
-  - `deviations.toml`: the deviation ledger; an entry may name the Markdown gates it explains
-    (`markdown_gates`). `spike3-expected.txt`: the differences spike 3 expects, each traced to a
-    ledger entry.
-  - `evidence/`: the reviewed outputs of each spike and rebaseline; from A2 on, each folder
-    also keeps its builds' records (`builds/<name>/build.json`, `sha256.txt`) and its Jekyll
-    baselines' (`baselines/<name>/BASELINE.json`, `sha256.txt`, `Gemfile.lock`), built from a
-    clean Folia commit and committed on their own, as its child (plan v12, §5.4).
 - **`scripts/`**: the scripts behind the `just` recipes.
   - `baseline.sh`: builds a baseline, recording its identities, tools and lockfile; with
     `--lockfile` and `--at`, from exactly that lockfile and as of a pinned time.
@@ -98,17 +84,6 @@ Each mode crate depends on `folia-core` only, never on another mode.
     an existing baseline is left as it is. `baseline-negative.sh` shows both scripts refuse
     changes outside the approved paths, on throwaway repositories with a stand-in for Jekyll
     (part of `just check`).
-  - `markdown-negative.sh`, `pages-negative.sh`: show the Markdown and page checks fail when
-    they should.
-  - `ledger-negative.sh`: shows a DOM ledger entry holds only for the baseline record and files
-    it was reviewed against, on copies of the site and baseline, that the templates hash pin
-    refuses changed templates, and that a build whose source identity is unknown fails.
-  - `warnings-negative.sh`: shows the expected-warnings check fails on an unexpected warning, a
-    stale or missing entry and an ambiguous one, and refuses malformed files.
-  - `links-negative.sh`: shows the link check fails on links to nothing planned, and on no other,
-    and on a `<base>` element, on copies of the site.
-  - `coverage-negative.sh`: shows the coverage report fails on waivers and removals no owner
-    approved, on a copy of the ledger.
   - `determinism-negative.sh`: shows the determinism check fails on a changed reference and
     refuses an existing or misplaced directory, a malformed reference and other templates.
   - `accept.sh`: the acceptance runner behind `just accept` (A2.10): runs every check built so far
@@ -116,7 +91,7 @@ Each mode crate depends on `folia-core` only, never on another mode.
     refuses and records a tree with changes as it should, from a throwaway copy with a stand-in
     for the checks (part of `just check`).
   - `determinism-reference.sh`: chooses the determinism reference, fail-closed: A0's for
-    `BASELINE-B`, another baseline's only when configured and declared its own (`just determinism`,
+    `FOLIA_A0_LABEL`, another baseline's only when configured and declared its own (`just determinism`,
     `just determinism-negative`, `just accept`).
   - `evidence-provenance.sh`: checks an evidence folder keeps its builds' and baselines' records,
     made from one clean Folia commit, and is (or can be) committed on its own, on that commit; it
@@ -126,13 +101,35 @@ Each mode crate depends on `folia-core` only, never on another mode.
   - `check-file-length.sh`: enforces the 1,000-line limit.
   - `slice-boundary.sh`: checks a step of the vertical slice keeps out of the other step's mode.
 - **`.github/`**: the CI and docs workflows, the pull request template, and the Dependabot
-  configuration, which keeps Dependabot out of `parity/evidence/` (its lockfiles are records).
+  configuration.
 - **`docs/`**: this documentation, and the versioned plans in `docs/planning/`.
 - **`assets/brand/`**: logos and the banner.
 
+## A site's private inputs
+
+Folia's repository holds the generator and the generic parity tools, never a site's data. What
+the parity recipes need of a site is kept by its owner, outside this repository, and named by the
+environment; a recipe that needs one refuses to run without it, and `just check` and CI need
+none:
+
+| Variable | What it names |
+|-|-|
+| `FOLIA_SITE`, `FOLIA_BASELINES` | the site's checkout, and where its baselines go |
+| `FOLIA_CONFIG` | Folia's configuration for the site (`folia.toml`), with the slice's documents |
+| `FOLIA_LEDGER` | the deviation ledger (`deviations.toml`) |
+| `FOLIA_EXPECTED_WARNINGS` | the warnings Folia is expected to give, each with its decision |
+| `FOLIA_TEMPLATES_SHA256` | the tree hash of the templates the pages check expects |
+| `FOLIA_A0_LABEL`, `FOLIA_A0_REFERENCE` | the reference baseline, and its recorded manifest |
+| `FOLIA_TOOLCHAINS`, `FOLIA_TOOLCHAIN_AT`, `FOLIA_TOOLCHAIN_DIR` | the toolchain comparison's environments, pinned time and lockfiles |
+
+The site's evidence (each spike's and step's reviewed outputs, the builds' and baselines'
+records), its spike 3 list, its own negative checks (which change copies of the real site and
+baseline) and the tests of its ledgers' contents are kept with them. The `.gitignore` keeps the
+reference site's from being added here again.
+
 ## Owner approvals in the ledger
 
-`parity/deviations.toml` declares, at its top, the `owners`: the only names an approval may give.
+The deviation ledger declares, at its top, the `owners`: the only names an approval may give.
 A waiver or removal (`check = "coverage"`) classifies an output only when it has
 `status = "accepted"`, a valid `accepted` date, a `decision` and a `rationale`, and an
 `accepted_by` that is exactly one of `owners`; a missing or empty `owners` approves nothing, and
@@ -140,9 +137,9 @@ proposed and withdrawn entries classify nothing (plan v12, §5.2 and §5.4).
 
 **What the tool checks is the recorded approval, not who wrote it.** It cannot tell whether the
 owner made or approved a ledger change: anyone who can edit the file can type an owner's name, or
-add a name to `owners`. A change to `owners` is visible, not prevented: a test pins the list
-(`the_ledger_names_its_owner_and_holds_no_waiver_or_removal` in `crates/parity/src/coverage/`),
-and every coverage report records it. So review must confirm, for each change to `owners` and
+add a name to `owners`. A change to `owners` is visible, not prevented: a test kept with the
+site's ledger pins the list, and every coverage report records it. So review must confirm, for
+each change to `owners` and
 each accepted entry, that the owner actually approved it; an implementer never writes an owner's
 name into `accepted_by` or `owners` on their own.
 
