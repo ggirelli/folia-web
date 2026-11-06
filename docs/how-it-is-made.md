@@ -8,12 +8,12 @@
 
 - **It is tested, not audited:** changes are checked with automated checks and against production
   builds of the Jekyll site, but nobody reviews the code line by line.
-- **Expect rough edges:** please [report bugs](https://github.com/ggirelli/folia/issues).
+- **Expect rough edges:** please [report bugs](https://github.com/ggirelli/folia-web/issues).
 - **It is built for one website** and makes no promise to suit yours.
 - **No warranty:** the software is provided "as is" under the MIT license.
 
 The full text is in
-[DISCLAIMER.md](https://github.com/ggirelli/folia/blob/main/DISCLAIMER.md).
+[DISCLAIMER.md](https://github.com/ggirelli/folia-web/blob/main/DISCLAIMER.md).
 
 ## The process
 

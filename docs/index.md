@@ -15,7 +15,7 @@ or Zola, although the code is public.
     - **Fully vibe coded:** an AI assistant (Claude) writes all of its code, tests, scripts and
       docs; see [how it is made](how-it-is-made.md).
     - **Free and open source** under the
-      [MIT license](https://github.com/ggirelli/folia/blob/main/LICENSE), provided as is,
+      [MIT license](https://github.com/ggirelli/folia-web/blob/main/LICENSE), provided as is,
       **without warranty**.
 
 ## Status

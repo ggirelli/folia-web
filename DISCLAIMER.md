@@ -12,7 +12,7 @@ hand.
   for output parity, against production builds of the Jekyll site Folia replaces. Nobody reviews
   the code line by line the way a careful human-written project would be.
 - **Expect rough edges.** Bugs that the checks did not reveal are likely. Please
-  [report them](https://github.com/ggirelli/folia/issues).
+  [report them](https://github.com/ggirelli/folia-web/issues).
 - **It is built for one website.** Folia publishes [ggirelli.info](https://ggirelli.info). It is
   not meant as a general-purpose static-site generator, and nothing promises it will suit yours.
 - **No warranty.** As the [license](LICENSE) says, the software is provided "as is".
