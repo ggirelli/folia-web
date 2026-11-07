@@ -601,3 +601,41 @@ fn the_assertions_and_the_ledger_kind_share_one_whitespace_operation() {
         assert_eq!(Some(assertion), ledger, "{jekyll:?} / {folia:?}");
     }
 }
+
+/// A page Jekyll writes without the site's frame, as the site's changelog: no canonical link and
+/// no title, but a document's `lang` (the parser gives one `html` element either way).
+const FRAMELESS: &str = "<h2 id=\"changelog\">CHANGELOG</h2>\n<p>Fixed things.</p>\n";
+
+#[test]
+fn canonical_and_title_do_not_apply_when_neither_page_has_one() {
+    let outcomes = check("changelog.html", PAGE_OUTPUT, FRAMELESS, FRAMELESS, SITE);
+    assert_eq!(checked(&outcomes), ["lang"]);
+    assert_eq!(failed(&outcomes), [] as [&str; 0]);
+}
+
+#[test]
+fn canonical_and_title_on_one_side_only_fail() {
+    let outcomes = check("changelog.html", PAGE_OUTPUT, FRAMELESS, PAGE, SITE);
+    assert!(failed(&outcomes).contains(&"canonical"));
+    assert!(failed(&outcomes).contains(&"title"));
+    let outcomes = check("about.html", PAGE_OUTPUT, PAGE, FRAMELESS, SITE);
+    assert!(failed(&outcomes).contains(&"canonical"));
+    assert!(failed(&outcomes).contains(&"title"));
+}
+
+#[test]
+fn a_framed_page_still_needs_its_canonical_and_title() {
+    let outcomes = check("about.html", PAGE_OUTPUT, PAGE, PAGE, SITE);
+    assert!(checked(&outcomes).contains(&"canonical"));
+    assert!(checked(&outcomes).contains(&"title"));
+    let without = changed(
+        PAGE,
+        "<link rel=\"canonical\" href=\"https://example.org/about\" />",
+        "",
+    );
+    let without = changed(&without, "<title>", "<meta name=\"x\" content=\"");
+    let without = changed(&without, "</title>", "\">");
+    let outcomes = check("about.html", PAGE_OUTPUT, PAGE, &without, SITE);
+    assert!(failed(&outcomes).contains(&"canonical"));
+    assert!(failed(&outcomes).contains(&"title"));
+}
