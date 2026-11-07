@@ -144,6 +144,9 @@ pub struct Author {
     pub web: String,
     /// A line about them.
     pub description: String,
+    /// Their Bluesky DID, which the interactions crawler needs (`bluesky-did`), if any.
+    #[serde(default)]
+    pub bluesky_did: Option<String>,
 }
 
 /// Why the configuration cannot be loaded.

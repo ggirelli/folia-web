@@ -19,11 +19,14 @@
 //! |-|-|
 //! | `url` | the page's URL (`/about`) |
 //! | `title` | its front matter `title` |
-//! | `layout` | its front matter `layout` |
+//! | `layout` | its front matter `layout`, or none: the page is then written as its content alone (`NO_LAYOUT_TEMPLATE`), as Jekyll writes it |
+//! | `hide_title` | whether its front matter `hide_title` hides its title, `false` by default |
 //! | `modified` | its last commit's time in the site's time zone (`2026-01-04T13:36:24+01:00`), or none |
 //! | `toc` | its table of contents, `{placement, title, entries}`, or none (`folia_core`'s `Toc`) |
 //! | `cover` | its cover, `{path, position, show, unsplash}` (`folia_core`'s `Cover`) |
 //! | `hide_website_junk` | the parts of the frame it hides, each `true` or `false` |
+//! | `title_icon` | the classes of the icon its front matter `title_icon` puts before its title, or none |
+//! | `corner_backlink` | `{show, url, icon_class}`: the link back in its corner, its front matter over the site's defaults (not shown, to `/`) |
 //! | `error_type` | its front matter `error-type`, the error an error page shows (`404 Not Found`), or none |
 //! | `date`, `description`, `author`, `previous`, `next` | none: a page has no date, excerpt, author or neighbours |
 //! | `categories`, `tags`, `syndications` | empty |
@@ -36,13 +39,13 @@
 //!
 //! | Front matter | Outcome |
 //! |-|-|
-//! | `layout`, `title`, `error-type`, `permalink`, `redirect_from`, `published`, `hide_website_junk` | built |
+//! | `layout` (or none), `title`, `hide_title`, `title_icon`, `corner_backlink`, `error-type`, `permalink`, `redirect_from`, `published`, `hide_website_junk` | built |
 //! | an HTML page's body, without Liquid | built: written as it is, as Jekyll converts only Markdown |
 //! | Liquid in an HTML page; a table of contents on one | refused as not built yet |
 //! | `cover` without a picture, shown behind the page, or after the title | built |
 //! | `toc` disabled, or placed on the left | built |
 //! | `comments`, `narrow_post` set to `false` | built: the site's default, which changes nothing |
-//! | `comments`, `narrow_post` set to `true`; `title_icon`, `corner_backlink`, `hide_title`, `last_modified_at`; a table of contents on the right or at the top | refused as not built yet |
+//! | `comments`, `narrow_post` set to `true`; `last_modified_at`; a table of contents on the right or at the top | refused as not built yet |
 //! | a value those keys cannot take (`comments: maybe`, a cover position or TOC placement Jekyll's templates do not know) | refused as invalid |
 //! | any other key | refused as unknown, which may be a typo (`narrow-post`) |
 
@@ -51,13 +54,16 @@ use folia_core::content::{
     Cover, Diagnostic, LastCommits, Route, SiteClock, SourceDoc, Toc, TocPlacement, cover,
     hide_website_junk, modified, table_of_contents,
 };
-use folia_core::publish::{EntrySummary, ModeOutput, PageSpec, PlannedOutput};
+use folia_core::publish::{EntrySummary, ModeOutput, NO_LAYOUT_TEMPLATE, PageSpec, PlannedOutput};
 use serde_json::{Value, json};
 
 /// The front matter keys a page may have, besides the switches.
-const KEYS: [&str; 9] = [
+const KEYS: [&str; 12] = [
     "layout",
     "title",
+    "hide_title",
+    "title_icon",
+    "corner_backlink",
     "error-type",
     "permalink",
     "redirect_from",
@@ -70,9 +76,6 @@ const KEYS: [&str; 9] = [
 /// Switches the page template does not have: a page may only leave them off, as the site's
 /// default does.
 const SWITCHES: [&str; 2] = ["comments", "narrow_post"];
-
-/// Keys the site's pages use whose effect the page template does not have yet.
-const NOT_BUILT: [&str; 3] = ["title_icon", "corner_backlink", "hide_title"];
 
 /// Source extensions that a converter renders as HTML.
 const MARKDOWN_EXTENSIONS: [&str; 5] = [".markdown", ".mkdown", ".mkdn", ".mkd", ".md"];
@@ -153,7 +156,7 @@ fn build_page(
             .map_err(|e| problem(&e))?
             .ok_or_else(|| problem(&format!("a page without a {key} is not built yet")))
     };
-    let layout = required("layout")?;
+    let layout = doc.front.string("layout").map_err(|e| problem(&e))?;
     let title = required("title")?;
     if doc.front.get("last_modified_at").is_some() {
         return Err(problem(
@@ -171,6 +174,13 @@ fn build_page(
     let error_type = doc.front.string("error-type").map_err(|e| problem(&e))?;
     let cover = cover(doc)?;
     unshown(&cover, toc.as_ref()).map_err(|message| problem(&message))?;
+    let hide_title = match doc.front.json("hide_title") {
+        None => false,
+        Some(Value::Bool(hide)) => hide,
+        Some(_) => return Err(problem(&"hide_title should be true or false")),
+    };
+    let title_icon = doc.front.string("title_icon").map_err(|e| problem(&e))?;
+    let corner_backlink = corner_backlink(doc).map_err(|message| problem(&message))?;
 
     let context = json!({
         "url": planned.route.url(),
@@ -182,6 +192,9 @@ fn build_page(
         "hide_website_junk": hide_website_junk(doc),
         "narrow_post": false,
         "error_type": error_type,
+        "hide_title": hide_title,
+        "title_icon": title_icon,
+        "corner_backlink": corner_backlink,
         "date": null,
         "description": null,
         "author": null,
@@ -193,7 +206,10 @@ fn build_page(
     });
     let page = PageSpec {
         route: planned.route.clone(),
-        template: format!("{layout}.html"),
+        template: layout.as_ref().map_or_else(
+            || NO_LAYOUT_TEMPLATE.to_owned(),
+            |layout| format!("{layout}.html"),
+        ),
         source: Some(doc.id.clone()),
         context,
     };
@@ -220,9 +236,6 @@ fn unknown_or_unbuilt(doc: &SourceDoc) -> Result<(), String> {
         if KEYS.contains(&key) || key == "last_modified_at" {
             continue;
         }
-        if NOT_BUILT.contains(&key) {
-            return Err(format!("{key} is not built yet on pages"));
-        }
         if !SWITCHES.contains(&key) {
             return Err(format!(
                 "the front matter key {key} is not one pages have (a typo?)"
@@ -235,6 +248,34 @@ fn unknown_or_unbuilt(doc: &SourceDoc) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// The link back a page shows in its corner: its front matter `corner_backlink`, each key over
+/// the site's default for pages (`show: false`, `url: "/"`, `icon_class: "fas
+/// fa-angle-double-left"`), as Jekyll merged them.
+fn corner_backlink(doc: &SourceDoc) -> Result<Value, String> {
+    let mut backlink = json!({"show": false, "url": "/", "icon_class": "fas fa-angle-double-left"});
+    match doc.front.json("corner_backlink") {
+        None | Some(Value::Null) => {}
+        Some(Value::Object(set)) => {
+            for (key, value) in set {
+                match (key.as_str(), &value) {
+                    ("show", Value::Bool(_)) | ("url" | "icon_class", Value::String(_)) => {
+                        backlink[key.as_str()] = value;
+                    }
+                    ("show", _) => {
+                        return Err("corner_backlink: show should be true or false".to_owned());
+                    }
+                    ("url" | "icon_class", _) => {
+                        return Err(format!("corner_backlink: {key} should be text"));
+                    }
+                    _ => return Err(format!("corner_backlink: the key {key} is not built yet")),
+                }
+            }
+        }
+        Some(_) => return Err("corner_backlink should be a mapping".to_owned()),
+    }
+    Ok(backlink)
 }
 
 /// Why the page template cannot show `cover` or `toc`, if it cannot: the template shows a
@@ -354,6 +395,36 @@ mod tests {
     }
 
     #[test]
+    fn a_title_icon_is_passed_on_and_none_by_default() {
+        let built = |front| {
+            let doc = page("pages/p.md", front);
+            build(&[doc], &LastCommits::default(), &clock())
+                .unwrap()
+                .pages[0]
+                .context["title_icon"]
+                .clone()
+        };
+        assert_eq!(
+            built("layout: page\ntitle: T\npermalink: /p\ntitle_icon: fas fa-code"),
+            "fas fa-code"
+        );
+        assert_eq!(built("layout: page\ntitle: T\npermalink: /p"), Value::Null);
+    }
+
+    #[test]
+    fn a_corner_backlink_is_the_front_matter_over_the_defaults() {
+        let doc = page(
+            "me/p.md",
+            "layout: page\ntitle: T\npermalink: /me/p\ncorner_backlink:\n  show: true",
+        );
+        let output = build(&[doc], &LastCommits::default(), &clock()).unwrap();
+        assert_eq!(
+            output.pages[0].context["corner_backlink"],
+            json!({"show": true, "url": "/", "icon_class": "fas fa-angle-double-left"})
+        );
+    }
+
+    #[test]
     fn a_page_is_built_with_the_template_its_layout_names() {
         let output = build(&[about()], &LastCommits::default(), &clock()).unwrap();
         let [entry] = &output.entries[..] else {
@@ -381,6 +452,9 @@ mod tests {
                 },
                 "narrow_post": false,
                 "error_type": null,
+                "hide_title": false,
+                "title_icon": null,
+                "corner_backlink": {"show": false, "url": "/", "icon_class": "fas fa-angle-double-left"},
                 "date": null, "description": null, "author": null, "categories": [], "tags": [],
                 "syndications": [], "previous": null, "next": null,
             })
@@ -408,10 +482,21 @@ mod tests {
     }
 
     #[test]
-    fn a_page_without_a_layout_or_title_or_markdown_is_not_built_yet() {
+    fn a_page_without_a_layout_is_written_as_its_content() {
+        let doc = page(
+            "pages/log.md",
+            "title: Log\npermalink: /log\nhide_title: true",
+        );
+        let output = build(&[doc], &LastCommits::default(), &clock()).unwrap();
+        assert_eq!(output.pages[0].template, NO_LAYOUT_TEMPLATE);
+        assert_eq!(output.pages[0].context["layout"], Value::Null);
+        assert_eq!(output.pages[0].context["hide_title"], true);
+    }
+
+    #[test]
+    fn a_page_without_a_title_or_markdown_is_not_built_yet() {
         let problems = build(
             &[
-                page("pages/a.md", "title: A"),
                 page("pages/b.md", "layout: page"),
                 SourceDoc {
                     body: "{% for post in site.posts %}{% endfor %}".to_owned(),
@@ -430,7 +515,6 @@ mod tests {
         assert_eq!(
             messages,
             [
-                "pages/a.md: a page without a layout is not built yet",
                 "pages/b.md: a page without a title is not built yet",
                 "blog/c.html: Liquid in an HTML page is not built yet",
                 "pages/d.md: last_modified_at is not read on pages yet; the last commit dates them",
@@ -495,14 +579,14 @@ mod tests {
     fn front_matter_the_page_template_cannot_show_is_refused_with_its_key() {
         let cases = [
             (
-                "title_icon: fas fa-code",
-                "title_icon is not built yet on pages",
+                "title_icon: [fas]",
+                "front matter key \"title_icon\" should be a single value",
             ),
             (
-                "corner_backlink:\n  show: true",
-                "corner_backlink is not built yet on pages",
+                "corner_backlink:\n  label: back",
+                "corner_backlink: the key label is not built yet",
             ),
-            ("hide_title: true", "hide_title is not built yet on pages"),
+            ("hide_title: maybe", "hide_title should be true or false"),
             ("comments: true", "comments: true is not built yet"),
             ("narrow_post: maybe", "narrow_post should be true or false"),
             (

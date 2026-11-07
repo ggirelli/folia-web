@@ -21,6 +21,7 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use folia_core::content::Diagnostic;
+use folia_core::publish::NO_LAYOUT_TEMPLATE;
 use folia_core::publish::PageSpec;
 use minijinja::syntax::SyntaxConfig;
 use minijinja::value::Serde;
@@ -49,6 +50,9 @@ impl Renderer {
         }
         let dir = dir.to_path_buf();
         env.set_loader(move |name| load(&dir, name));
+        // A constant, valid template: adding it cannot fail; were it to, the pages without a
+        // layout would fail to render, naming it.
+        let _ = env.add_template(NO_LAYOUT_TEMPLATE, "{{ content | safe }}");
         env.add_filter("date", date);
         env.add_filter("head_title", head_title);
         env.add_filter("heading_title", heading_title);

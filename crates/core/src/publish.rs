@@ -88,6 +88,10 @@ pub struct EntrySummary {
     pub redirect_from: Vec<Route>,
 }
 
+/// The template of a page without a layout: the page is written as its content alone, as Jekyll
+/// writes such a page. The renderer provides it; no site template can take the name.
+pub const NO_LAYOUT_TEMPLATE: &str = "folia:no-layout";
+
 /// A page to render with a template.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PageSpec {
