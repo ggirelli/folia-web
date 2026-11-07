@@ -263,6 +263,10 @@ fn without_a_slice_every_document_is_built_and_those_folia_cannot_build_are_skip
                 "---\nlayout: page\ntitle: Raw\npermalink: /raw\n---\n<p>raw</p>\n",
             ),
             (
+                "pages/liquid.html",
+                "---\nlayout: page\ntitle: Liquid\npermalink: /liquid\n---\n{{ site.title }}\n",
+            ),
+            (
                 "pages/fancy.md",
                 "---\nlayout: fancy\ntitle: Fancy\npermalink: /fancy\nredirect_from:\n  - /old-fancy\n---\nFancy\n",
             ),
@@ -271,7 +275,11 @@ fn without_a_slice_every_document_is_built_and_those_folia_cannot_build_are_skip
     let built = fixture.build_with(&whole_site()).unwrap();
     assert_eq!(
         built.pages,
-        [Route::html("/about").unwrap(), Route::html("/now").unwrap()]
+        [
+            Route::html("/about").unwrap(),
+            Route::html("/now").unwrap(),
+            Route::html("/raw").unwrap()
+        ]
     );
     assert_eq!(built.stubs, [Route::html("/blog/about").unwrap()]);
     assert!(
@@ -281,7 +289,7 @@ fn without_a_slice_every_document_is_built_and_those_folia_cannot_build_are_skip
     );
     let skipped: Vec<String> = built.skipped.iter().map(ToString::to_string).collect();
     assert!(
-        skipped.contains(&"pages/raw.html: only Markdown pages are built yet".to_owned()),
+        skipped.contains(&"pages/liquid.html: Liquid in an HTML page is not built yet".to_owned()),
         "{skipped:#?}"
     );
     assert!(
