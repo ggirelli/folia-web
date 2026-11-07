@@ -230,13 +230,31 @@ fn a_note_shows_its_dates_and_its_description_keeps_wiki_links_as_written() {
     let docs = [with_body(
         "_digital_garden/topic/index.md",
         "title: Tips\ndate: 2023-01-30 12:20",
-        "Tips for [[Rust|rustaceans]].\n",
+        "Tips for [[Rust]],\nsee [[Rust]].\n",
     )];
     let page = &build_all(&docs).unwrap().pages[0];
     assert_eq!(page.template, "garden_post.html");
     assert_eq!(page.context["date"], "2023-01-30T12:20:00+01:00");
     assert_eq!(page.context["modified"], "2023-01-30T12:20:00+01:00");
-    assert_eq!(page.context["description"], "Tips for [[Rust|rustaceans]].");
+    assert_eq!(
+        page.context["description"],
+        "Tips for [[Rust]],see [[Rust]]."
+    );
+    assert_eq!(page.context["garden_map"], true);
+}
+
+#[test]
+fn a_description_shows_a_line_with_an_aliased_wiki_link_as_kramdown_s_table_row() {
+    let docs = [with_body(
+        "_digital_garden/topic/index.md",
+        "title: Tips\ndate: 2023-01-30 12:20",
+        "Tips for [[Rust|rustaceans]].\n",
+    )];
+    let page = &build_all(&docs).unwrap().pages[0];
+    assert_eq!(
+        page.context["description"],
+        "            Tips for [[Rust      rustaceans]].      "
+    );
     assert_eq!(page.context["garden_map"], true);
 }
 
