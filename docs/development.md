@@ -125,6 +125,14 @@ settings are its configuration's `[sass]` table: `dir`, the directory imports ar
 (default `_sass`), and `style`, `expanded` (default) or `compressed`. Stylesheets are compiled in
 whole-site builds only, so a slice's output is unchanged.
 
+**Front matter Folia does not know is refused**, because a misspelt key would otherwise leave a
+page silently different from what its author meant. Jekyll ignores such keys, so a published site
+can have some. The exceptions are listed, one exact key each, with why, in
+`folia_pages::IGNORED_TYPOS`. So far there is one, owner decision Q3h: `narrow-post` (for
+`narrow_post`), set to `true` or `false`, on pages only, is accepted and changes nothing. No
+template reads it, so Jekyll published the page at its usual width, and Folia builds it the same
+way. Posts and other modes still refuse it, and every other unknown key is still refused.
+
 ## A site's private inputs
 
 Folia's repository holds the generator and the generic parity tools, never a site's data. What
