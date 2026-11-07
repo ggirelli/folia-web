@@ -24,7 +24,8 @@ use folia_core::content::Diagnostic;
 use folia_core::publish::PageSpec;
 use minijinja::syntax::SyntaxConfig;
 use minijinja::value::Serde;
-use minijinja::{Environment, Error, ErrorKind, UndefinedBehavior, context};
+use minijinja::value::Value;
+use minijinja::{Environment, Error, ErrorKind, HtmlEscape, UndefinedBehavior, context};
 
 /// Renders pages with the templates of one directory.
 pub struct Renderer {
@@ -49,6 +50,9 @@ impl Renderer {
         let dir = dir.to_path_buf();
         env.set_loader(move |name| load(&dir, name));
         env.add_filter("date", date);
+        env.add_filter("head_title", head_title);
+        env.add_filter("heading_title", heading_title);
+        env.add_filter("title_markup", title_markup);
         Self { env }
     }
 
@@ -186,6 +190,35 @@ fn date(value: &str, format: &str) -> Result<String, Error> {
         .and_then(|time| time.to_zoned())
         .map_err(|e| invalid(&e))?;
     jiff::fmt::strtime::format(format, &zoned).map_err(|e| invalid(&e))
+}
+
+/// The `head_title` filter: a title as the site's head shows it, each `<br />` (or `<br/>`) a
+/// space, as its Liquid did (`replace: "<br/>", " " | replace: "<br />", " "`; plan v11, Q18).
+fn head_title(title: &str) -> String {
+    title.replace("<br/>", " ").replace("<br />", " ")
+}
+
+/// The `title_markup` filter: a title as the site's Liquid wrote it into a page, unescaped, so
+/// that a `<br />` in it is a line break. Everything else is escaped as autoescaping escapes it,
+/// so a title without one is written as before (plan v11, Q18).
+fn title_markup(title: &str) -> Value {
+    Value::from_safe_string(with_breaks(title))
+}
+
+/// The `heading_title` filter: a title as the site's headings show it, with [`title_markup`]'s
+/// line breaks, and each double space a line break too (`replace: "  ", "<br />"`; plan v11,
+/// Q18).
+fn heading_title(title: &str) -> Value {
+    Value::from_safe_string(with_breaks(title).replace("  ", "<br />"))
+}
+
+/// `title` escaped as autoescaping escapes it, its `<br />` and `<br/>` tags kept as tags.
+fn with_breaks(title: &str) -> String {
+    let mut escaped = HtmlEscape(title).to_string();
+    for tag in ["<br />", "<br/>"] {
+        escaped = escaped.replace(&HtmlEscape(tag).to_string(), tag);
+    }
+    escaped
 }
 
 #[cfg(test)]
