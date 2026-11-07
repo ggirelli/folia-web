@@ -27,7 +27,7 @@ whole pipeline: `folia build` renders it with MiniJinja templates kept in the si
 redirect stub, and copies the static files, and the result matches Jekyll's. The second, a blog post
 with its table of contents, dates and highlighted code, and the third, two garden notes with their
 backlinks and the note graph, match Jekyll's too. The templates they use are committed in the site
-on a branch, not yet merged. Most of the site is still to be built; [plan v12](planning/plan.v12.md)
+on a branch, not yet merged. Most of the site is still to be built; [plan v13](planning/plan.v13.md)
 is the plan for the rest of the migration. Nothing is migrated: the Jekyll site is still the one
 published. Besides that, the parity harness records production builds of the Jekyll site with
 Jekyll's own intermediate results; Folia's discovery and routes reproduce every output path of the
