@@ -133,6 +133,14 @@ can have some. The exceptions are listed, one exact key each, with why, in
 template reads it, so Jekyll published the page at its usual width, and Folia builds it the same
 way. Posts and other modes still refuse it, and every other unknown key is still refused.
 
+**Authors** are the configuration's `[authors.<key>]` tables (plan v11, Q16b), typed in
+`folia::config::Author`, with the fields listed in its module: names, picture, pages, the
+author page's backgrounds (`[[authors.<key>.covers]]`) and an account on each service the site
+links to. An unset field is left out; an empty one is refused. Templates see every field as
+`site.authors.<key>`, and `covers_json`, the backgrounds as the author page's script reads them,
+serialized by Folia as Jekyll's `jsonify` wrote them. A page names its author with its front
+matter `author`; one that names an author the configuration does not have is not rendered.
+
 ## A site's private inputs
 
 Folia's repository holds the generator and the generic parity tools, never a site's data. What

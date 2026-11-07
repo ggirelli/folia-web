@@ -9,7 +9,7 @@
 //! 3. Assemble the site index templates show: the site's identity and authors, the build's year,
 //!    and the blog's categories.
 //! 4. Check every page's template, then render each page. Without a slice, a page whose template
-//!    is missing or fails is skipped too.
+//!    is missing or fails, or whose `author` is not one of the configuration's, is skipped too.
 //! 5. Add a redirect stub for each `redirect_from` URL of a page rendered, the files the modes
 //!    generated (the note graph), and copy every static file.
 //! 6. Write it all to the destination (`output`).
@@ -79,6 +79,7 @@ pub fn build(
 
     let renderer = Renderer::new(&root.join(&config.templates_dir));
     let renderable = check_templates(&renderer, &pages.pages, strict, &mut built.skipped)?;
+    let renderable = check_authors(renderable, config, strict, &mut built.skipped)?;
     let mut outputs = BTreeMap::new();
     let mut problems = Vec::new();
     let mut shown = BTreeSet::new();
@@ -335,6 +336,44 @@ fn check_templates<'a>(
     Ok(renderable)
 }
 
+/// The pages whose `author`, if they have one, is one of the configuration's. Unless `strict`,
+/// the others are skipped, each saying so; when `strict`, any fails the build.
+fn check_authors<'a>(
+    pages: Vec<&'a PageSpec>,
+    config: &Config,
+    strict: bool,
+    skipped: &mut Vec<Diagnostic>,
+) -> Result<Vec<&'a PageSpec>, Vec<Diagnostic>> {
+    let (known, unknown): (Vec<_>, Vec<_>) = pages
+        .into_iter()
+        .map(|page| (page, unknown_author(page, config)))
+        .partition(|(_, problem)| problem.is_none());
+    let problems = unknown.into_iter().filter_map(|(_, problem)| problem);
+    if strict {
+        let problems: Vec<_> = problems.collect();
+        if !problems.is_empty() {
+            return Err(problems);
+        }
+    } else {
+        skipped.extend(problems);
+    }
+    Ok(known.into_iter().map(|(page, _)| page).collect())
+}
+
+/// Why `page` cannot be rendered, when its `author` is not one of the site's: its template
+/// would show nothing of them.
+fn unknown_author(page: &PageSpec, config: &Config) -> Option<Diagnostic> {
+    let author = page.context.get("author")?.as_str()?;
+    (!config.authors.contains_key(author)).then(|| {
+        skipped_page(
+            page,
+            Diagnostic::site(format!(
+                "the author {author} is not one of the configuration's authors"
+            )),
+        )
+    })
+}
+
 /// A page that is not built, because of `problem`, named by its source.
 fn skipped_page(page: &PageSpec, problem: Diagnostic) -> Diagnostic {
     match &page.source {
@@ -414,15 +453,11 @@ fn site_index(
         .authors
         .iter()
         .map(|(key, author)| {
-            let author = json!({
-                "name": author.name,
-                "display_name": author.display_name,
-                "avatar": author.avatar,
-                "web": author.web,
-                "description": author.description,
-                "bluesky_did": author.bluesky_did,
-            });
-            (key.clone(), author)
+            // Every field, by its Rust name, and the covers as the author page's script reads
+            // them, serialized here rather than by a template.
+            let mut shown = serde_json::to_value(author).expect("an author is strings");
+            shown["covers_json"] = author.covers_json().into();
+            (key.clone(), shown)
         })
         .collect();
     Ok(json!({

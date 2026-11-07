@@ -6,6 +6,10 @@ use std::path::Path;
 
 use serde::Deserialize;
 
+mod author;
+
+pub use author::{Author, AuthorCover};
+
 /// A site's configuration.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -130,25 +134,6 @@ pub struct Identity {
     pub description: String,
 }
 
-/// An author, as pages show them.
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct Author {
-    /// Their name (`Gabriele Girelli`).
-    pub name: String,
-    /// The name shown in a post's author box.
-    pub display_name: String,
-    /// Their picture, relative to the site root.
-    pub avatar: String,
-    /// Their web page.
-    pub web: String,
-    /// A line about them.
-    pub description: String,
-    /// Their Bluesky DID, which the interactions crawler needs (`bluesky-did`), if any.
-    #[serde(default)]
-    pub bluesky_did: Option<String>,
-}
-
 /// Why the configuration cannot be loaded.
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
@@ -158,6 +143,11 @@ pub enum ConfigError {
     /// The file is not a valid configuration.
     #[error("invalid configuration {0}: {1}")]
     Toml(String, toml::de::Error),
+    /// An author has a field set to nothing: leave its key out instead.
+    #[error(
+        "invalid configuration {0}: the author {1} has {2} set to an empty value; leave it out instead"
+    )]
+    EmptyAuthorField(String, String, String),
 }
 
 impl Config {
@@ -165,11 +155,22 @@ impl Config {
     ///
     /// # Errors
     ///
-    /// Fails when the file cannot be read, or is not a valid configuration.
+    /// Fails when the file cannot be read, or is not a valid configuration: one an author of
+    /// which has a field set to an empty value is not.
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
         let name = path.display().to_string();
         let text = std::fs::read_to_string(path).map_err(|e| ConfigError::Io(name.clone(), e))?;
-        toml::from_str(&text).map_err(|e| ConfigError::Toml(name, e))
+        let config: Self = toml::from_str(&text).map_err(|e| ConfigError::Toml(name.clone(), e))?;
+        for (key, author) in &config.authors {
+            if let Some(field) = author.empty_fields().first() {
+                return Err(ConfigError::EmptyAuthorField(
+                    name,
+                    key.clone(),
+                    (*field).to_owned(),
+                ));
+            }
+        }
+        Ok(config)
     }
 }
 
@@ -229,6 +230,28 @@ mod tests {
             .is_err(),
             "presentation defaults are Rust's, not the configuration's"
         );
+    }
+
+    #[test]
+    fn an_author_field_set_to_nothing_is_refused_on_load() {
+        let dir = std::env::temp_dir().join(format!("folia-config-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("folia.toml");
+        let base = "time-zone = \"UTC\"\n[roots]\nblog = \"b\"\nmicro = \"m\"\ngarden = \"g\"\n[site]\nurl = \"u\"\ntitle = \"t\"\ndescription = \"d\"\n[authors.gg]\nname = \"G\"\ndisplay-name = \"GG\"\navatar = \"a.webp\"\nweb = \"/\"\ndescription = \"x\"\n";
+        std::fs::write(&path, format!("{base}github = \"gh\"\n")).unwrap();
+        assert_eq!(
+            Config::load(&path).unwrap().authors["gg"].github.as_deref(),
+            Some("gh")
+        );
+        std::fs::write(&path, format!("{base}facebook = \"\"\n")).unwrap();
+        let error = Config::load(&path).unwrap_err().to_string();
+        assert!(
+            error.ends_with(
+                "the author gg has facebook set to an empty value; leave it out instead"
+            ),
+            "{error}"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
