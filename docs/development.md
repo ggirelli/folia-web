@@ -1,7 +1,7 @@
 # Development
 
 The conventions are in
-[CONTRIBUTING.md](https://github.com/ggirelli/folia/blob/main/CONTRIBUTING.md). Run `just` to list
+[CONTRIBUTING.md](https://github.com/ggirelli/folia-web/blob/main/CONTRIBUTING.md). Run `just` to list
 the recipes and `just check` before every commit.
 
 ## How the repository is organized
@@ -147,7 +147,7 @@ name into `accepted_by` or `owners` on their own.
 
 `just check` runs every check; CI runs the same recipes, in three jobs of `.github/workflows/ci.yml`
 and one of `.github/workflows/docs.yml`, which also publishes the docs to
-[GitHub Pages](https://ggirelli.github.io/folia/) from `main`:
+[GitHub Pages](https://ggirelli.github.io/folia-web/) from `main`:
 
 | Job | Recipes |
 |-|-|

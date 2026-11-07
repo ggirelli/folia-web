@@ -1,8 +1,8 @@
 site_name: Folia
 site_description: The static-site generator behind ggirelli.info.
-site_url: https://ggirelli.github.io/folia/
-repo_url: https://github.com/ggirelli/folia
-repo_name: ggirelli/folia
+site_url: https://ggirelli.github.io/folia-web/
+repo_url: https://github.com/ggirelli/folia-web
+repo_name: ggirelli/folia-web
 edit_uri: edit/main/docs/
 copyright: Free software under the MIT license.
 

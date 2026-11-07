@@ -38,7 +38,7 @@ discovery and routes, which reproduce every output path of the site
 (spike 2); and its Markdown renderer, which reproduces the body HTML of
 every Markdown document of the site (spike 1).
 
-The documentation is published at <https://ggirelli.github.io/folia/>.
+The documentation is published at <https://ggirelli.github.io/folia-web/>.
 
 - [Parity baselines](docs/baseline.md): how to build and compare them.
 - [Development](docs/development.md): how the repository is organized.

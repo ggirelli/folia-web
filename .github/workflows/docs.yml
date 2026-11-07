@@ -1,7 +1,7 @@
 name: Docs
 
 # Builds the documentation site (MkDocs, strict) on every change, and publishes it to GitHub
-# Pages, at https://ggirelli.github.io/folia/, from main.
+# Pages, at https://ggirelli.github.io/folia-web/, from main.
 on:
   push:
     branches: [main]
