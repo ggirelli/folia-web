@@ -294,6 +294,21 @@ fn a_footer_line_is_in_the_context_and_none_by_default() {
 }
 
 #[test]
+fn a_cover_at_another_position_is_built_and_passed_on_as_it_is() {
+    let front = "title: T\ncover:\n  path: /c.webp\n  show: false\n  position: top";
+    let output = build_one(&[post(SAMPLE_POST, front)]).unwrap();
+    assert_eq!(
+        output.pages[0].context["cover"],
+        serde_json::json!({"path": "/c.webp", "position": "top", "show": false, "unsplash": null})
+    );
+    let without = build_one(&[post(SAMPLE_POST, "title: T")]).unwrap();
+    assert_eq!(
+        without.pages[0].context["cover"]["path"],
+        serde_json::Value::Null
+    );
+}
+
+#[test]
 fn a_single_category_is_one_of_the_posts_categories() {
     let output = build_one(&[post(SAMPLE_POST, "title: T\ncategory: travel")]).unwrap();
     assert_eq!(
@@ -343,10 +358,6 @@ fn front_matter_the_template_cannot_show_is_not_built_yet() {
         (
             "layout: page",
             "a post with the layout page is not built yet",
-        ),
-        (
-            "cover:\n  path: /c.webp\n  position: top",
-            "cover: unknown position \"top\"",
         ),
         ("narrow_post: maybe", "narrow_post should be true or false"),
         ("featured: yes please", "featured should be true or false"),
