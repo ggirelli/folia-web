@@ -20,18 +20,23 @@
 //! | `syndications` | `{name, url}` for each of its front matter `syndications`, in order |
 //! | `narrow_post` | whether the article is narrower (front matter `narrow_post`), `false` by default |
 //! | `footer` | `{extra}`: the line front matter `footer.extra` adds to the page's footer, or none |
+//! | `interactions` | `{mastodon, bluesky, hacker_news}`: the URLs of its syndications the interactions crawler pulls from, each or none; none without any |
 //!
 //! Every post shows its author box and its previous and next posts, so `show_author` and
 //! `pagination`, which the site's posts never set otherwise, are not read.
 //!
-//! A post whose front matter the template cannot show yet (another key, a cover position other
-//! than behind the page or after the title, a table of contents not on the left, or a
-//! syndication that offers to pull interactions) is reported as not built yet.
+//! A cover is shown where its `position` says, as the site's templates showed it: `behind` the
+//! page, or `after_title` as the featured image. Any other position (`top`, which one post sets)
+//! shows the picture nowhere, as those templates never tested for it, though its Unsplash credits
+//! still follow the article.
+//!
+//! A post whose front matter the template cannot show yet (another key, or a table of contents
+//! not on the left) is reported as not built yet.
 
 use folia_core::content::markdown::{description, excerpt_html, to_html};
 use folia_core::content::{
-    Cover, Diagnostic, LastCommits, SiteClock, SourceDoc, Toc, TocPlacement, cover,
-    hide_website_junk, modified, table_of_contents,
+    Diagnostic, LastCommits, SiteClock, SourceDoc, Toc, TocPlacement, cover, hide_website_junk,
+    modified, table_of_contents,
 };
 use folia_core::publish::{EntrySummary, ModeOutput, PageSpec};
 use serde_json::{Value, json};
@@ -84,13 +89,13 @@ const PRESENTATION_KEYS: [&str; 6] = [
     "narrow_post",
 ];
 
-/// Where the post template can show a cover: behind the page, or as the featured image after
-/// the title (with its Unsplash credits after the article).
-const COVER_POSITIONS: [&str; 2] = ["behind", "after_title"];
-
-/// Syndications whose links the site's template turns into an interactions crawler, which the
-/// post template does not have yet.
-const INTERACTIONS: [&str; 3] = ["hacker-news", "mastodon", "bluesky"];
+/// Syndications whose links the site's template turns into an interactions crawler: each with
+/// its key in the post's `interactions`.
+const INTERACTIONS: [(&str, &str); 3] = [
+    ("mastodon", "mastodon"),
+    ("bluesky", "bluesky"),
+    ("hacker-news", "hacker_news"),
+];
 
 /// Builds the pages of the published posts among `docs` whose source is in `only`. Every
 /// published post counts for the previous and next links. A post's `modified` time comes from
@@ -155,7 +160,7 @@ fn build_post(
     let problem = |message: &dyn std::fmt::Display| Diagnostic::in_doc(&doc.id, message);
     let toc = table_of_contents(doc)?;
     let cover = cover(doc)?;
-    unsupported(doc, toc.as_ref(), &cover).map_err(|message| problem(&message))?;
+    unsupported(doc, toc.as_ref()).map_err(|message| problem(&message))?;
     let modified = modified(doc, commits, Some(post.published), clock)?;
     let author = doc.front.string("author").map_err(|e| problem(&e))?;
     let narrow_post = narrow_post(doc).map_err(|message| problem(&message))?;
@@ -179,6 +184,7 @@ fn build_post(
         "syndications": syndications(doc),
         "narrow_post": narrow_post,
         "footer": footer,
+        "interactions": interactions(doc),
     });
 
     let page = PageSpec {
@@ -198,9 +204,9 @@ fn build_post(
     Ok((entry, page))
 }
 
-/// Why the post template cannot show `doc`, with its table of contents `toc` and its `cover`,
-/// yet, if it cannot.
-fn unsupported(doc: &SourceDoc, toc: Option<&Toc>, cover: &Cover) -> Result<(), String> {
+/// Why the post template cannot show `doc`, with its table of contents `toc`, yet, if it
+/// cannot.
+fn unsupported(doc: &SourceDoc, toc: Option<&Toc>) -> Result<(), String> {
     for key in doc.front.keys() {
         if let Some((_, kind)) = INERT_KEYS.iter().find(|(name, _)| *name == key) {
             match (kind, doc.front.json(key)) {
@@ -224,18 +230,8 @@ fn unsupported(doc: &SourceDoc, toc: Option<&Toc>, cover: &Cover) -> Result<(), 
     {
         return Err(format!("a post with the layout {layout} is not built yet"));
     }
-    if !COVER_POSITIONS.contains(&cover.position.as_str()) {
-        return Err(format!("cover: unknown position {:?}", cover.position));
-    }
     if toc.is_some_and(|toc| toc.placement != TocPlacement::Left) {
         return Err("a table of contents not on the left is not built yet".to_owned());
-    }
-    let syndications = doc.front.entries("syndications").unwrap_or_default();
-    if let Some((name, _)) = syndications
-        .iter()
-        .find(|(name, _)| INTERACTIONS.contains(&name.as_str()))
-    {
-        return Err(format!("a syndication to {name} is not built yet"));
     }
     Ok(())
 }
@@ -267,6 +263,27 @@ fn footer(doc: &SourceDoc) -> Result<Value, String> {
         Some(_) => return Err("footer should be a mapping".to_owned()),
     };
     Ok(json!({ "extra": extra }))
+}
+
+/// The URLs of the post's syndications that offer to pull interactions, by
+/// [`INTERACTIONS`]' keys (`{mastodon, bluesky, hacker_news}`, each a URL or none); none when it
+/// has none of them, as the site's template shows no crawler then.
+fn interactions(doc: &SourceDoc) -> Value {
+    let syndications = doc.front.entries("syndications").unwrap_or_default();
+    let url = |name: &str| {
+        syndications
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, url)| url.clone())
+    };
+    if INTERACTIONS.iter().all(|(name, _)| url(name).is_none()) {
+        return Value::Null;
+    }
+    INTERACTIONS
+        .iter()
+        .map(|(name, key)| ((*key).to_owned(), url(name).unwrap_or(Value::Null)))
+        .collect::<serde_json::Map<_, _>>()
+        .into()
 }
 
 /// The syndications as `{name, url}`, in their front matter's order: a JSON mapping would sort
