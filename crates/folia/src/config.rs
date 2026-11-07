@@ -43,6 +43,32 @@ pub struct Config {
     /// The microblog's settings.
     #[serde(default)]
     pub micro: MicroConfig,
+    /// The blog's settings.
+    #[serde(default)]
+    pub blog: BlogConfig,
+}
+
+/// The blog's listings (`folia_blog::listings`): each is built only when configured.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct BlogConfig {
+    /// The blog's index, which the blog claims: its pages, `/blog/` and `/blog/pageN/`.
+    #[serde(default)]
+    pub index: Option<ClaimedPage>,
+    /// The template of the category archives (`archive.html`).
+    #[serde(default)]
+    pub archive_template: Option<String>,
+}
+
+/// A page of the site a mode claims: the page keeps its route and front matter, its body
+/// (Liquid, for Jekyll) is not rendered, and `template` renders what the mode lists.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ClaimedPage {
+    /// The page's source, relative to the site root (`blog/index.html`).
+    pub source: String,
+    /// The template that renders it.
+    pub template: String,
 }
 
 /// The microblog's settings: what the site's front matter defaults gave every micro entry.

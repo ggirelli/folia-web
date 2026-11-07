@@ -214,6 +214,10 @@ fn build_documents(
     } else {
         let mut pages = ids(Mode::Pages);
         pages.retain(|id| !is_sass(id));
+        // The blog builds its claimed index's pages.
+        if let Some(index) = &config.blog.index {
+            pages.remove(&index.source);
+        }
         (pages, ids(Mode::Blog), ids(Mode::Garden), ids(Mode::Micro))
     };
     let dated: Vec<_> = [Mode::Pages, Mode::Blog, Mode::Garden, Mode::Micro]
@@ -278,10 +282,45 @@ fn build_documents(
         }
     }
     list_micro(config, site, clock, &mut output.pages, &mut problems);
+    if config.slice.is_none() {
+        list_blog(config, site, clock, &mut output.pages, &mut problems);
+    }
     if problems.is_empty() {
         Ok(output)
     } else {
         Err(problems)
+    }
+}
+
+/// Adds the blog's listing pages to `pages`: its index's, when the configuration claims one, and
+/// its category archives, when it names their template.
+fn list_blog(
+    config: &Config,
+    site: &Site,
+    clock: &SiteClock,
+    pages: &mut Vec<PageSpec>,
+    problems: &mut Vec<Diagnostic>,
+) {
+    let index = match &config.blog.index {
+        Some(claim) => {
+            let found = documents(site, Mode::Pages)
+                .iter()
+                .find(|doc| doc.id.as_str() == claim.source);
+            let Some(doc) = found else {
+                problems.push(Diagnostic::site(format!(
+                    "the blog's index {} is not one of the site's pages",
+                    claim.source
+                )));
+                return;
+            };
+            Some((doc, claim.template.as_str()))
+        }
+        None => None,
+    };
+    let archive = config.blog.archive_template.as_deref();
+    match folia_blog::listings(documents(site, Mode::Blog), index, archive, clock) {
+        Ok(more) => pages.extend(more),
+        Err(more) => problems.extend(more),
     }
 }
 

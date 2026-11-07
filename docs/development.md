@@ -153,6 +153,13 @@ configuration's `[micro]` `author`, a key of `[authors]`; without one, they have
 rendered, and the template gets `page.items`, the entries newest first (same dates by path,
 descending, as Jekyll sorted them), each with its excerpt, its text and its first 25 words.
 
+**Blog listings** are built by the blog (`folia_blog::listings`) when the configuration's `[blog]`
+names them: `index`, the claimed source of `/blog/` (its `source` and `template`), whose pages
+list 9 posts each (not `hidden`), the first also the `featured` ones; and `archive-template`, which
+renders an archive per category. Each post is a card: its cover, title, the first 30 words of its
+excerpt, author and date. Archives are not dark, as the site's front matter defaults never
+reached them (`use_dark_layout` false).
+
 ## A site's private inputs
 
 Folia's repository holds the generator and the generic parity tools, never a site's data. What
