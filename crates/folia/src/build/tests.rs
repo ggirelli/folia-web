@@ -134,6 +134,7 @@ fn config() -> Config {
                 avatar: "gg.webp".into(),
                 web: "/".into(),
                 description: "Eclectic.".into(),
+                bluesky_did: None,
             },
         )]
         .into_iter()

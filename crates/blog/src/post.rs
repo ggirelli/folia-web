@@ -20,13 +20,14 @@
 //! | `syndications` | `{name, url}` for each of its front matter `syndications`, in order |
 //! | `narrow_post` | whether the article is narrower (front matter `narrow_post`), `false` by default |
 //! | `footer` | `{extra}`: the line front matter `footer.extra` adds to the page's footer, or none |
+//! | `interactions` | `{mastodon, bluesky, hacker_news}`: the URLs of its syndications the interactions crawler pulls from, each or none; none without any |
 //!
 //! Every post shows its author box and its previous and next posts, so `show_author` and
 //! `pagination`, which the site's posts never set otherwise, are not read.
 //!
 //! A post whose front matter the template cannot show yet (another key, a cover position other
-//! than behind the page or after the title, a table of contents not on the left, or a
-//! syndication that offers to pull interactions) is reported as not built yet.
+//! than behind the page or after the title, or a table of contents not on the left) is reported
+//! as not built yet.
 
 use folia_core::content::markdown::{description, excerpt_html, to_html};
 use folia_core::content::{
@@ -88,9 +89,13 @@ const PRESENTATION_KEYS: [&str; 6] = [
 /// the title (with its Unsplash credits after the article).
 const COVER_POSITIONS: [&str; 2] = ["behind", "after_title"];
 
-/// Syndications whose links the site's template turns into an interactions crawler, which the
-/// post template does not have yet.
-const INTERACTIONS: [&str; 3] = ["hacker-news", "mastodon", "bluesky"];
+/// Syndications whose links the site's template turns into an interactions crawler: each with
+/// its key in the post's `interactions`.
+const INTERACTIONS: [(&str, &str); 3] = [
+    ("mastodon", "mastodon"),
+    ("bluesky", "bluesky"),
+    ("hacker-news", "hacker_news"),
+];
 
 /// Builds the pages of the published posts among `docs` whose source is in `only`. Every
 /// published post counts for the previous and next links. A post's `modified` time comes from
@@ -179,6 +184,7 @@ fn build_post(
         "syndications": syndications(doc),
         "narrow_post": narrow_post,
         "footer": footer,
+        "interactions": interactions(doc),
     });
 
     let page = PageSpec {
@@ -230,13 +236,6 @@ fn unsupported(doc: &SourceDoc, toc: Option<&Toc>, cover: &Cover) -> Result<(), 
     if toc.is_some_and(|toc| toc.placement != TocPlacement::Left) {
         return Err("a table of contents not on the left is not built yet".to_owned());
     }
-    let syndications = doc.front.entries("syndications").unwrap_or_default();
-    if let Some((name, _)) = syndications
-        .iter()
-        .find(|(name, _)| INTERACTIONS.contains(&name.as_str()))
-    {
-        return Err(format!("a syndication to {name} is not built yet"));
-    }
     Ok(())
 }
 
@@ -267,6 +266,27 @@ fn footer(doc: &SourceDoc) -> Result<Value, String> {
         Some(_) => return Err("footer should be a mapping".to_owned()),
     };
     Ok(json!({ "extra": extra }))
+}
+
+/// The URLs of the post's syndications that offer to pull interactions, by
+/// [`INTERACTIONS`]' keys (`{mastodon, bluesky, hacker_news}`, each a URL or none); none when it
+/// has none of them, as the site's template shows no crawler then.
+fn interactions(doc: &SourceDoc) -> Value {
+    let syndications = doc.front.entries("syndications").unwrap_or_default();
+    let url = |name: &str| {
+        syndications
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, url)| url.clone())
+    };
+    if INTERACTIONS.iter().all(|(name, _)| url(name).is_none()) {
+        return Value::Null;
+    }
+    INTERACTIONS
+        .iter()
+        .map(|(name, key)| ((*key).to_owned(), url(name).unwrap_or(Value::Null)))
+        .collect::<serde_json::Map<_, _>>()
+        .into()
 }
 
 /// The syndications as `{name, url}`, in their front matter's order: a JSON mapping would sort
