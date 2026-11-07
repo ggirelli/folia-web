@@ -158,3 +158,56 @@ fn a_template_that_does_not_compile_is_reported_by_the_check() {
         "{problem}"
     );
 }
+
+/// Renders `template` for a page titled `title`.
+fn titled(test: &str, template: &str, title: &str) -> String {
+    let templates = Templates::new(test, &[("page.html", template)]);
+    let mut page = spec("/p", "page.html");
+    page.context["title"] = json!(title);
+    Renderer::new(&templates.0)
+        .render(&page, "", &json!({}))
+        .unwrap()
+}
+
+#[test]
+fn a_title_line_break_is_a_space_in_the_head() {
+    let title = "Own your content<br />with a static site & more";
+    assert_eq!(
+        titled(
+            "head",
+            "<title>{{ page.title | head_title }}</title>",
+            title
+        ),
+        "<title>Own your content with a static site &amp; more</title>"
+    );
+}
+
+#[test]
+fn a_heading_keeps_a_titles_line_break_and_makes_a_double_space_one() {
+    let template = "<h1>{{ page.title | heading_title }}</h1>";
+    assert_eq!(
+        titled("heading", template, "One<br />two,  three <&>"),
+        "<h1>One<br />two,<br />three &lt;&amp;&gt;</h1>"
+    );
+    assert_eq!(
+        titled("heading-plain", template, "Who's \"here\"?"),
+        titled(
+            "heading-auto",
+            "<h1>{{ page.title }}</h1>",
+            "Who's \"here\"?"
+        ),
+        "a title without a break is escaped as autoescaping escapes it"
+    );
+}
+
+#[test]
+fn a_link_keeps_a_titles_line_break_but_not_a_double_space() {
+    assert_eq!(
+        titled(
+            "link",
+            "<a>{{ page.title | title_markup }}</a>",
+            "One<br/>two,  three"
+        ),
+        "<a>One<br/>two,  three</a>"
+    );
+}
