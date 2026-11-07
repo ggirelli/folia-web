@@ -9,7 +9,9 @@
 //!    `div.main-content`, and of its whole body, so the site's frame (category counts, footer
 //!    year) is checked too. Text values are compared with whitespace collapsed.
 //! 3. **Main content:** the page's `div.main-content` is equal after spike 1's normalization
-//!    (`dom`), and so is its text.
+//!    (`dom`), and so is its text. A page that has none on either side, one Jekyll writes
+//!    without the site's frame, is reported as such (`n/a`) and compared whole by the
+//!    whole-document check only; one side alone without it fails.
 //! 4. **Other files:** redirect stubs and static files are byte-identical.
 //! 5. **Entries** (`entries`): each document's dates equal the baseline's dump; a page's table of
 //!    contents equals Jekyll's; its code blocks are its body's, highlighted as spike 1 does.
@@ -370,6 +372,12 @@ fn check_page(path: &str, jekyll: &str, folia: &str) -> bool {
     let main = |nodes: &[Node]| find(nodes, &|node| has_class(node, "main-content")).cloned();
     let difference = match (main(&jekyll), main(&folia)) {
         (Some(want), Some(got)) => dom::first_difference(&[want], &[got]),
+        (None, None) => {
+            // A page Jekyll writes without the site's frame: the whole-document comparison
+            // checks it instead (owner decision of 2026-11-07).
+            println!("n/a: {path}: div.main-content, which neither page has (no frame).");
+            return fingerprint_ok;
+        }
         (None, _) => Some("Jekyll's page has no div.main-content".to_owned()),
         (_, None) => Some("Folia's page has no div.main-content".to_owned()),
     };

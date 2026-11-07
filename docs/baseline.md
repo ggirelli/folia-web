@@ -390,7 +390,12 @@ comparison decides the check: every difference must be explained by an accepted 
 the deviation ledger (`--ledger`, `FOLIA_LEDGER`; §5.2), no such entry may explain
 nothing, and the hard document assertions (robots, canonical, title, description, `lang`,
 `rel="me"` and the h-card on `/`, h-entry, redirect stubs) must hold; a page that cannot be read
-as UTF-8 fails its assertions as a `read` failure. A `dom` entry is bound to the baseline's
+as UTF-8 fails its assertions as a `read` failure. The canonical and title assertions apply to
+a page when either Jekyll's document or Folia's has a canonical link or a title. A page Jekyll
+writes without the site's frame (one without a layout, such as a changelog) has neither on either
+side, so they do not apply to it. Its whole-document comparison and every other assertion still
+do. A canonical link or title on one side only still fails. This scope is the owner's decision
+of 2026-11-07, and covers frameless pages only. A `dom` entry is bound to the baseline's
 `BASELINE.json` and, for each output, to both files reviewed: `expected_sha256`, checked against
 the SHA-256 of the baseline file's bytes, and `actual_sha256`, checked against the SHA-256 that
 Folia's output manifest (`sha256.txt`) records for the page. Every page compared must be in that
@@ -415,7 +420,9 @@ the same way, in report only. The checks:
 2. each page has Jekyll's fingerprint: title, canonical link, description and Open Graph values;
    headings in order; `a href`, `img src` and `link href`/`script src` multisets; and the text of
    its `div.main-content` and of its body, whitespace collapsed;
-3. each page's `div.main-content` is equal after the Markdown check's normalization;
+3. each page's `div.main-content` is equal after the Markdown check's normalization; a page
+   with none on either side, written without the site's frame, is reported `n/a` and left to the
+   whole-document comparison, while one side alone without it fails;
 4. redirect stubs and static files are byte-identical.
 
 So far Folia builds 4 pages, a stub, the note graph and the static files; the outputs it does not
