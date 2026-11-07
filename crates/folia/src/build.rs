@@ -32,6 +32,7 @@ use crate::config::Config;
 #[cfg(doc)]
 use crate::config::Slice;
 use crate::output::{self, Content};
+use crate::redirects::redirects_json;
 use crate::render::Renderer;
 use crate::site::{Site, plan, redirect_stub};
 
@@ -112,6 +113,22 @@ pub fn build(
         add(&mut outputs, artifact.route.output_path(), body)
             .unwrap_or_else(|clash| problems.push(clash));
         built.artifacts.push(artifact.route);
+    }
+    if !strict {
+        // Site-wide files (`site::SITE_FILES`), each planned unless a file of the site takes
+        // its URL.
+        for planned in site.routes.outputs() {
+            if planned.generator == Some("redirects") {
+                let json = redirects_json(&config.site.url, &site);
+                add(
+                    &mut outputs,
+                    planned.route.output_path(),
+                    Content::Bytes(json.into_bytes()),
+                )
+                .unwrap_or_else(|clash| problems.push(clash));
+                built.artifacts.push(planned.route.clone());
+            }
+        }
     }
     for id in &site.discovery.statics {
         let copy = Content::Copy(root.join(id.as_str()));
