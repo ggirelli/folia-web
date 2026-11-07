@@ -11,6 +11,12 @@
 //!
 //! A kind applies to Markdown files directly in its directory, as Jekyll's front matter
 //! defaults (`_micro/notes/*.md`) did.
+//!
+//! [`build`] builds the entries' pages (module `entry`).
+
+mod entry;
+
+pub use entry::build;
 
 use folia_core::content::{
     Diagnostic, Route, SiteClock, SlugMode, SourceDoc, dated_file_name, slugify,
@@ -101,6 +107,18 @@ fn entry_output(
         redirect_from: doc.redirect_from()?,
         ..PlannedOutput::authored(route, doc.id.clone())
     }))
+}
+
+/// The kind of `doc` (`notes`, `likes`, `bookmarks` or `rsvps`): the directory below `root` it
+/// sits directly in, for a Markdown file in a kind's directory; none otherwise.
+fn kind_of(doc: &SourceDoc, root: &str) -> Option<&'static str> {
+    let below = doc.id.below(root)?;
+    kind_prefix(below, doc.id.extension())?;
+    let (dir, _) = below.split_once('/')?;
+    KINDS
+        .iter()
+        .map(|(kind, _)| *kind)
+        .find(|kind| *kind == dir)
 }
 
 /// The URL prefix of an entry's kind, for a Markdown file directly in a kind's directory.

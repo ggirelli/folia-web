@@ -40,6 +40,18 @@ pub struct Config {
     /// How the site's stylesheets are compiled from Sass.
     #[serde(default)]
     pub sass: SassConfig,
+    /// The microblog's settings.
+    #[serde(default)]
+    pub micro: MicroConfig,
+}
+
+/// The microblog's settings: what the site's front matter defaults gave every micro entry.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MicroConfig {
+    /// The author of every entry, a key of `[authors]`, if any.
+    #[serde(default)]
+    pub author: Option<String>,
 }
 
 /// How stylesheets are compiled from Sass, with Jekyll's defaults.
@@ -102,6 +114,9 @@ pub struct Slice {
     /// The notes the slice builds.
     #[serde(default)]
     pub notes: Vec<String>,
+    /// The micro entries the slice builds.
+    #[serde(default)]
+    pub micro: Vec<String>,
 }
 
 /// Where templates live unless the configuration says otherwise: in the site, next to the

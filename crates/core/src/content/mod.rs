@@ -18,7 +18,10 @@ pub use diagnostic::Diagnostic;
 pub use front_matter::{FrontMatter, FrontMatterError, has_front_matter, split_front_matter};
 pub use git::{GitError, LastCommits};
 pub use modified::{Modified, ModifiedFrom, modified};
-pub use presentation::{Cover, Toc, TocPlacement, cover, hide_website_junk, table_of_contents};
+pub use presentation::{
+    Cover, Toc, TocPlacement, cover, hide_website_junk, interactions, syndications,
+    table_of_contents,
+};
 pub use route::{OutputKind, Route, RouteError};
 pub use slug::{SlugMode, slugify};
 pub use source::{DocId, Mode, SourceDoc, SourceError};

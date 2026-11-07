@@ -141,6 +141,12 @@ links to. An unset field is left out; an empty one is refused. Templates see eve
 serialized by Folia as Jekyll's `jsonify` wrote them. A page names its author with its front
 matter `author`; one that names an author the configuration does not have is not rendered.
 
+**Micro entries** are built by kind, the directory they sit in (`notes`, `likes`, `bookmarks`,
+`rsvps`), with the defaults the site's Jekyll configuration gave each kind: layout and category,
+the frame's navigation and titles hidden, a corner link back to `/micro`, no previous and next
+row, categories and tags hidden (see `folia_micro`'s `entry` module). Their author is the
+configuration's `[micro]` `author`, a key of `[authors]`; without one, they have none.
+
 ## A site's private inputs
 
 Folia's repository holds the generator and the generic parity tools, never a site's data. What

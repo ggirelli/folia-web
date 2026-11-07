@@ -36,7 +36,7 @@
 use folia_core::content::markdown::{description, excerpt_html, to_html};
 use folia_core::content::{
     Diagnostic, LastCommits, SiteClock, SourceDoc, Toc, TocPlacement, cover, hide_website_junk,
-    modified, table_of_contents,
+    interactions, modified, syndications, table_of_contents,
 };
 use folia_core::publish::{EntrySummary, ModeOutput, PageSpec};
 use serde_json::{Value, json};
@@ -87,14 +87,6 @@ const PRESENTATION_KEYS: [&str; 6] = [
     "hide_website_junk",
     "syndications",
     "narrow_post",
-];
-
-/// Syndications whose links the site's template turns into an interactions crawler: each with
-/// its key in the post's `interactions`.
-const INTERACTIONS: [(&str, &str); 3] = [
-    ("mastodon", "mastodon"),
-    ("bluesky", "bluesky"),
-    ("hacker-news", "hacker_news"),
 ];
 
 /// Builds the pages of the published posts among `docs` whose source is in `only`. Every
@@ -263,38 +255,6 @@ fn footer(doc: &SourceDoc) -> Result<Value, String> {
         Some(_) => return Err("footer should be a mapping".to_owned()),
     };
     Ok(json!({ "extra": extra }))
-}
-
-/// The URLs of the post's syndications that offer to pull interactions, by
-/// [`INTERACTIONS`]' keys (`{mastodon, bluesky, hacker_news}`, each a URL or none); none when it
-/// has none of them, as the site's template shows no crawler then.
-fn interactions(doc: &SourceDoc) -> Value {
-    let syndications = doc.front.entries("syndications").unwrap_or_default();
-    let url = |name: &str| {
-        syndications
-            .iter()
-            .find(|(key, _)| key == name)
-            .map(|(_, url)| url.clone())
-    };
-    if INTERACTIONS.iter().all(|(name, _)| url(name).is_none()) {
-        return Value::Null;
-    }
-    INTERACTIONS
-        .iter()
-        .map(|(name, key)| ((*key).to_owned(), url(name).unwrap_or(Value::Null)))
-        .collect::<serde_json::Map<_, _>>()
-        .into()
-}
-
-/// The syndications as `{name, url}`, in their front matter's order: a JSON mapping would sort
-/// them. Without a mapping of its own, a post has its default's, which is none.
-fn syndications(doc: &SourceDoc) -> Value {
-    doc.front
-        .entries("syndications")
-        .unwrap_or_default()
-        .into_iter()
-        .map(|(name, url)| json!({"name": name, "url": url}))
-        .collect()
 }
 
 /// Categories or tags sorted by name, each with its fragment on the page listing them, as the
