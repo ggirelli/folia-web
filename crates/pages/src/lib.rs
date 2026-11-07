@@ -36,10 +36,10 @@
 //! | Front matter | Outcome |
 //! |-|-|
 //! | `layout`, `title`, `permalink`, `redirect_from`, `published`, `hide_website_junk` | built |
-//! | `cover` without a picture, or shown behind the page | built |
+//! | `cover` without a picture, shown behind the page, or after the title | built |
 //! | `toc` disabled, or placed on the left | built |
 //! | `comments`, `narrow_post` set to `false` | built: the site's default, which changes nothing |
-//! | `comments`, `narrow_post` set to `true`; `title_icon`, `corner_backlink`, `hide_title`, `last_modified_at`; a cover after the title; a table of contents on the right or at the top | refused as not built yet |
+//! | `comments`, `narrow_post` set to `true`; `title_icon`, `corner_backlink`, `hide_title`, `last_modified_at`; a table of contents on the right or at the top | refused as not built yet |
 //! | a value those keys cannot take (`comments: maybe`, a cover position or TOC placement Jekyll's templates do not know) | refused as invalid |
 //! | any other key | refused as unknown, which may be a typo (`narrow-post`) |
 
@@ -165,6 +165,7 @@ fn build_page(
         "toc": toc.as_ref().map(Toc::to_json),
         "cover": cover.to_json(),
         "hide_website_junk": hide_website_junk(doc),
+        "narrow_post": false,
         "date": null,
         "description": null,
         "author": null,
@@ -216,13 +217,11 @@ fn unknown_or_unbuilt(doc: &SourceDoc) -> Result<(), String> {
 }
 
 /// Why the page template cannot show `cover` or `toc`, if it cannot: the template shows a
-/// cover behind the page and a table of contents on the left, and nothing else yet.
+/// cover behind the page or after the title, and a table of contents on the left, and nothing
+/// else yet.
 fn unshown(cover: &Cover, toc: Option<&Toc>) -> Result<(), String> {
-    match cover.position.as_str() {
-        "behind" => {}
-        "after_title" if cover.path.is_none() => {}
-        "after_title" => return Err("a cover shown after the title is not built yet".to_owned()),
-        other => return Err(format!("cover: unknown position {other:?}")),
+    if !matches!(cover.position.as_str(), "behind" | "after_title") {
+        return Err(format!("cover: unknown position {:?}", cover.position));
     }
     match toc.map(|toc| toc.placement) {
         None | Some(TocPlacement::Left) => Ok(()),
@@ -341,6 +340,7 @@ mod tests {
                 "hide_website_junk": {
                     "main_nav": false, "title": false, "cat_jumbotron": false, "footer": false,
                 },
+                "narrow_post": false,
                 "date": null, "description": null, "author": null, "categories": [], "tags": [],
                 "syndications": [], "previous": null, "next": null,
             })
@@ -465,10 +465,6 @@ mod tests {
             (
                 "narrow-post: true",
                 "the front matter key narrow-post is not one pages have (a typo?)",
-            ),
-            (
-                "cover:\n  path: /c.webp",
-                "a cover shown after the title is not built yet",
             ),
             (
                 "cover:\n  path: /c.webp\n  position: top",

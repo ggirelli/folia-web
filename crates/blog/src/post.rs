@@ -18,13 +18,14 @@
 //! | `cover` | its cover, `{path, position, show, unsplash}` (`folia_core`'s `Cover`) |
 //! | `hide_website_junk` | the parts of the frame it hides, each `true` or `false` |
 //! | `syndications` | `{name, url}` for each of its front matter `syndications`, in order |
+//! | `narrow_post` | whether the article is narrower (front matter `narrow_post`), `false` by default |
 //!
 //! Every post shows its author box and its previous and next posts, so `show_author` and
 //! `pagination`, which the site's posts never set otherwise, are not read.
 //!
-//! So far the template has only what the slice's post uses. A post whose front matter it could
-//! not show (another key, a cover not shown behind the page, a table of contents not on the
-//! left, or a syndication that offers to pull interactions) is reported as not built yet.
+//! A post whose front matter the template cannot show yet (another key, a cover position other
+//! than behind the page or after the title, a table of contents not on the left, or a
+//! syndication that offers to pull interactions) is reported as not built yet.
 
 use folia_core::content::markdown::{description, excerpt_html, to_html};
 use folia_core::content::{
@@ -51,7 +52,17 @@ const KEYS: [&str; 7] = [
 ];
 
 /// The presentation keys the post template can show.
-const PRESENTATION_KEYS: [&str; 4] = ["cover", "toc", "hide_website_junk", "syndications"];
+const PRESENTATION_KEYS: [&str; 5] = [
+    "cover",
+    "toc",
+    "hide_website_junk",
+    "syndications",
+    "narrow_post",
+];
+
+/// Where the post template can show a cover: behind the page, or as the featured image after
+/// the title (with its Unsplash credits after the article).
+const COVER_POSITIONS: [&str; 2] = ["behind", "after_title"];
 
 /// Syndications whose links the site's template turns into an interactions crawler, which the
 /// post template does not have yet.
@@ -123,6 +134,7 @@ fn build_post(
     unsupported(doc, toc.as_ref(), &cover).map_err(|message| problem(&message))?;
     let modified = modified(doc, commits, Some(post.published), clock)?;
     let author = doc.front.string("author").map_err(|e| problem(&e))?;
+    let narrow_post = narrow_post(doc).map_err(|message| problem(&message))?;
 
     let context = json!({
         "url": post.route.url(),
@@ -140,6 +152,7 @@ fn build_post(
         "cover": cover.to_json(),
         "hide_website_junk": hide_website_junk(doc),
         "syndications": syndications(doc),
+        "narrow_post": narrow_post,
     });
 
     let page = PageSpec {
@@ -172,8 +185,8 @@ fn unsupported(doc: &SourceDoc, toc: Option<&Toc>, cover: &Cover) -> Result<(), 
     {
         return Err(format!("a post with the layout {layout} is not built yet"));
     }
-    if cover.path.is_some() && cover.position != "behind" {
-        return Err("a cover not shown behind the post is not built yet".to_owned());
+    if !COVER_POSITIONS.contains(&cover.position.as_str()) {
+        return Err(format!("cover: unknown position {:?}", cover.position));
     }
     if toc.is_some_and(|toc| toc.placement != TocPlacement::Left) {
         return Err("a table of contents not on the left is not built yet".to_owned());
@@ -186,6 +199,15 @@ fn unsupported(doc: &SourceDoc, toc: Option<&Toc>, cover: &Cover) -> Result<(), 
         return Err(format!("a syndication to {name} is not built yet"));
     }
     Ok(())
+}
+
+/// Whether the post's article is narrower: its front matter `narrow_post`, `false` without one.
+fn narrow_post(doc: &SourceDoc) -> Result<bool, String> {
+    match doc.front.json("narrow_post") {
+        None => Ok(false),
+        Some(Value::Bool(narrow)) => Ok(narrow),
+        Some(_) => Err("narrow_post should be true or false".to_owned()),
+    }
 }
 
 /// The syndications as `{name, url}`, in their front matter's order: a JSON mapping would sort
