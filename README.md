@@ -30,8 +30,10 @@ stub and the static
 files, matching Jekyll's output. Its second step, a blog post, is built,
 checked and committed; its third, two garden notes with their backlinks
 and the note graph, is built, checked and reviewed, its fixes awaiting
-acceptance. The Jekyll site
-is still the one published.
+acceptance. Without a `[slice]` in its configuration, `folia build` now builds the whole
+site: every document Folia can build (the garden's notes, and the pages and posts whose
+front matter its templates show), skipping, and naming, those it cannot build yet. The Jekyll
+site is still the one published.
 The repository also holds the parity
 harness, which records production builds of the Jekyll site; Folia's
 discovery and routes, which reproduce every output path of the site
