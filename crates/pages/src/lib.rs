@@ -27,6 +27,7 @@
 //! | `hide_website_junk` | the parts of the frame it hides, each `true` or `false` |
 //! | `title_icon` | the classes of the icon its front matter `title_icon` puts before its title, or none |
 //! | `corner_backlink` | `{show, url, icon_class}`: the link back in its corner, its front matter over the site's defaults (not shown, to `/`) |
+//! | `error_type` | its front matter `error-type`, the error an error page shows (`404 Not Found`), or none |
 //! | `date`, `description`, `author`, `previous`, `next` | none: a page has no date, excerpt, author or neighbours |
 //! | `categories`, `tags`, `syndications` | empty |
 //!
@@ -38,7 +39,9 @@
 //!
 //! | Front matter | Outcome |
 //! |-|-|
-//! | `layout` (or none), `title`, `hide_title`, `title_icon`, `corner_backlink`, `permalink`, `redirect_from`, `published`, `hide_website_junk` | built |
+//! | `layout` (or none), `title`, `hide_title`, `title_icon`, `corner_backlink`, `error-type`, `permalink`, `redirect_from`, `published`, `hide_website_junk` | built |
+//! | an HTML page's body, without Liquid | built: written as it is, as Jekyll converts only Markdown |
+//! | Liquid in an HTML page; a table of contents on one | refused as not built yet |
 //! | `cover` without a picture, shown behind the page, or after the title | built |
 //! | `toc` disabled, or placed on the left | built |
 //! | `comments`, `narrow_post` set to `false` | built: the site's default, which changes nothing |
@@ -55,12 +58,13 @@ use folia_core::publish::{EntrySummary, ModeOutput, NO_LAYOUT_TEMPLATE, PageSpec
 use serde_json::{Value, json};
 
 /// The front matter keys a page may have, besides the switches.
-const KEYS: [&str; 11] = [
+const KEYS: [&str; 12] = [
     "layout",
     "title",
     "hide_title",
     "title_icon",
     "corner_backlink",
+    "error-type",
     "permalink",
     "redirect_from",
     "published",
@@ -138,8 +142,13 @@ fn build_page(
 ) -> Result<(EntrySummary, PageSpec), Diagnostic> {
     let problem = |message: &dyn std::fmt::Display| Diagnostic::in_doc(&doc.id, message);
     let planned = page_output(doc)?;
-    if !MARKDOWN_EXTENSIONS.contains(&doc.id.extension().to_lowercase().as_str()) {
-        return Err(problem(&"only Markdown pages are built yet"));
+    let extension = doc.id.extension().to_lowercase();
+    let markdown = MARKDOWN_EXTENSIONS.contains(&extension.as_str());
+    if !markdown && extension != ".html" {
+        return Err(problem(&"only Markdown and HTML pages are built yet"));
+    }
+    if !markdown && (doc.body.contains("{%") || doc.body.contains("{{")) {
+        return Err(problem(&"Liquid in an HTML page is not built yet"));
     }
     let required = |key: &str| {
         doc.front
@@ -157,6 +166,12 @@ fn build_page(
     unknown_or_unbuilt(doc).map_err(|message| problem(&message))?;
     let modified = modified(doc, commits, None, clock)?;
     let toc = table_of_contents(doc)?;
+    if !markdown && toc.is_some() {
+        return Err(problem(
+            &"a table of contents on an HTML page is not built yet",
+        ));
+    }
+    let error_type = doc.front.string("error-type").map_err(|e| problem(&e))?;
     let cover = cover(doc)?;
     unshown(&cover, toc.as_ref()).map_err(|message| problem(&message))?;
     let hide_title = match doc.front.json("hide_title") {
@@ -176,6 +191,7 @@ fn build_page(
         "cover": cover.to_json(),
         "hide_website_junk": hide_website_junk(doc),
         "narrow_post": false,
+        "error_type": error_type,
         "hide_title": hide_title,
         "title_icon": title_icon,
         "corner_backlink": corner_backlink,
@@ -202,7 +218,12 @@ fn build_page(
         route: planned.route,
         published: None,
         modified,
-        body_html: to_html(&doc.body, None),
+        // An HTML page is written as it is: Jekyll converts only Markdown.
+        body_html: if markdown {
+            to_html(&doc.body, None)
+        } else {
+            doc.body.clone()
+        },
         redirect_from: planned.redirect_from,
     };
     Ok((entry, page))
@@ -356,6 +377,24 @@ mod tests {
     }
 
     #[test]
+    fn an_html_page_is_written_as_it_is_with_its_error_type() {
+        let doc = SourceDoc {
+            body: "\n<p class=\"x\">Not *Markdown*</p>\n".to_owned(),
+            ..page(
+                "404.html",
+                "layout: error\ntitle: 404\npermalink: /404.html\nerror-type: 404 Not Found",
+            )
+        };
+        let output = build(&[doc], &LastCommits::default(), &clock()).unwrap();
+        assert_eq!(
+            output.entries[0].body_html,
+            "\n<p class=\"x\">Not *Markdown*</p>\n"
+        );
+        assert_eq!(output.pages[0].template, "error.html");
+        assert_eq!(output.pages[0].context["error_type"], "404 Not Found");
+    }
+
+    #[test]
     fn a_title_icon_is_passed_on_and_none_by_default() {
         let built = |front| {
             let doc = page("pages/p.md", front);
@@ -412,6 +451,7 @@ mod tests {
                     "main_nav": false, "title": false, "cat_jumbotron": false, "footer": false,
                 },
                 "narrow_post": false,
+                "error_type": null,
                 "hide_title": false,
                 "title_icon": null,
                 "corner_backlink": {"show": false, "url": "/", "icon_class": "fas fa-angle-double-left"},
@@ -458,7 +498,10 @@ mod tests {
         let problems = build(
             &[
                 page("pages/b.md", "layout: page"),
-                page("blog/c.html", "layout: page\ntitle: C"),
+                SourceDoc {
+                    body: "{% for post in site.posts %}{% endfor %}".to_owned(),
+                    ..page("blog/c.html", "layout: page\ntitle: C")
+                },
                 page(
                     "pages/d.md",
                     "layout: page\ntitle: D\nlast_modified_at: 2026-01-01",
@@ -473,7 +516,7 @@ mod tests {
             messages,
             [
                 "pages/b.md: a page without a title is not built yet",
-                "blog/c.html: only Markdown pages are built yet",
+                "blog/c.html: Liquid in an HTML page is not built yet",
                 "pages/d.md: last_modified_at is not read on pages yet; the last commit dates them",
             ]
         );
