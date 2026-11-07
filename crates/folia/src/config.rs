@@ -33,6 +33,54 @@ pub struct Config {
     /// whole site: every document, except those Folia cannot build yet, which it skips and names.
     #[serde(default)]
     pub slice: Option<Slice>,
+    /// How the site's stylesheets are compiled from Sass.
+    #[serde(default)]
+    pub sass: SassConfig,
+}
+
+/// How stylesheets are compiled from Sass, with Jekyll's defaults.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SassConfig {
+    /// The directory Sass imports are found in, relative to the site root (`_sass`).
+    #[serde(default = "default_sass_dir")]
+    pub dir: String,
+    /// The output style.
+    #[serde(default)]
+    pub style: SassStyle,
+}
+
+impl Default for SassConfig {
+    fn default() -> Self {
+        Self {
+            dir: default_sass_dir(),
+            style: SassStyle::default(),
+        }
+    }
+}
+
+fn default_sass_dir() -> String {
+    "_sass".to_owned()
+}
+
+/// Dart Sass's output styles.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SassStyle {
+    /// One declaration per line (Jekyll's default).
+    #[default]
+    Expanded,
+    /// As little whitespace as possible.
+    Compressed,
+}
+
+impl std::fmt::Display for SassStyle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Expanded => "expanded",
+            Self::Compressed => "compressed",
+        })
+    }
 }
 
 /// The documents the vertical slice builds, by source path relative to the site root. The site
@@ -138,6 +186,18 @@ mod tests {
         assert_eq!(config.site.url, "https://example.com");
         assert!(config.authors.is_empty());
         assert_eq!(config.slice, None, "no slice: the whole site is built");
+    }
+
+    #[test]
+    fn sass_settings_default_to_jekylls_and_are_read() {
+        let base = "time-zone = \"UTC\"\n[roots]\nblog = \"b\"\nmicro = \"m\"\ngarden = \"g\"\n[site]\nurl = \"u\"\ntitle = \"t\"\ndescription = \"d\"\n";
+        let config: Config = toml::from_str(base).unwrap();
+        assert_eq!(config.sass.dir, "_sass");
+        assert_eq!(config.sass.style, SassStyle::Expanded);
+        let config: Config =
+            toml::from_str(&format!("{base}[sass]\nstyle = \"compressed\"\n")).unwrap();
+        assert_eq!(config.sass.style.to_string(), "compressed");
+        assert!(toml::from_str::<Config>(&format!("{base}[sass]\nstyle = \"nested\"\n")).is_err());
     }
 
     #[test]

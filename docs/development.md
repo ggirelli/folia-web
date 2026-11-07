@@ -106,6 +106,24 @@ Each mode crate depends on `folia-core` only, never on another mode.
 - **`docs/`**: this documentation, and the versioned plans in `docs/planning/`.
 - **`assets/brand/`**: logos and the banner.
 
+## Building a site
+
+```sh
+cargo run --release -p folia -- build --site ../my-site --dest ../my-site-out
+```
+
+Without a `[slice]` in the site's `folia.toml`, the whole site is built; documents Folia cannot
+build yet are skipped, each named with the reason.
+
+**Stylesheets need Dart Sass 1.100.0** (plan v12, Q7): the version Jekyll's `sass-embedded`
+runs, so that the CSS and its source maps are Jekyll's, byte for byte. Install the standalone
+release from <https://github.com/sass/dart-sass/releases/tag/1.100.0> and put its `sass` on
+`PATH`, or set `FOLIA_SASS` to the program. A site with Sass stylesheets fails to build, saying
+so, when Dart Sass is missing or another version; no other compiler is used. The site's Sass
+settings are its configuration's `[sass]` table: `dir`, the directory imports are found in
+(default `_sass`), and `style`, `expanded` (default) or `compressed`. Stylesheets are compiled in
+whole-site builds only, so a slice's output is unchanged.
+
 ## A site's private inputs
 
 Folia's repository holds the generator and the generic parity tools, never a site's data. What

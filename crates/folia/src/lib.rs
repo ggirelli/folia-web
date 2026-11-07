@@ -11,4 +11,5 @@ pub mod config;
 pub mod discover;
 pub mod output;
 pub mod render;
+pub mod sass;
 pub mod site;

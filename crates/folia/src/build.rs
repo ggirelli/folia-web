@@ -33,6 +33,7 @@ use crate::config::Config;
 use crate::config::Slice;
 use crate::output::{self, Content};
 use crate::render::Renderer;
+use crate::sass::Sass;
 use crate::site::{Site, plan, redirect_stub};
 
 /// What a build wrote.
@@ -113,6 +114,13 @@ pub fn build(
             .unwrap_or_else(|clash| problems.push(clash));
         built.artifacts.push(artifact.route);
     }
+    if !strict {
+        for (route, path, text) in stylesheets(root, config, &site)? {
+            built.artifacts.push(route);
+            add(&mut outputs, path, Content::Bytes(text.into_bytes()))
+                .unwrap_or_else(|clash| problems.push(clash));
+        }
+    }
     for id in &site.discovery.statics {
         let copy = Content::Copy(root.join(id.as_str()));
         add(&mut outputs, id.to_string(), copy).unwrap_or_else(|clash| problems.push(clash));
@@ -180,13 +188,16 @@ fn build_documents(
             .collect()
     };
     let named = |names: &[String]| names.iter().cloned().collect::<BTreeSet<_>>();
-    let (mut pages, mut posts, mut notes) = match &config.slice {
-        Some(slice) => (
+    let (mut pages, mut posts, mut notes) = if let Some(slice) = &config.slice {
+        (
             named(&slice.pages),
             named(&slice.posts),
             named(&slice.notes),
-        ),
-        None => (ids(Mode::Pages), ids(Mode::Blog), ids(Mode::Garden)),
+        )
+    } else {
+        let mut pages = ids(Mode::Pages);
+        pages.retain(|id| !is_sass(id));
+        (pages, ids(Mode::Blog), ids(Mode::Garden))
     };
     let dated: Vec<_> = [Mode::Pages, Mode::Blog, Mode::Garden]
         .into_iter()
@@ -314,6 +325,63 @@ fn skipped_page(page: &PageSpec, problem: Diagnostic) -> Diagnostic {
     match &page.source {
         Some(id) => Diagnostic::in_doc(id, problem.message),
         None => problem,
+    }
+}
+
+/// Whether the source `id` is a Sass stylesheet.
+fn is_sass(id: &str) -> bool {
+    Path::new(id)
+        .extension()
+        .is_some_and(|ext| ext == "scss" || ext == "sass")
+}
+
+/// A file a build writes: its route, its output path and its text.
+type Written = (Route, String, String);
+
+/// The site's published Sass stylesheets, compiled with Dart Sass: for each, its CSS and its
+/// source map. Dart Sass is looked for only when the site
+/// has a stylesheet.
+///
+/// # Errors
+///
+/// Fails when Dart Sass is missing or not the version required, or cannot compile a
+/// stylesheet; no other compiler is tried.
+fn stylesheets(root: &Path, config: &Config, site: &Site) -> Result<Vec<Written>, Vec<Diagnostic>> {
+    let sheets: Vec<(&SourceDoc, Route)> = documents(site, Mode::Pages)
+        .iter()
+        .filter(|doc| is_sass(doc.id.as_str()) && doc.front.published())
+        .filter_map(|doc| {
+            site.routes
+                .outputs()
+                .iter()
+                .find(|o| o.generator.is_none() && o.source.as_ref() == Some(&doc.id))
+                .map(|o| (doc, o.route.clone()))
+        })
+        .collect();
+    if sheets.is_empty() {
+        return Ok(Vec::new());
+    }
+    let sass = Sass::find().map_err(|e| vec![Diagnostic::site(e)])?;
+    let mut compiled = Vec::new();
+    let mut problems = Vec::new();
+    for (doc, route) in sheets {
+        match sass.compile(root, &config.sass, doc.id.as_str(), &doc.body) {
+            Ok(sheet) => {
+                let css = route.output_path();
+                let map = format!("{css}.map");
+                match Route::file(&format!("{}.map", route.url())) {
+                    Ok(map_route) => compiled.push((map_route, map, sheet.map)),
+                    Err(e) => problems.push(Diagnostic::in_doc(&doc.id, e)),
+                }
+                compiled.push((route, css, sheet.css));
+            }
+            Err(e) => problems.push(Diagnostic::in_doc(&doc.id, e)),
+        }
+    }
+    if problems.is_empty() {
+        Ok(compiled)
+    } else {
+        Err(problems)
     }
 }
 

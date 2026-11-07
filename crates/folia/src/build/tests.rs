@@ -146,6 +146,7 @@ fn config() -> Config {
                 "_digital_garden/topic/note.md".into(),
             ],
         }),
+        sass: crate::config::SassConfig::default(),
     }
 }
 
