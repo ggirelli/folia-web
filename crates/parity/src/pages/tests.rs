@@ -102,6 +102,26 @@ fn the_main_content_is_compared_as_a_tree() {
     }
 }
 
+/// A page Jekyll writes without the site's frame: no canonical link, title or main content.
+const FRAMELESS: &str = "<h2 id=\"changelog\">CHANGELOG</h2>\n<p>Fixed things.</p>\n";
+
+#[test]
+fn a_frameless_page_needs_no_main_content_when_neither_side_has_one() {
+    assert!(check_page("changelog.html", FRAMELESS, FRAMELESS));
+    // Its fingerprint is still checked.
+    let other = FRAMELESS.replace("Fixed", "Broke");
+    assert!(!check_page("changelog.html", FRAMELESS, &other));
+}
+
+#[test]
+fn a_main_content_on_one_side_only_fails() {
+    assert!(!check_page("changelog.html", FRAMELESS, PAGE));
+    assert!(!check_page("about.html", PAGE, FRAMELESS));
+    let unframed = changed("class=\"main-content container\"", "class=\"container\"");
+    assert!(!check_page("about.html", PAGE, &unframed));
+    assert!(!check_page("about.html", &unframed, PAGE));
+}
+
 /// A fixture site with a baseline of it beside: Jekyll's `about.html`, its manifest row and
 /// build record, so that `run` checks the build Folia makes.
 pub(crate) fn baseline(fixture: &crate::builds::tests::Fixture) -> PathBuf {

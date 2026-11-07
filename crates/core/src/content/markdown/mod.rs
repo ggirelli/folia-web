@@ -27,6 +27,7 @@ mod highlight;
 mod html;
 mod ial;
 mod lists;
+mod pipe_rows;
 mod render;
 mod tree;
 mod typography;
@@ -64,6 +65,9 @@ fn prepare(src: &str, links: Option<&dyn LinkResolver>) -> (Node, String) {
     let mut root = tree::parse(&src);
     html::apply(&mut root, &src);
     ial::apply(&mut root, &src);
+    if links.is_none() {
+        pipe_rows::apply(&mut root, &src);
+    }
     lists::mark_transparent(&mut root, &src);
     typography::apply(&mut root, &src);
     heading::assign_ids(&mut root);
@@ -109,7 +113,8 @@ fn gather_code(node: &Node, ranges: &mut Vec<Range<usize>>) {
 ///
 /// Jekyll took excerpts before its plugin resolved wiki-links, so its garden excerpts showed the
 /// raw `[[…]]`, and kramdown read a line of `[[Title|text]]` as a table row. Folia resolves them
-/// on purpose (deviation D-003, plan v5 §10).
+/// on purpose (deviation D-003, plan v5 §10). Without a resolver, the excerpt is Jekyll's, table
+/// rows included (`pipe_rows`): page descriptions are made of it.
 #[must_use]
 pub fn excerpt_html(body: &str, links: Option<&dyn LinkResolver>) -> String {
     to_html(&excerpt(body), links)

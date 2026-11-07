@@ -6,14 +6,20 @@
 //! | Assertion | Applies to | Requires |
 //! |-|-|-|
 //! | `robots` | a page Jekyll gives a `meta[name=robots]` | Folia's robots metas, names and contents compared case-insensitively, equal Jekyll's |
-//! | `canonical` | every page | one `link[rel=canonical]`, equal to Jekyll's, absolute on the site's URL |
-//! | `title` | every page | the `<title>` text equal to Jekyll's |
+//! | `canonical` | a page either side gives a `link[rel=canonical]` | one, equal to Jekyll's, absolute on the site's URL |
+//! | `title` | a page either side gives a `<title>` | the `<title>` text equal to Jekyll's |
 //! | `description` | a page either side gives a `meta[name=description]` | both have it, with equal `content` |
 //! | `lang` | every page | `html@lang` equal to Jekyll's |
 //! | `rel-me` | `/` (`index.html`) | the `href`s of every `rel="me"` element, as a multiset, equal to Jekyll's |
 //! | `h-card` | `/` | the root `h-card` (an `h-card` with a `u-url u-uid`), its `u-url` and `p-name` equal to Jekyll's |
 //! | `h-entry` | a page Jekyll gives an `h-entry` | as many `h-entry`s, each with Jekyll's `p-name`, `dt-published` and `u-url` values and an `e-content` where Jekyll's has them |
 //! | `stub` | a redirect stub | its target (`meta[http-equiv=refresh]` content) and canonical equal to Jekyll's |
+//!
+//! `canonical` and `title` do not apply to a page that neither Jekyll's document nor Folia's
+//! has one in, which is a page Jekyll writes without the site's frame (a page without a layout,
+//! such as the changelog). Such a page is still compared whole, and every other assertion still
+//! applies: the scope is the owner's decision of 2026-11-07, for frameless pages only. A page
+//! that has one on one side only fails, as before.
 //!
 //! The document-level assertions are for whole pages, not fragments; a stub is checked by
 //! `stub` only (and is compared byte for byte besides).
@@ -128,22 +134,26 @@ pub fn check(
     }
 
     let (want_canonical, got_canonical) = (canonicals(&want), canonicals(&got));
-    let absolute = |href: &str| href == site_url || href.starts_with(&format!("{site_url}/"));
-    let passed = want_canonical.len() == 1
-        && got_canonical == want_canonical
-        && got_canonical.iter().all(|href| absolute(href));
-    result(
-        "canonical",
-        passed,
-        format!("Jekyll {want_canonical:?}, Folia {got_canonical:?}, on {site_url}"),
-    );
+    if !want_canonical.is_empty() || !got_canonical.is_empty() {
+        let absolute = |href: &str| href == site_url || href.starts_with(&format!("{site_url}/"));
+        let passed = want_canonical.len() == 1
+            && got_canonical == want_canonical
+            && got_canonical.iter().all(|href| absolute(href));
+        result(
+            "canonical",
+            passed,
+            format!("Jekyll {want_canonical:?}, Folia {got_canonical:?}, on {site_url}"),
+        );
+    }
 
     let (want_title, got_title) = (title(&want), title(&got));
-    result(
-        "title",
-        want_title.is_some() && want_title == got_title,
-        format!("Jekyll {want_title:?}, Folia {got_title:?}"),
-    );
+    if want_title.is_some() || got_title.is_some() {
+        result(
+            "title",
+            want_title.is_some() && want_title == got_title,
+            format!("Jekyll {want_title:?}, Folia {got_title:?}"),
+        );
+    }
 
     let (want_description, got_description) = (description(&want), description(&got));
     if !want_description.is_empty() || !got_description.is_empty() {

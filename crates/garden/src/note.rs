@@ -24,7 +24,9 @@
 //! | `hide_website_junk` | as a page's, with the category menu hidden, as the site's defaults hid it for notes |
 //!
 //! A description keeps its wiki-links as written (`[[Rust|rustaceans]]`), as Jekyll took
-//! excerpts before its plugin resolved them; a backlink's `excerpt` is the linking note's first
+//! excerpts before its plugin resolved them, and so does a line kramdown read as a table row
+//! because of one: `- [[Title|text]]` is described as the cells `[[Title` and `text]]` (owner
+//! decision of 2026-11-07); a backlink's `excerpt` is the linking note's first
 //! paragraph as written.
 //!
 //! So far the template has only what the slice's notes use. A note it could not show (another
