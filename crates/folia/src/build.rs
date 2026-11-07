@@ -420,6 +420,7 @@ fn site_index(
                 "avatar": author.avatar,
                 "web": author.web,
                 "description": author.description,
+                "bluesky_did": author.bluesky_did,
             });
             (key.clone(), author)
         })
