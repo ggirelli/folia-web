@@ -269,9 +269,28 @@ fn a_post_without_a_toc_or_cover_has_none_and_the_default_cover() {
 #[test]
 fn keys_that_change_nothing_on_the_page_are_accepted_and_not_shown() {
     let plain = build_one(&[post(SAMPLE_POST, "title: T")]).unwrap();
-    let front = "title: T\ntrip: somewhere-2023\nfeatured: true\nhidden: false";
+    let front =
+        "title: T\ntrip: somewhere-2023\nfeatured: true\nhidden: false\nuse_dark_layout: true";
     let output = build_one(&[post(SAMPLE_POST, front)]).unwrap();
     assert_eq!(output.pages[0].context, plain.pages[0].context);
+}
+
+#[test]
+fn a_footer_line_is_in_the_context_and_none_by_default() {
+    let output = build_one(&[post(
+        SAMPLE_POST,
+        "title: T\nfooter:\n  extra: A fish named Elvis!",
+    )])
+    .unwrap();
+    assert_eq!(
+        output.pages[0].context["footer"],
+        serde_json::json!({"extra": "A fish named Elvis!"})
+    );
+    let plain = build_one(&[post(SAMPLE_POST, "title: T")]).unwrap();
+    assert_eq!(
+        plain.pages[0].context["footer"],
+        serde_json::json!({"extra": null})
+    );
 }
 
 #[test]
@@ -333,6 +352,16 @@ fn front_matter_the_template_cannot_show_is_not_built_yet() {
         ("featured: yes please", "featured should be true or false"),
         ("hidden: 1", "hidden should be true or false"),
         ("trip: [a, b]", "trip should be text"),
+        (
+            "use_dark_layout: false",
+            "use_dark_layout: false is not built yet",
+        ),
+        ("footer: plain", "footer should be a mapping"),
+        ("footer:\n  extra: [x]", "footer: extra should be text"),
+        (
+            "footer:\n  credits: x",
+            "footer: the key credits is not built yet",
+        ),
         (
             "toc:\n  enabled: true",
             "a table of contents not on the left is not built yet",
