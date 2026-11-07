@@ -36,9 +36,10 @@ Each mode crate depends on `folia-core` only, never on another mode.
 - **`crates/folia`** (`folia`): the site builder and the `folia build` command (`main.rs`).
   `config` reads `folia.toml`, `discover` classifies the site's files, and `site` plans every
   output in one route table, checks it for duplicate URLs and colliding output files, and writes
-  redirect stubs. `build` is the pipeline (so far for `/about`, one post and two notes, plan v9,
-  §12.2), `render` renders pages with MiniJinja from the site's templates (`_folia/templates` in
-  the site), and `output` writes the destination whole or not at all.
+  redirect stubs. `build` is the pipeline: of the configuration's slice (plan v9, §12.2), each
+  document of which must build, or, without a slice, of every document, skipping those Folia
+  cannot build yet. `render` renders pages with MiniJinja from the site's templates
+  (`_folia/templates` in the site), and `output` writes the destination whole or not at all.
 - **`crates/parity`**: the dev-only parity tool (`just routes`, `just markdown`, `just pages`,
   `just determinism`), and the content lint (`just liquid`).
   It reads baselines as black boxes and calls only Folia's public API. `markdown` holds spike 1's

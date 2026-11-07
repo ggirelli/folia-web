@@ -50,6 +50,15 @@ fn main() -> ExitCode {
             for warning in &built.warnings {
                 eprintln!("warning: {warning}");
             }
+            for skipped in &built.skipped {
+                eprintln!("skipped: {skipped}");
+            }
+            if !built.skipped.is_empty() {
+                eprintln!(
+                    "{} documents are skipped: Folia cannot build them yet.",
+                    built.skipped.len()
+                );
+            }
             println!(
                 "Built {} pages, {} redirect stubs, {} generated files and {} static files into {}; {} planned outputs are not built yet.",
                 built.pages.len(),

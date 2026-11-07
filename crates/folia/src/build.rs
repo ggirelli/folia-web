@@ -1,14 +1,17 @@
-//! The build pipeline (plan v6, §11), so far for the vertical slice (plan v9, §12.2).
+//! The build pipeline (plan v6, §11).
 //!
 //! 1. Plan every output of the site, and check the route table (`site::plan`).
-//! 2. Build the slice's pages ([`Slice::pages`]) with the pages mode, its posts
-//!    ([`Slice::posts`]) with the blog mode, and its notes ([`Slice::notes`]), with the note graph,
-//!    with the garden mode, dated with their last commits. The site's configuration names them.
+//! 2. Build the documents: pages with the pages mode, posts with the blog mode, and notes, with
+//!    the note graph, with the garden mode, dated with their last commits. A configured slice
+//!    ([`Slice`], plan v9, §12.2) names the documents to build, and each must build. Without one,
+//!    every document is built, except those Folia cannot build yet: each is skipped, with the
+//!    reason, in [`Built::skipped`].
 //! 3. Assemble the site index templates show: the site's identity and authors, the build's year,
 //!    and the blog's categories.
-//! 4. Check every page's template, then render each page.
-//! 5. Add a redirect stub for each of their `redirect_from` URLs, the files the modes generated
-//!    (the note graph), and copy every static file.
+//! 4. Check every page's template, then render each page. Without a slice, a page whose template
+//!    is missing or fails is skipped too.
+//! 5. Add a redirect stub for each `redirect_from` URL of a page rendered, the files the modes
+//!    generated (the note graph), and copy every static file.
 //! 6. Write it all to the destination (`output`).
 //!
 //! Every other planned output is not built yet; [`Built::not_built`] counts them. Nothing is
@@ -21,7 +24,7 @@ use std::fmt::Write;
 use std::path::Path;
 
 use folia_core::content::{Diagnostic, LastCommits, Mode, Route, SiteClock, SourceDoc};
-use folia_core::publish::{EntrySummary, ModeOutput};
+use folia_core::publish::{EntrySummary, ModeOutput, PageSpec};
 use jiff::Timestamp;
 use serde_json::json;
 
@@ -49,6 +52,8 @@ pub struct Built {
     pub entries: Vec<EntrySummary>,
     /// Problems that did not stop the build.
     pub warnings: Vec<Diagnostic>,
+    /// Without a slice, the documents Folia cannot build yet, each with why; they are not built.
+    pub skipped: Vec<Diagnostic>,
 }
 
 /// Builds the site at `root` into `dest`, as of the build time `now`.
@@ -65,15 +70,17 @@ pub fn build(
 ) -> Result<Built, Vec<Diagnostic>> {
     let site = plan(root, config, now)?;
     let clock = SiteClock::new(&config.time_zone, now).map_err(|e| vec![Diagnostic::site(e)])?;
-    let pages = build_documents(root, config, &site, &clock)?;
+    let strict = config.slice.is_some();
+    let mut built = Built::default();
+    let pages = build_documents(root, config, &site, &clock, &mut built.skipped)?;
     let index = site_index(config, &site, &clock)?;
 
     let renderer = Renderer::new(&root.join(&config.templates_dir));
-    renderer.check(&pages.pages).map_err(|e| vec![e])?;
+    let renderable = check_templates(&renderer, &pages.pages, strict, &mut built.skipped)?;
     let mut outputs = BTreeMap::new();
-    let mut built = Built::default();
     let mut problems = Vec::new();
-    for page in &pages.pages {
+    let mut shown = BTreeSet::new();
+    for page in renderable {
         let content = pages
             .entries
             .iter()
@@ -82,14 +89,16 @@ pub fn build(
         match renderer.render(page, content, &index) {
             Ok(html) => {
                 built.pages.push(page.route.clone());
+                shown.extend(page.source.clone());
                 let html = Content::Bytes(html.into_bytes());
                 add(&mut outputs, page.route.output_path(), html)
                     .unwrap_or_else(|clash| problems.push(clash));
             }
-            Err(problem) => problems.push(problem),
+            Err(problem) if strict => problems.push(problem),
+            Err(problem) => built.skipped.push(skipped_page(page, problem)),
         }
     }
-    for entry in &pages.entries {
+    for entry in pages.entries.iter().filter(|e| shown.contains(&e.doc)) {
         let to = format!("{}{}", config.site.url, entry.route.url());
         for from in &entry.redirect_from {
             built.stubs.push(from.clone());
@@ -128,7 +137,11 @@ pub fn build(
         return Err(unplanned);
     }
     built.not_built = planned.len() - outputs.len();
-    built.entries = pages.entries;
+    built.entries = pages
+        .entries
+        .into_iter()
+        .filter(|e| shown.contains(&e.doc))
+        .collect();
     built.warnings = pages.warnings;
     output::write(dest, root, &outputs).map_err(|e| vec![e])?;
     Ok(built)
@@ -150,48 +163,69 @@ fn add(
     }
 }
 
-/// The slice's pages, posts and notes, built by their modes, with the git dates of their
-/// sources.
+/// The pages, posts and notes to build, built by their modes, with the git dates of their
+/// sources: the slice's, or, without one, every document, less those a mode reports it cannot
+/// build yet, which go to `skipped`.
 fn build_documents(
     root: &Path,
     config: &Config,
     site: &Site,
     clock: &SiteClock,
+    skipped: &mut Vec<Diagnostic>,
 ) -> Result<ModeOutput, Vec<Diagnostic>> {
-    let slice = &config.slice;
-    let only_posts: Vec<&str> = slice.posts.iter().map(String::as_str).collect();
-    let only_notes: Vec<&str> = slice.notes.iter().map(String::as_str).collect();
-    let pages: Vec<SourceDoc> = documents(site, Mode::Pages)
-        .iter()
-        .filter(|doc| slice.pages.iter().any(|page| page == doc.id.as_str()))
-        .cloned()
-        .collect();
-    let posts = documents(site, Mode::Blog);
-    let notes = documents(site, Mode::Garden);
-    let dated = pages
-        .iter()
+    let ids = |mode| -> BTreeSet<String> {
+        documents(site, mode)
+            .iter()
+            .map(|doc| doc.id.to_string())
+            .collect()
+    };
+    let named = |names: &[String]| names.iter().cloned().collect::<BTreeSet<_>>();
+    let (mut pages, mut posts, mut notes) = match &config.slice {
+        Some(slice) => (
+            named(&slice.pages),
+            named(&slice.posts),
+            named(&slice.notes),
+        ),
+        None => (ids(Mode::Pages), ids(Mode::Blog), ids(Mode::Garden)),
+    };
+    let dated: Vec<_> = [Mode::Pages, Mode::Blog, Mode::Garden]
+        .into_iter()
+        .flat_map(|mode| documents(site, mode))
         .map(|doc| &doc.id)
-        .chain(
-            posts
+        .filter(|id| {
+            [&pages, &posts, &notes]
                 .iter()
-                .map(|doc| &doc.id)
-                .filter(|id| only_posts.contains(&id.as_str())),
-        )
-        .chain(
-            notes
-                .iter()
-                .map(|doc| &doc.id)
-                .filter(|id| only_notes.contains(&id.as_str())),
-        );
+                .any(|s| s.contains(id.as_str()))
+        })
+        .collect();
     let commits = LastCommits::read(root, dated).map_err(|e| vec![Diagnostic::site(e)])?;
 
+    let strict = config.slice.is_some();
     let mut output = ModeOutput::default();
     let mut problems = Vec::new();
-    for built in [
-        folia_pages::build(&pages, &commits, clock),
-        folia_blog::build(posts, &only_posts, &commits, clock),
-        folia_garden::build(notes, &config.roots.garden, &only_notes, &commits, clock),
-    ] {
+    let only = |set: &BTreeSet<String>| -> Vec<String> { set.iter().cloned().collect() };
+    let results = [
+        leniently(strict, &mut pages, skipped, |pages| {
+            let docs: Vec<SourceDoc> = documents(site, Mode::Pages)
+                .iter()
+                .filter(|doc| pages.contains(doc.id.as_str()))
+                .cloned()
+                .collect();
+            folia_pages::build(&docs, &commits, clock)
+        }),
+        leniently(strict, &mut posts, skipped, |posts| {
+            let only = only(posts);
+            let only: Vec<&str> = only.iter().map(String::as_str).collect();
+            folia_blog::build(documents(site, Mode::Blog), &only, &commits, clock)
+        }),
+        leniently(strict, &mut notes, skipped, |notes| {
+            let only = only(notes);
+            let only: Vec<&str> = only.iter().map(String::as_str).collect();
+            let docs = documents(site, Mode::Garden);
+            folia_garden::build(docs, &config.roots.garden, &only, &commits, clock)
+        }),
+    ];
+    for built in results {
         match built {
             Ok(built) => {
                 output.entries.extend(built.entries);
@@ -206,6 +240,80 @@ fn build_documents(
         Ok(output)
     } else {
         Err(problems)
+    }
+}
+
+/// Runs a mode's `build` over the documents `selected`. Unless `strict`, when every problem it
+/// reports is one of those documents', they are moved to `skipped` and the rest built again, until
+/// the mode builds; a problem of no document selected (of the mode as a whole, or of a document
+/// it reads but was not asked to build) fails the build.
+fn leniently(
+    strict: bool,
+    selected: &mut BTreeSet<String>,
+    skipped: &mut Vec<Diagnostic>,
+    build: impl Fn(&BTreeSet<String>) -> Result<ModeOutput, Vec<Diagnostic>>,
+) -> Result<ModeOutput, Vec<Diagnostic>> {
+    loop {
+        match build(selected) {
+            Err(problems) if !strict && skippable(&problems, selected) => {
+                for problem in &problems {
+                    if let Some(id) = &problem.source {
+                        selected.remove(id.as_str());
+                    }
+                }
+                skipped.extend(problems);
+            }
+            result => return result,
+        }
+    }
+}
+
+/// Whether every problem, at least one, is of a document in `selected`.
+fn skippable(problems: &[Diagnostic], selected: &BTreeSet<String>) -> bool {
+    !problems.is_empty()
+        && problems.iter().all(|problem| {
+            problem
+                .source
+                .as_ref()
+                .is_some_and(|id| selected.contains(id.as_str()))
+        })
+}
+
+/// The pages whose template exists and compiles. Unless `strict`, the others are skipped, each
+/// with its template's problem; when `strict`, any fails the build.
+fn check_templates<'a>(
+    renderer: &Renderer,
+    pages: &'a [PageSpec],
+    strict: bool,
+    skipped: &mut Vec<Diagnostic>,
+) -> Result<Vec<&'a PageSpec>, Vec<Diagnostic>> {
+    if strict {
+        renderer.check(pages).map_err(|e| vec![e])?;
+        return Ok(pages.iter().collect());
+    }
+    let mut by_template: BTreeMap<&str, Vec<&PageSpec>> = BTreeMap::new();
+    for page in pages {
+        by_template.entry(&page.template).or_default().push(page);
+    }
+    let mut renderable = Vec::new();
+    for (_, users) in by_template {
+        let owned: Vec<PageSpec> = users.iter().map(|page| (*page).clone()).collect();
+        match renderer.check(&owned) {
+            Ok(()) => renderable.extend(users),
+            Err(problem) => {
+                skipped.extend(users.iter().map(|page| skipped_page(page, problem.clone())));
+            }
+        }
+    }
+    renderable.sort_by_key(|page| page.route.output_path());
+    Ok(renderable)
+}
+
+/// A page that is not built, because of `problem`, named by its source.
+fn skipped_page(page: &PageSpec, problem: Diagnostic) -> Diagnostic {
+    match &page.source {
+        Some(id) => Diagnostic::in_doc(id, problem.message),
+        None => problem,
     }
 }
 
