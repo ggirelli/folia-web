@@ -10,6 +10,7 @@ pub mod build;
 pub mod config;
 pub mod discover;
 pub mod output;
+pub mod redirects;
 pub mod render;
 pub mod sass;
 pub mod site;
