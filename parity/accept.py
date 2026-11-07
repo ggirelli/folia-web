@@ -227,12 +227,14 @@ def unbuilt_scopes(run: Run) -> dict[str, int] | None:
     return {"pages": html - stubs, "stubs": stubs, "root": int("index.html" in unbuilt)}
 
 
-# The hard assertions of §5.1, each with the outputs its "Applies to" names, as plan v12 words it,
+# The hard assertions of §5.1, each with the outputs its "Applies to" names, as plan v12 words it
+# (narrowed by the owner's decisions since),
 # and the scope of `unbuilt_scopes` holding those of them not built yet.
 ASSERTIONS = [
     ("robots", "every HTML page Jekyll gives one", "pages"),
-    ("canonical", "every HTML page", "pages"),
-    ("title", "every HTML page", "pages"),
+    # Neither applies to a page Jekyll writes without the frame (owner decision of 2026-11-07).
+    ("canonical", "every HTML page either side gives one", "pages"),
+    ("title", "every HTML page either side gives one", "pages"),
     ("description", "every HTML page with one", "pages"),
     ("lang", "every HTML page", "pages"),
     ("rel-me", "`/`", "root"),

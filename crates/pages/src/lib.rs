@@ -48,7 +48,8 @@
 //! | `comments`, `narrow_post` set to `false` | built: the site's default, which changes nothing |
 //! | `comments`, `narrow_post` set to `true`; `last_modified_at`; a table of contents on the right or at the top | refused as not built yet |
 //! | a value those keys cannot take (`comments: maybe`, a cover position or TOC placement Jekyll's templates do not know) | refused as invalid |
-//! | any other key | refused as unknown, which may be a typo (`narrow-post`) |
+//! | `narrow-post` set to `true` or `false` | built, and ignored: see [`IGNORED_TYPOS`] |
+//! | any other key | refused as unknown, which may be a typo (`narow_post`) |
 
 use folia_core::content::markdown::to_html;
 use folia_core::content::{
@@ -78,6 +79,19 @@ const KEYS: [&str; 13] = [
 /// Switches the page template does not have: a page may only leave them off, as the site's
 /// default does.
 const SWITCHES: [&str; 2] = ["comments", "narrow_post"];
+
+/// Misspelt keys a page may have, which change nothing, with why each is accepted.
+///
+/// Folia refuses a front matter key it does not know, because it may be a typo whose page would
+/// silently come out wrong. These are the exceptions: typos that a site's published pages
+/// already have, which Jekyll ignored, as it ignores every key no template reads. Building them
+/// as Jekyll did keeps the page as it was published; refusing them would leave it unbuilt.
+/// Each exception is one exact key, on pages only, with a `true` or `false` value; any other
+/// unknown key is still refused (owner decision Q3h, 2026-11-07).
+pub const IGNORED_TYPOS: [(&str, &str); 1] = [(
+    "narrow-post",
+    "a typo of narrow_post; no template reads narrow-post, so the page is not narrower",
+)];
 
 /// Source extensions that a converter renders as HTML.
 const MARKDOWN_EXTENSIONS: [&str; 5] = [".markdown", ".mkdown", ".mkdn", ".mkd", ".md"];
@@ -238,6 +252,12 @@ fn unknown_or_unbuilt(doc: &SourceDoc) -> Result<(), String> {
     for key in doc.front.keys() {
         if KEYS.contains(&key) || key == "last_modified_at" {
             continue;
+        }
+        if IGNORED_TYPOS.iter().any(|(typo, _)| *typo == key) {
+            match doc.front.json(key) {
+                Some(Value::Bool(_)) => continue,
+                _ => return Err(format!("{key} should be true or false")),
+            }
         }
         if !SWITCHES.contains(&key) {
             return Err(format!(
@@ -605,6 +625,21 @@ mod tests {
     }
 
     #[test]
+    fn the_narrow_post_typo_is_built_as_jekyll_ignored_it() {
+        // The site's security hall of fame has `narrow-post: true` (Q3h): Jekyll's templates
+        // read only `narrow_post`, so the page was published at its usual width.
+        for typo in ["narrow-post: true", "narrow-post: false"] {
+            let output = build_one(policy(typo)).unwrap();
+            let typoless = build_one(policy("")).unwrap();
+            assert_eq!(
+                output.pages[0].context, typoless.pages[0].context,
+                "{typo:?}"
+            );
+            assert_eq!(output.pages[0].context["narrow_post"], false);
+        }
+    }
+
+    #[test]
     fn front_matter_the_page_template_cannot_show_is_refused_with_its_key() {
         let cases = [
             (
@@ -618,9 +653,14 @@ mod tests {
             ("hide_title: maybe", "hide_title should be true or false"),
             ("comments: true", "comments: true is not built yet"),
             ("narrow_post: maybe", "narrow_post should be true or false"),
+            ("narrow-post: maybe", "narrow-post should be true or false"),
             (
-                "narrow-post: true",
-                "the front matter key narrow-post is not one pages have (a typo?)",
+                "narrow_posts: true",
+                "the front matter key narrow_posts is not one pages have (a typo?)",
+            ),
+            (
+                "narrow-posts: true",
+                "the front matter key narrow-posts is not one pages have (a typo?)",
             ),
             (
                 "cover:\n  path: /c.webp\n  position: top",

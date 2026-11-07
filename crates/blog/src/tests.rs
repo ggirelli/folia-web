@@ -400,6 +400,11 @@ fn front_matter_the_template_cannot_show_is_not_built_yet() {
             "a post with the layout page is not built yet",
         ),
         ("narrow_post: maybe", "narrow_post should be true or false"),
+        // Pages accept this typo (Q3h); posts never had it, so they still refuse it.
+        (
+            "narrow-post: true",
+            "the front matter key narrow-post is not built yet",
+        ),
         ("featured: yes please", "featured should be true or false"),
         ("hidden: 1", "hidden should be true or false"),
         ("trip: [a, b]", "trip should be text"),
