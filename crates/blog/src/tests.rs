@@ -263,6 +263,19 @@ fn a_post_without_a_toc_or_cover_has_none_and_the_default_cover() {
     assert_eq!(context["toc"], serde_json::Value::Null);
     assert_eq!(context["cover"]["position"], "after_title");
     assert_eq!(context["syndications"], serde_json::json!([]));
+    assert_eq!(context["narrow_post"], false);
+}
+
+#[test]
+fn a_narrow_post_with_a_cover_after_its_title_is_built() {
+    let front = "narrow_post: true\ncover:\n  path: /c.webp\n  unsplash: someone";
+    let output = build_one(&[post(SAMPLE_POST, front)]).unwrap();
+    let context = &output.pages[0].context;
+    assert_eq!(context["narrow_post"], true);
+    assert_eq!(
+        context["cover"],
+        serde_json::json!({"position": "after_title", "show": true, "path": "/c.webp", "unsplash": "someone"})
+    );
 }
 
 #[test]
@@ -296,9 +309,10 @@ fn front_matter_the_template_cannot_show_is_not_built_yet() {
             "a post with the layout page is not built yet",
         ),
         (
-            "cover:\n  path: /c.webp",
-            "a cover not shown behind the post is not built yet",
+            "cover:\n  path: /c.webp\n  position: top",
+            "cover: unknown position \"top\"",
         ),
+        ("narrow_post: maybe", "narrow_post should be true or false"),
         (
             "toc:\n  enabled: true",
             "a table of contents not on the left is not built yet",
