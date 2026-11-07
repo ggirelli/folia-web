@@ -211,3 +211,15 @@ fn a_link_keeps_a_titles_line_break_but_not_a_double_space() {
         "<a>One<br/>two,  three</a>"
     );
 }
+
+#[test]
+fn a_page_without_a_layout_is_its_content_alone() {
+    let templates = Templates::new("no-layout", &[]);
+    let renderer = Renderer::new(&templates.0);
+    let page = spec("/log", NO_LAYOUT_TEMPLATE);
+    renderer.check(std::slice::from_ref(&page)).unwrap();
+    let html = renderer
+        .render(&page, "<h2 id=\"log\">Log</h2>\n", &json!({}))
+        .unwrap();
+    assert_eq!(html, "<h2 id=\"log\">Log</h2>\n");
+}

@@ -19,7 +19,8 @@
 //! |-|-|
 //! | `url` | the page's URL (`/about`) |
 //! | `title` | its front matter `title` |
-//! | `layout` | its front matter `layout` |
+//! | `layout` | its front matter `layout`, or none: the page is then written as its content alone (`NO_LAYOUT_TEMPLATE`), as Jekyll writes it |
+//! | `hide_title` | whether its front matter `hide_title` hides its title, `false` by default |
 //! | `modified` | its last commit's time in the site's time zone (`2026-01-04T13:36:24+01:00`), or none |
 //! | `toc` | its table of contents, `{placement, title, entries}`, or none (`folia_core`'s `Toc`) |
 //! | `cover` | its cover, `{path, position, show, unsplash}` (`folia_core`'s `Cover`) |
@@ -37,11 +38,11 @@
 //!
 //! | Front matter | Outcome |
 //! |-|-|
-//! | `layout`, `title`, `title_icon`, `corner_backlink`, `permalink`, `redirect_from`, `published`, `hide_website_junk` | built |
+//! | `layout` (or none), `title`, `hide_title`, `title_icon`, `corner_backlink`, `permalink`, `redirect_from`, `published`, `hide_website_junk` | built |
 //! | `cover` without a picture, shown behind the page, or after the title | built |
 //! | `toc` disabled, or placed on the left | built |
 //! | `comments`, `narrow_post` set to `false` | built: the site's default, which changes nothing |
-//! | `comments`, `narrow_post` set to `true`; `hide_title`, `last_modified_at`; a table of contents on the right or at the top | refused as not built yet |
+//! | `comments`, `narrow_post` set to `true`; `last_modified_at`; a table of contents on the right or at the top | refused as not built yet |
 //! | a value those keys cannot take (`comments: maybe`, a cover position or TOC placement Jekyll's templates do not know) | refused as invalid |
 //! | any other key | refused as unknown, which may be a typo (`narrow-post`) |
 
@@ -50,13 +51,14 @@ use folia_core::content::{
     Cover, Diagnostic, LastCommits, Route, SiteClock, SourceDoc, Toc, TocPlacement, cover,
     hide_website_junk, modified, table_of_contents,
 };
-use folia_core::publish::{EntrySummary, ModeOutput, PageSpec, PlannedOutput};
+use folia_core::publish::{EntrySummary, ModeOutput, NO_LAYOUT_TEMPLATE, PageSpec, PlannedOutput};
 use serde_json::{Value, json};
 
 /// The front matter keys a page may have, besides the switches.
-const KEYS: [&str; 10] = [
+const KEYS: [&str; 11] = [
     "layout",
     "title",
+    "hide_title",
     "title_icon",
     "corner_backlink",
     "permalink",
@@ -70,9 +72,6 @@ const KEYS: [&str; 10] = [
 /// Switches the page template does not have: a page may only leave them off, as the site's
 /// default does.
 const SWITCHES: [&str; 2] = ["comments", "narrow_post"];
-
-/// Keys the site's pages use whose effect the page template does not have yet.
-const NOT_BUILT: [&str; 1] = ["hide_title"];
 
 /// Source extensions that a converter renders as HTML.
 const MARKDOWN_EXTENSIONS: [&str; 5] = [".markdown", ".mkdown", ".mkdn", ".mkd", ".md"];
@@ -148,7 +147,7 @@ fn build_page(
             .map_err(|e| problem(&e))?
             .ok_or_else(|| problem(&format!("a page without a {key} is not built yet")))
     };
-    let layout = required("layout")?;
+    let layout = doc.front.string("layout").map_err(|e| problem(&e))?;
     let title = required("title")?;
     if doc.front.get("last_modified_at").is_some() {
         return Err(problem(
@@ -160,6 +159,11 @@ fn build_page(
     let toc = table_of_contents(doc)?;
     let cover = cover(doc)?;
     unshown(&cover, toc.as_ref()).map_err(|message| problem(&message))?;
+    let hide_title = match doc.front.json("hide_title") {
+        None => false,
+        Some(Value::Bool(hide)) => hide,
+        Some(_) => return Err(problem(&"hide_title should be true or false")),
+    };
     let title_icon = doc.front.string("title_icon").map_err(|e| problem(&e))?;
     let corner_backlink = corner_backlink(doc).map_err(|message| problem(&message))?;
 
@@ -172,6 +176,7 @@ fn build_page(
         "cover": cover.to_json(),
         "hide_website_junk": hide_website_junk(doc),
         "narrow_post": false,
+        "hide_title": hide_title,
         "title_icon": title_icon,
         "corner_backlink": corner_backlink,
         "date": null,
@@ -185,7 +190,10 @@ fn build_page(
     });
     let page = PageSpec {
         route: planned.route.clone(),
-        template: format!("{layout}.html"),
+        template: layout.as_ref().map_or_else(
+            || NO_LAYOUT_TEMPLATE.to_owned(),
+            |layout| format!("{layout}.html"),
+        ),
         source: Some(doc.id.clone()),
         context,
     };
@@ -206,9 +214,6 @@ fn unknown_or_unbuilt(doc: &SourceDoc) -> Result<(), String> {
     for key in doc.front.keys() {
         if KEYS.contains(&key) || key == "last_modified_at" {
             continue;
-        }
-        if NOT_BUILT.contains(&key) {
-            return Err(format!("{key} is not built yet on pages"));
         }
         if !SWITCHES.contains(&key) {
             return Err(format!(
@@ -407,6 +412,7 @@ mod tests {
                     "main_nav": false, "title": false, "cat_jumbotron": false, "footer": false,
                 },
                 "narrow_post": false,
+                "hide_title": false,
                 "title_icon": null,
                 "corner_backlink": {"show": false, "url": "/", "icon_class": "fas fa-angle-double-left"},
                 "date": null, "description": null, "author": null, "categories": [], "tags": [],
@@ -436,10 +442,21 @@ mod tests {
     }
 
     #[test]
-    fn a_page_without_a_layout_or_title_or_markdown_is_not_built_yet() {
+    fn a_page_without_a_layout_is_written_as_its_content() {
+        let doc = page(
+            "pages/log.md",
+            "title: Log\npermalink: /log\nhide_title: true",
+        );
+        let output = build(&[doc], &LastCommits::default(), &clock()).unwrap();
+        assert_eq!(output.pages[0].template, NO_LAYOUT_TEMPLATE);
+        assert_eq!(output.pages[0].context["layout"], Value::Null);
+        assert_eq!(output.pages[0].context["hide_title"], true);
+    }
+
+    #[test]
+    fn a_page_without_a_title_or_markdown_is_not_built_yet() {
         let problems = build(
             &[
-                page("pages/a.md", "title: A"),
                 page("pages/b.md", "layout: page"),
                 page("blog/c.html", "layout: page\ntitle: C"),
                 page(
@@ -455,7 +472,6 @@ mod tests {
         assert_eq!(
             messages,
             [
-                "pages/a.md: a page without a layout is not built yet",
                 "pages/b.md: a page without a title is not built yet",
                 "blog/c.html: only Markdown pages are built yet",
                 "pages/d.md: last_modified_at is not read on pages yet; the last commit dates them",
@@ -527,7 +543,7 @@ mod tests {
                 "corner_backlink:\n  label: back",
                 "corner_backlink: the key label is not built yet",
             ),
-            ("hide_title: true", "hide_title is not built yet on pages"),
+            ("hide_title: maybe", "hide_title should be true or false"),
             ("comments: true", "comments: true is not built yet"),
             ("narrow_post: maybe", "narrow_post should be true or false"),
             (
