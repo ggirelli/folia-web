@@ -309,6 +309,46 @@ fn a_cover_at_another_position_is_built_and_passed_on_as_it_is() {
 }
 
 #[test]
+fn syndications_that_pull_interactions_are_named_for_the_crawler() {
+    let front = "title: T\nsyndications:\n  mastodon: https://social.example/@me/1\n  \
+                 linkedin: https://linkedin.example/p/2\n  hacker-news: https://news.example/item?id=3";
+    let output = build_one(&[post(SAMPLE_POST, front)]).unwrap();
+    let context = &output.pages[0].context;
+    assert_eq!(
+        context["interactions"],
+        serde_json::json!({
+            "mastodon": "https://social.example/@me/1",
+            "bluesky": null,
+            "hacker_news": "https://news.example/item?id=3",
+        })
+    );
+    assert_eq!(
+        context["syndications"],
+        serde_json::json!([
+            {"name": "mastodon", "url": "https://social.example/@me/1"},
+            {"name": "linkedin", "url": "https://linkedin.example/p/2"},
+            {"name": "hacker-news", "url": "https://news.example/item?id=3"},
+        ]),
+        "every syndication is still linked, in order"
+    );
+}
+
+#[test]
+fn a_post_without_such_syndications_has_no_interactions() {
+    let front = "title: T\nsyndications:\n  linkedin: https://linkedin.example/p/2";
+    let output = build_one(&[post(SAMPLE_POST, front)]).unwrap();
+    assert_eq!(
+        output.pages[0].context["interactions"],
+        serde_json::Value::Null
+    );
+    let plain = build_one(&[post(SAMPLE_POST, "title: T")]).unwrap();
+    assert_eq!(
+        plain.pages[0].context["interactions"],
+        serde_json::Value::Null
+    );
+}
+
+#[test]
 fn a_single_category_is_one_of_the_posts_categories() {
     let output = build_one(&[post(SAMPLE_POST, "title: T\ncategory: travel")]).unwrap();
     assert_eq!(
@@ -376,10 +416,6 @@ fn front_matter_the_template_cannot_show_is_not_built_yet() {
         (
             "toc:\n  enabled: true",
             "a table of contents not on the left is not built yet",
-        ),
-        (
-            "syndications:\n  mastodon: https://m",
-            "a syndication to mastodon is not built yet",
         ),
         (
             "show_author: false",
