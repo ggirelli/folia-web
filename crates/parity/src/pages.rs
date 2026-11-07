@@ -205,6 +205,7 @@ fn claimed(config: &Config) -> BTreeSet<String> {
         .listings
         .iter()
         .map(|listing| listing.source.clone())
+        .chain(config.blog.grouped().map(|(page, _)| page.source.clone()))
         .collect()
 }
 

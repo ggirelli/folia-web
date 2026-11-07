@@ -50,19 +50,7 @@ pub fn listings(
     archive_template: Option<&str>,
     clock: &SiteClock,
 ) -> Result<Vec<PageSpec>, Vec<Diagnostic>> {
-    let mut posts = read_posts(docs, clock)?;
-    posts.sort_by(|a, b| (b.date, &b.id).cmp(&(a.date, &a.id)));
-    let mut cards = Vec::with_capacity(posts.len());
-    let mut problems = Vec::new();
-    for post in &posts {
-        match card(docs, post, clock) {
-            Ok(card) => cards.push(card),
-            Err(problem) => problems.push(problem),
-        }
-    }
-    if !problems.is_empty() {
-        return Err(problems);
-    }
+    let (posts, cards) = cards(docs, clock)?;
     let mut pages = Vec::new();
     if let Some((index, template)) = index {
         let title = index
@@ -77,6 +65,78 @@ pub fn listings(
         pages.extend(archives(&posts, &cards, template)?);
     }
     Ok(pages)
+}
+
+/// The published posts, newest first and same dates by path descending (`site.posts`), with
+/// their cards.
+fn cards(
+    docs: &[SourceDoc],
+    clock: &SiteClock,
+) -> Result<(Vec<Post>, Vec<Value>), Vec<Diagnostic>> {
+    let mut posts = read_posts(docs, clock)?;
+    posts.sort_by(|a, b| (b.date, &b.id).cmp(&(a.date, &a.id)));
+    let mut cards = Vec::with_capacity(posts.len());
+    let mut problems = Vec::new();
+    for post in &posts {
+        match card(docs, post, clock) {
+            Ok(card) => cards.push(card),
+            Err(problem) => problems.push(problem),
+        }
+    }
+    if problems.is_empty() {
+        Ok((posts, cards))
+    } else {
+        Err(problems)
+    }
+}
+
+/// What groups the posts on the blog's categories or tags page.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Grouping {
+    /// By category, as `site.categories`.
+    Categories,
+    /// By tag, as `site.tags`.
+    Tags,
+}
+
+/// The posts by category or tag, as the blog's categories and tags pages list them (Liquid's
+/// `site.categories | sort`): each group `{name, anchor, count, items}`, by name in byte order,
+/// its posts' cards newest first; `anchor` is the name with each space as ` -`, the site's
+/// fragment.
+///
+/// # Errors
+///
+/// Returns every problem found reading the posts.
+pub fn groups(
+    docs: &[SourceDoc],
+    by: Grouping,
+    clock: &SiteClock,
+) -> Result<Value, Vec<Diagnostic>> {
+    let (posts, cards) = cards(docs, clock)?;
+    let names = |post: &Post| match by {
+        Grouping::Categories => post.categories.clone(),
+        Grouping::Tags => post.tags.clone(),
+    };
+    let mut all: Vec<String> = posts.iter().flat_map(names).collect();
+    all.sort();
+    all.dedup();
+    Ok(all
+        .into_iter()
+        .map(|name| {
+            let items: Vec<Value> = posts
+                .iter()
+                .zip(&cards)
+                .filter(|(post, _)| names(post).contains(&name))
+                .map(|(_, card)| card.clone())
+                .collect();
+            json!({
+                "anchor": name.replace(' ', " -"),
+                "count": items.len(),
+                "items": items,
+                "name": name,
+            })
+        })
+        .collect())
 }
 
 /// What every listing page's frame shows: the parts of the frame its source hides, and its cover.

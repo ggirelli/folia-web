@@ -196,3 +196,37 @@ fn same_date_posts_are_listed_by_path_descending() {
 fn without_their_settings_neither_listing_is_built() {
     assert_eq!(listings(&posts(3), None, None, &clock()).unwrap().len(), 0);
 }
+
+#[test]
+fn groups_are_by_name_in_byte_order_with_their_posts_newest_first() {
+    let docs = [
+        doc(
+            "_posts/2021/2021-01-01-a.md",
+            Mode::Blog,
+            "title: A\ntags: [indieweb, stem cells]\ncategories: [code]",
+            "",
+        ),
+        doc(
+            "_posts/2021/2021-01-02-b.md",
+            Mode::Blog,
+            "title: B\ntags: [R, indieweb]\ncategories: [journal, code]",
+            "",
+        ),
+    ];
+    let tags = groups(&docs, Grouping::Tags, &clock()).unwrap();
+    let names: Vec<&str> = tags
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|g| g["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["R", "indieweb", "stem cells"]);
+    assert_eq!(tags[1]["count"], 2);
+    assert_eq!(tags[1]["items"][0]["title"], "B");
+    assert_eq!(tags[1]["items"][1]["title"], "A");
+    assert_eq!(tags[2]["anchor"], "stem -cells");
+    let categories = groups(&docs, Grouping::Categories, &clock()).unwrap();
+    assert_eq!(categories[0]["name"], "code");
+    assert_eq!(categories[0]["count"], 2);
+    assert_eq!(categories[1]["name"], "journal");
+}

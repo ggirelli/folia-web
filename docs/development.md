@@ -158,7 +158,9 @@ names them: `index`, the claimed source of `/blog/` (its `source` and `template`
 list 9 posts each (not `hidden`), the first also the `featured` ones; and `archive-template`, which
 renders an archive per category. Each post is a card: its cover, title, the first 30 words of its
 excerpt, author and date. Archives are not dark, as the site's front matter defaults never
-reached them (`use_dark_layout` false).
+reached them (`use_dark_layout` false). `[blog]`'s `categories` and `tags` claim the pages listing
+the posts by category and by tag (their `source` and `template`): each gets `page.groups`, every
+group by name in byte order, with its posts' cards newest first.
 
 ## A site's private inputs
 
