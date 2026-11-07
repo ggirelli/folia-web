@@ -11,8 +11,10 @@
 //! | a tag feed | `/blog/tag/:tag.xml`, for tags of letters, digits and `_` only |
 //!
 //! [`category_counts`] gives the categories with their number of posts, which every page's
-//! category menu shows. [`build`] builds posts' pages (module `post`).
+//! category menu shows. [`build`] builds posts' pages (module `post`), and [`listings`] the
+//! index's pages and the category archives (module `listing`).
 
+mod listing;
 mod post;
 
 use folia_core::content::{
@@ -23,6 +25,7 @@ use folia_core::publish::PlannedOutput;
 use jiff::Timestamp;
 use jiff::civil::Date;
 
+pub use listing::listings;
 pub use post::{POST_TEMPLATE, build};
 
 /// Posts per listing page.
@@ -44,6 +47,8 @@ struct Post {
     categories: Vec<String>,
     tags: Vec<String>,
     hidden: bool,
+    /// Whether its front matter `featured` is `true`.
+    featured: bool,
 }
 
 /// The outputs of the blog: one page per published post, and the generated pages and feeds.
@@ -157,6 +162,7 @@ fn read_post(doc: &SourceDoc, clock: &SiteClock) -> Result<Option<Post>, Diagnos
         categories: categories(doc).map_err(front)?,
         tags: doc.front.pluralized("tag", "tags").map_err(front)?,
         hidden: doc.front.truthy("hidden"),
+        featured: doc.front.json("featured") == Some(serde_json::Value::Bool(true)),
     }))
 }
 

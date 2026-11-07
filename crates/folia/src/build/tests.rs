@@ -146,6 +146,7 @@ fn config() -> Config {
         }),
         sass: crate::config::SassConfig::default(),
         micro: crate::config::MicroConfig::default(),
+        blog: crate::config::BlogConfig::default(),
     }
 }
 
@@ -545,5 +546,52 @@ fn a_claimed_micro_listing_lists_its_entries_and_keeps_its_stubs() {
         fixture.read("micro.html"),
         "<title>Micro | Filopoetica</title><li>B</li><li>A</li>\
          <a href=\"/c#journal\">journal (2)</a><a href=\"/c#cinema\">cinema (1)</a><footer>2026</footer>"
+    );
+}
+
+#[test]
+fn the_claimed_blog_index_and_the_archives_are_built_by_the_blog() {
+    const INDEX: &str = "{% extends \"base.html\" %}{% block body %}\
+        {{ page.paginator.page }}/{{ page.paginator.total_pages }}:\
+        {% for post in page.items %}<li>{{ post.title }}</li>{% endfor %}{% endblock %}";
+    const ARCHIVE: &str = "{% extends \"base.html\" %}{% block body %}\
+        {{ page.type }} {{ page.title }}:{% for post in page.items %}<li>{{ post.url }}</li>{% endfor %}{% endblock %}";
+    let fixture = Fixture::with(
+        "blog-index",
+        &[
+            ("base.html", BASE),
+            ("page.html", PAGE),
+            ("index.html", INDEX),
+            ("archive.html", ARCHIVE),
+        ],
+        &[(
+            "blog/index.html",
+            "---\nlayout: default\ntitle: Blog\npagination:\n  enabled: true\n---\n{% for post in paginator.posts %}{% endfor %}\n",
+        )],
+    );
+    let mut config = whole_site();
+    config.blog.index = Some(crate::config::ClaimedPage {
+        source: "blog/index.html".to_owned(),
+        template: "index.html".to_owned(),
+    });
+    config.blog.archive_template = Some("archive.html".to_owned());
+    let built = fixture.build_with(&config).unwrap();
+    assert!(
+        built.skipped.iter().all(|s| s
+            .source
+            .as_ref()
+            .is_none_or(|id| id.as_str() != "blog/index.html")),
+        "{:?}",
+        built.skipped
+    );
+    assert!(
+        fixture
+            .read("blog/index.html")
+            .contains("1/1:<li>B</li><li>A</li>")
+    );
+    assert!(
+        fixture
+            .read("blog/category/cinema/index.html")
+            .contains("category cinema:<li>&#x2f;blog&#x2f;2014&#x2f;01&#x2f;08&#x2f;b</li>")
     );
 }

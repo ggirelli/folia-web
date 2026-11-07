@@ -46,6 +46,7 @@ fn config(exclude: &[&str]) -> Config {
         slice: None,
         sass: crate::config::SassConfig::default(),
         micro: crate::config::MicroConfig::default(),
+        blog: crate::config::BlogConfig::default(),
     }
 }
 
