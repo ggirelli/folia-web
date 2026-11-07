@@ -147,6 +147,12 @@ the frame's navigation and titles hidden, a corner link back to `/micro`, no pre
 row, categories and tags hidden (see `folia_micro`'s `entry` module). Their author is the
 configuration's `[micro]` `author`, a key of `[authors]`; without one, they have none.
 
+**Micro listings** are the site's pages that list micro entries, which micro *claims* (plan v12,
+§3.3–3.4): each `[[micro.listings]]` names its `source`, the `template` that renders it and the
+`kinds` it lists. The page keeps its route, redirects and front matter, its body is not
+rendered, and the template gets `page.items`, the entries newest first (same dates by path,
+descending, as Jekyll sorted them), each with its excerpt, its text and its first 25 words.
+
 ## A site's private inputs
 
 Folia's repository holds the generator and the generic parity tools, never a site's data. What

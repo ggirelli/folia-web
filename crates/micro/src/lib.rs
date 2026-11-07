@@ -12,11 +12,14 @@
 //! A kind applies to Markdown files directly in its directory, as Jekyll's front matter
 //! defaults (`_micro/notes/*.md`) did.
 //!
-//! [`build`] builds the entries' pages (module `entry`).
+//! [`build`] builds the entries' pages (module `entry`), and [`listing`] the items of a listing
+//! of some kinds (module `listing`).
 
 mod entry;
+mod listing;
 
 pub use entry::build;
+pub use listing::listing;
 
 use folia_core::content::{
     Diagnostic, Route, SiteClock, SlugMode, SourceDoc, dated_file_name, slugify,

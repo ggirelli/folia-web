@@ -31,8 +31,7 @@ const DESCRIPTION_LENGTH: usize = 160;
 /// `...` included. It is HTML text, to be shown unescaped.
 #[must_use]
 pub fn description(excerpt_html: &str) -> String {
-    let text = HTML_TAG
-        .replace_all(&HTML_BLOCKS.replace_all(excerpt_html, ""), "")
+    let text = strip_html(excerpt_html)
         .replace("\r\n", "")
         .replace('\n', "");
     if text.chars().count() > DESCRIPTION_LENGTH {
@@ -40,6 +39,32 @@ pub fn description(excerpt_html: &str) -> String {
         kept + "..."
     } else {
         text
+    }
+}
+
+/// `html` without scripts, comments, styles or tags, as Liquid's `strip_html` makes it: entities
+/// and line breaks are kept as written.
+#[must_use]
+pub fn strip_html(html: &str) -> String {
+    HTML_TAG
+        .replace_all(&HTML_BLOCKS.replace_all(html, ""), "")
+        .into_owned()
+}
+
+/// The first `count` words of `text`, joined by a space and followed by `...`, when it has more;
+/// else `text` as it is: Liquid's `truncatewords` (4.0), whose words are separated by ASCII
+/// whitespace.
+#[must_use]
+pub fn truncate_words(text: &str, count: usize) -> String {
+    let words: Vec<&str> = text
+        .split([' ', '\t', '\n', '\u{b}', '\u{c}', '\r'])
+        .filter(|word| !word.is_empty())
+        .collect();
+    let count = count.max(1);
+    if words.len() > count {
+        words[..count].join(" ") + "..."
+    } else {
+        text.to_owned()
     }
 }
 
@@ -91,6 +116,24 @@ mod tests {
         assert_eq!(cut.chars().count(), 160);
         assert!(cut.ends_with("é..."));
         assert_eq!(description(&"a".repeat(160)), "a".repeat(160));
+    }
+
+    #[test]
+    fn strip_html_keeps_entities_and_line_breaks() {
+        assert_eq!(
+            strip_html("<p>A &amp; <em>B</em>\n<!-- c --></p><style>p{}</style>"),
+            "A &amp; B\n"
+        );
+    }
+
+    #[test]
+    fn truncate_words_cuts_after_the_count_as_liquid_does() {
+        assert_eq!(
+            truncate_words("  one two\nthree  four ", 3),
+            "one two three..."
+        );
+        assert_eq!(truncate_words("  one two\nthree ", 3), "  one two\nthree ");
+        assert_eq!(truncate_words("one two", 0), "one...");
     }
 
     #[test]

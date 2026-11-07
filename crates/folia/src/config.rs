@@ -52,6 +52,23 @@ pub struct MicroConfig {
     /// The author of every entry, a key of `[authors]`, if any.
     #[serde(default)]
     pub author: Option<String>,
+    /// The site's pages that list micro entries (`[[micro.listings]]`).
+    #[serde(default)]
+    pub listings: Vec<MicroListing>,
+}
+
+/// A page of the site that lists micro entries, which micro claims: the page keeps its route and
+/// front matter, its body (Liquid, for Jekyll) is not rendered, and `template` renders its
+/// frame with the entries of `kinds` as `page.items` (`folia_micro::listing`).
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MicroListing {
+    /// The page's source, relative to the site root (`blog/microblog.html`).
+    pub source: String,
+    /// The template that renders it (`micro_index.html`).
+    pub template: String,
+    /// The kinds it lists (`notes`, `likes`, `bookmarks`, `rsvps`).
+    pub kinds: Vec<String>,
 }
 
 /// How stylesheets are compiled from Sass, with Jekyll's defaults.

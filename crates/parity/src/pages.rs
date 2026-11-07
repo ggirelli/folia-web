@@ -14,7 +14,8 @@
 //!    whole-document check only; one side alone without it fails.
 //! 4. **Other files:** redirect stubs and static files are byte-identical.
 //! 5. **Entries** (`entries`): each document's dates equal the baseline's dump; a page's table of
-//!    contents equals Jekyll's; its code blocks are its body's, highlighted as spike 1 does.
+//!    contents equals Jekyll's; its code blocks are its body's, highlighted as spike 1 does, but
+//!    on a claimed listing (`[[micro.listings]]`), whose blocks are its entries' (`n/a`).
 //! 6. **The garden** (`garden`): the note graph has Jekyll's nodes and edges, and each broken
 //!    link on a page built gives one warning.
 //! 7. **Links** (`links`, A2.8): every internal `href` and `src` of the HTML written resolves to a
@@ -143,6 +144,7 @@ pub fn run(
         &clock,
         &planned,
         &waived,
+        &claimed(&config),
         &mut checks,
     )?;
     passed &= judge_documents(
@@ -195,6 +197,17 @@ fn planned_routes(
         .collect())
 }
 
+/// The sources another mode claims, whose pages list that mode's entries: their bodies are not
+/// rendered, so their code blocks are not their bodies'.
+fn claimed(config: &Config) -> BTreeSet<String> {
+    config
+        .micro
+        .listings
+        .iter()
+        .map(|listing| listing.source.clone())
+        .collect()
+}
+
 /// Runs the checks of the pages, stubs, generated and static files Folia wrote, recording each
 /// one's verdict on each output in `checks`; the outputs in `waived` are compared by none but
 /// the route check, which is not a comparison of their contents.
@@ -210,6 +223,7 @@ fn compare(
     clock: &SiteClock,
     planned: &BTreeMap<String, String>,
     waived: &BTreeSet<String>,
+    claimed: &BTreeSet<String>,
     checks: &mut Checks,
 ) -> Result<bool, String> {
     let jekyll = &baseline_dir.join("site");
@@ -245,6 +259,13 @@ fn compare(
         checks.record(&path, "toc", toc_ok);
         passed &= page_ok && toc_ok;
         if let Some(entry) = built.entries.iter().find(|entry| &entry.route == route) {
+            if claimed.contains(entry.doc.as_str()) {
+                // A listing shows other entries' code; their own pages check it.
+                println!(
+                    "n/a: {path}: code blocks, which a claimed listing takes from its entries."
+                );
+                continue;
+            }
             let code_ok = entries::check_code(&path, entry, &jekyll, &folia);
             checks.record(&path, "code", code_ok);
             passed &= code_ok;

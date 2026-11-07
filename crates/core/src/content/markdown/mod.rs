@@ -36,7 +36,7 @@ mod wiki_link;
 use std::ops::Range;
 
 pub use analyze::{Heading, TocEntry, toc};
-pub use excerpt::{description, excerpt};
+pub use excerpt::{description, excerpt, strip_html, truncate_words};
 pub use wiki_link::{LinkResolver, targets as wiki_link_targets};
 
 use tree::{Kind, Node};
