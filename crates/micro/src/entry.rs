@@ -50,7 +50,7 @@ const KEYS: [&str; 6] = [
 ];
 
 /// Each kind: its directory, layout, and the front matter keys of its own.
-const KINDS: [(&str, &str, &[&str]); 4] = [
+pub(super) const KINDS: [(&str, &str, &[&str]); 4] = [
     ("notes", "page", &[]),
     ("likes", "like", &["like"]),
     ("bookmarks", "bookmark", &["bookmark"]),
@@ -183,7 +183,7 @@ fn build_entry(
 }
 
 /// A like's or bookmark's link, its front matter `key`: `{url, label}`, `label` none without one.
-fn link(doc: &SourceDoc, key: &str) -> Result<Value, String> {
+pub(super) fn link(doc: &SourceDoc, key: &str) -> Result<Value, String> {
     let Some(Value::Object(link)) = doc.front.json(key) else {
         return Err(format!("{key} should be a mapping with a url"));
     };
@@ -203,7 +203,7 @@ fn link(doc: &SourceDoc, key: &str) -> Result<Value, String> {
 }
 
 /// An RSVP's answer, as written (`yes`).
-fn rsvp(doc: &SourceDoc) -> Result<Value, String> {
+pub(super) fn rsvp(doc: &SourceDoc) -> Result<Value, String> {
     match doc.front.json("rsvp") {
         Some(Value::String(answer)) => Ok(answer.into()),
         _ => Err("rsvp should be text, such as yes".to_owned()),
@@ -212,7 +212,7 @@ fn rsvp(doc: &SourceDoc) -> Result<Value, String> {
 
 /// The event an RSVP answers: `{date, time, name, organizer, url}`, each text but `date`, a date
 /// at midnight in the site's time zone.
-fn event(doc: &SourceDoc, clock: &SiteClock) -> Result<Value, String> {
+pub(super) fn event(doc: &SourceDoc, clock: &SiteClock) -> Result<Value, String> {
     const FIELDS: [&str; 5] = ["date", "time", "name", "organizer", "url"];
     let Some(Value::Object(event)) = doc.front.json("event") else {
         return Err("event should be a mapping".to_owned());

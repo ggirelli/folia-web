@@ -42,6 +42,8 @@
 //! |-|-|
 //! | `layout` (or none), `author`, `title`, `hide_title`, `title_icon`, `corner_backlink`, `error-type`, `permalink`, `redirect_from`, `published`, `hide_website_junk` | built |
 //! | an HTML page's body, without Liquid | built: written as it is, as Jekyll converts only Markdown |
+//! | a page another mode claims (`claimed`: its source and template) | built with that template, its body not rendered: the template lists what the other mode built, which the builder adds |
+//! | `show_author: true` | built: an author box shows whenever a page has an author |
 //! | Liquid in an HTML page; a table of contents on one | refused as not built yet |
 //! | `cover` without a picture, shown behind the page, or after the title | built |
 //! | `toc` disabled, or placed on the left | built |
@@ -58,6 +60,7 @@ use folia_core::content::{
 };
 use folia_core::publish::{EntrySummary, ModeOutput, NO_LAYOUT_TEMPLATE, PageSpec, PlannedOutput};
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 
 /// The front matter keys a page may have, besides the switches.
 const KEYS: [&str; 13] = [
@@ -120,7 +123,8 @@ pub fn routes(docs: &[SourceDoc]) -> Result<Vec<PlannedOutput>, Vec<Diagnostic>>
 
 /// Builds the published pages among `docs`: each one's entry, with its body as HTML, and the
 /// page its layout renders. A page's `modified` time is its last commit's (`commits`), shown in
-/// the time zone of `clock`.
+/// the time zone of `clock`. A page in `claimed` (its source, and the template that lists what
+/// another mode built) is rendered with that template, and its body is not rendered.
 ///
 /// # Errors
 ///
@@ -132,11 +136,13 @@ pub fn build(
     docs: &[SourceDoc],
     commits: &LastCommits,
     clock: &SiteClock,
+    claimed: &BTreeMap<String, String>,
 ) -> Result<ModeOutput, Vec<Diagnostic>> {
     let mut output = ModeOutput::default();
     let mut problems = Vec::new();
     for doc in docs.iter().filter(|doc| doc.front.published()) {
-        match build_page(doc, commits, clock) {
+        let claim = claimed.get(doc.id.as_str()).map(String::as_str);
+        match build_page(doc, commits, clock, claim) {
             Ok((entry, page)) => {
                 output.entries.push(entry);
                 output.pages.push(page);
@@ -155,6 +161,7 @@ fn build_page(
     doc: &SourceDoc,
     commits: &LastCommits,
     clock: &SiteClock,
+    claim: Option<&str>,
 ) -> Result<(EntrySummary, PageSpec), Diagnostic> {
     let problem = |message: &dyn std::fmt::Display| Diagnostic::in_doc(&doc.id, message);
     let planned = page_output(doc)?;
@@ -163,7 +170,7 @@ fn build_page(
     if !markdown && extension != ".html" {
         return Err(problem(&"only Markdown and HTML pages are built yet"));
     }
-    if !markdown && (doc.body.contains("{%") || doc.body.contains("{{")) {
+    if claim.is_none() && !markdown && (doc.body.contains("{%") || doc.body.contains("{{")) {
         return Err(problem(&"Liquid in an HTML page is not built yet"));
     }
     let required = |key: &str| {
@@ -223,10 +230,11 @@ fn build_page(
     });
     let page = PageSpec {
         route: planned.route.clone(),
-        template: layout.as_ref().map_or_else(
-            || NO_LAYOUT_TEMPLATE.to_owned(),
-            |layout| format!("{layout}.html"),
-        ),
+        template: match (claim, &layout) {
+            (Some(template), _) => template.to_owned(),
+            (None, Some(layout)) => format!("{layout}.html"),
+            (None, None) => NO_LAYOUT_TEMPLATE.to_owned(),
+        },
         source: Some(doc.id.clone()),
         context,
     };
@@ -235,8 +243,11 @@ fn build_page(
         route: planned.route,
         published: None,
         modified,
+        // A claimed page's body is not rendered: its template lists what another mode built.
         // An HTML page is written as it is: Jekyll converts only Markdown.
-        body_html: if markdown {
+        body_html: if claim.is_some() {
+            String::new()
+        } else if markdown {
             to_html(&doc.body, None)
         } else {
             doc.body.clone()
@@ -257,6 +268,15 @@ fn unknown_or_unbuilt(doc: &SourceDoc) -> Result<(), String> {
             match doc.front.json(key) {
                 Some(Value::Bool(_)) => continue,
                 _ => return Err(format!("{key} should be true or false")),
+            }
+        }
+        if key == "show_author" {
+            match doc.front.json(key) {
+                Some(Value::Bool(true)) => continue,
+                Some(Value::Bool(false)) => {
+                    return Err("show_author: false is not built yet".to_owned());
+                }
+                _ => return Err("show_author should be true or false".to_owned()),
             }
         }
         if !SWITCHES.contains(&key) {
@@ -408,7 +428,7 @@ mod tests {
                 "layout: error\ntitle: 404\npermalink: /404.html\nerror-type: 404 Not Found",
             )
         };
-        let output = build(&[doc], &LastCommits::default(), &clock()).unwrap();
+        let output = build(&[doc], &LastCommits::default(), &clock(), &BTreeMap::new()).unwrap();
         assert_eq!(
             output.entries[0].body_html,
             "\n<p class=\"x\">Not *Markdown*</p>\n"
@@ -421,7 +441,7 @@ mod tests {
     fn an_author_page_names_its_author_and_other_pages_none() {
         let author = |front| {
             let doc = page("me/index.html", front);
-            build(&[doc], &LastCommits::default(), &clock()).map(|output| {
+            build(&[doc], &LastCommits::default(), &clock(), &BTreeMap::new()).map(|output| {
                 (
                     output.pages[0].template.clone(),
                     output.pages[0].context["author"].clone(),
@@ -444,10 +464,68 @@ mod tests {
     }
 
     #[test]
+    fn a_claimed_page_takes_the_claim_s_template_and_no_body() {
+        let doc = SourceDoc {
+            body: "{% for item in site.micro %}{{ item.title }}{% endfor %}\n".to_owned(),
+            ..page(
+                "blog/microblog.html",
+                "layout: page\ntitle: A microblog.\nauthor: gg\nshow_author: true\npermalink: /micro\nredirect_from:\n  - /social\ncomments: false",
+            )
+        };
+        let claimed: BTreeMap<String, String> = [(
+            "blog/microblog.html".to_owned(),
+            "micro_index.html".to_owned(),
+        )]
+        .into();
+        let output = build(
+            std::slice::from_ref(&doc),
+            &LastCommits::default(),
+            &clock(),
+            &claimed,
+        )
+        .unwrap();
+        assert_eq!(output.pages[0].template, "micro_index.html");
+        assert_eq!(output.pages[0].route.url(), "/micro");
+        assert_eq!(output.pages[0].context["author"], "gg");
+        assert_eq!(output.entries[0].body_html, "");
+        assert_eq!(output.entries[0].redirect_from[0].url(), "/social");
+        let unclaimed = build(&[doc], &LastCommits::default(), &clock(), &BTreeMap::new());
+        assert_eq!(
+            unclaimed.unwrap_err()[0].to_string(),
+            "blog/microblog.html: Liquid in an HTML page is not built yet"
+        );
+    }
+
+    #[test]
+    fn show_author_is_built_only_on() {
+        let shown = |value: &str| {
+            build(
+                &[page(
+                    "pages/p.md",
+                    &format!("layout: page\ntitle: T\nshow_author: {value}"),
+                )],
+                &LastCommits::default(),
+                &clock(),
+                &BTreeMap::new(),
+            )
+            .map_err(|problems| problems[0].to_string())
+        };
+        assert!(shown("true").is_ok());
+        assert_eq!(
+            shown("false").unwrap_err(),
+            "pages/p.md: show_author: false is not built yet"
+        );
+        assert_eq!(
+            shown("maybe").unwrap_err(),
+            "pages/p.md: show_author should be true or false"
+        );
+    }
+
+    #[test]
     fn a_title_icon_is_passed_on_and_none_by_default() {
         let built = |front| {
             let doc = page("pages/p.md", front);
-            build(&[doc], &LastCommits::default(), &clock())
+            build(&[doc], &LastCommits::default(), &clock(), &BTreeMap::new())
                 .unwrap()
                 .pages[0]
                 .context["title_icon"]
@@ -466,7 +544,7 @@ mod tests {
             "me/p.md",
             "layout: page\ntitle: T\npermalink: /me/p\ncorner_backlink:\n  show: true",
         );
-        let output = build(&[doc], &LastCommits::default(), &clock()).unwrap();
+        let output = build(&[doc], &LastCommits::default(), &clock(), &BTreeMap::new()).unwrap();
         assert_eq!(
             output.pages[0].context["corner_backlink"],
             json!({"show": true, "url": "/", "icon_class": "fas fa-angle-double-left"})
@@ -475,7 +553,13 @@ mod tests {
 
     #[test]
     fn a_page_is_built_with_the_template_its_layout_names() {
-        let output = build(&[about()], &LastCommits::default(), &clock()).unwrap();
+        let output = build(
+            &[about()],
+            &LastCommits::default(),
+            &clock(),
+            &BTreeMap::new(),
+        )
+        .unwrap();
         let [entry] = &output.entries[..] else {
             panic!("one entry")
         };
@@ -519,7 +603,7 @@ mod tests {
         )]
         .into_iter()
         .collect();
-        let output = build(&[about()], &commits, &clock()).unwrap();
+        let output = build(&[about()], &commits, &clock(), &BTreeMap::new()).unwrap();
         assert_eq!(
             output.pages[0].context["modified"],
             "2026-01-04T13:36:24+01:00"
@@ -536,7 +620,7 @@ mod tests {
             "pages/log.md",
             "title: Log\npermalink: /log\nhide_title: true",
         );
-        let output = build(&[doc], &LastCommits::default(), &clock()).unwrap();
+        let output = build(&[doc], &LastCommits::default(), &clock(), &BTreeMap::new()).unwrap();
         assert_eq!(output.pages[0].template, NO_LAYOUT_TEMPLATE);
         assert_eq!(output.pages[0].context["layout"], Value::Null);
         assert_eq!(output.pages[0].context["hide_title"], true);
@@ -558,6 +642,7 @@ mod tests {
             ],
             &LastCommits::default(),
             &clock(),
+            &BTreeMap::new(),
         )
         .unwrap_err();
         let messages: Vec<_> = problems.iter().map(ToString::to_string).collect();
@@ -587,7 +672,7 @@ mod tests {
     }
 
     fn build_one(doc: SourceDoc) -> Result<ModeOutput, Vec<Diagnostic>> {
-        build(&[doc], &LastCommits::default(), &clock())
+        build(&[doc], &LastCommits::default(), &clock(), &BTreeMap::new())
     }
 
     #[test]

@@ -229,6 +229,12 @@ fn build_documents(
     let commits = LastCommits::read(root, dated).map_err(|e| vec![Diagnostic::site(e)])?;
 
     let strict = config.slice.is_some();
+    let claimed: BTreeMap<String, String> = config
+        .micro
+        .listings
+        .iter()
+        .map(|listing| (listing.source.clone(), listing.template.clone()))
+        .collect();
     let mut output = ModeOutput::default();
     let mut problems = Vec::new();
     let only = |set: &BTreeSet<String>| -> Vec<String> { set.iter().cloned().collect() };
@@ -239,7 +245,7 @@ fn build_documents(
                 .filter(|doc| pages.contains(doc.id.as_str()))
                 .cloned()
                 .collect();
-            folia_pages::build(&docs, &commits, clock)
+            folia_pages::build(&docs, &commits, clock, &claimed)
         }),
         leniently(strict, &mut posts, skipped, |posts| {
             let only = only(posts);
@@ -271,10 +277,35 @@ fn build_documents(
             Err(more) => problems.extend(more),
         }
     }
+    list_micro(config, site, clock, &mut output.pages, &mut problems);
     if problems.is_empty() {
         Ok(output)
     } else {
         Err(problems)
+    }
+}
+
+/// Gives each micro listing page built, among `pages`, the entries it lists as `items`.
+fn list_micro(
+    config: &Config,
+    site: &Site,
+    clock: &SiteClock,
+    pages: &mut [PageSpec],
+    problems: &mut Vec<Diagnostic>,
+) {
+    for listing in &config.micro.listings {
+        let Some(page) = pages.iter_mut().find(|page| {
+            page.source
+                .as_ref()
+                .is_some_and(|id| id.as_str() == listing.source)
+        }) else {
+            continue;
+        };
+        let docs = documents(site, Mode::Micro);
+        match folia_micro::listing(docs, &config.roots.micro, &listing.kinds, clock) {
+            Ok(items) => page.context["items"] = items,
+            Err(more) => problems.extend(more),
+        }
     }
 }
 

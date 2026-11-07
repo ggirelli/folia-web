@@ -512,3 +512,38 @@ fn a_micro_note_is_built_with_the_configured_author() {
         fixture.read("micro/2025-06-11-foo-bar.html")
     );
 }
+
+#[test]
+fn a_claimed_micro_listing_lists_its_entries_and_keeps_its_stubs() {
+    const LISTING: &str = "{% extends \"base.html\" %}{% block body %}\
+        {% for item in page.items %}<li>{{ item.title }}</li>{% endfor %}{% endblock %}";
+    let fixture = Fixture::with(
+        "listing",
+        &[
+            ("base.html", BASE),
+            ("page.html", PAGE),
+            ("listing.html", LISTING),
+        ],
+        &[
+            ("_micro/notes/2025-06-11-a.md", "---\ntitle: A\n---\nA.\n"),
+            ("_micro/notes/2025-06-12-b.md", "---\ntitle: B\n---\nB.\n"),
+            (
+                "blog/microblog.html",
+                "---\nlayout: page\ntitle: Micro\npermalink: /micro\nredirect_from:\n  - /social\n---\n{% for item in site.micro %}{% endfor %}\n",
+            ),
+        ],
+    );
+    let mut config = whole_site();
+    config.micro.listings.push(crate::config::MicroListing {
+        source: "blog/microblog.html".to_owned(),
+        template: "listing.html".to_owned(),
+        kinds: vec!["notes".to_owned()],
+    });
+    let built = fixture.build_with(&config).unwrap();
+    assert!(built.stubs.contains(&Route::html("/social").unwrap()));
+    assert_eq!(
+        fixture.read("micro.html"),
+        "<title>Micro | Filopoetica</title><li>B</li><li>A</li>\
+         <a href=\"/c#journal\">journal (2)</a><a href=\"/c#cinema\">cinema (1)</a><footer>2026</footer>"
+    );
+}
