@@ -28,7 +28,8 @@
 //! | `title_icon` | the classes of the icon its front matter `title_icon` puts before its title, or none |
 //! | `corner_backlink` | `{show, url, icon_class}`: the link back in its corner, its front matter over the site's defaults (not shown, to `/`) |
 //! | `error_type` | its front matter `error-type`, the error an error page shows (`404 Not Found`), or none |
-//! | `date`, `description`, `author`, `previous`, `next` | none: a page has no date, excerpt, author or neighbours |
+//! | `author` | its front matter `author`, a key of the site's authors (the author page's, `layout: author`), or none |
+//! | `date`, `description`, `previous`, `next` | none: a page has no date, excerpt or neighbours |
 //! | `categories`, `tags`, `syndications` | empty |
 //!
 //! The keys a page lacks are there, empty, because the templates of pages and posts share their
@@ -39,7 +40,7 @@
 //!
 //! | Front matter | Outcome |
 //! |-|-|
-//! | `layout` (or none), `title`, `hide_title`, `title_icon`, `corner_backlink`, `error-type`, `permalink`, `redirect_from`, `published`, `hide_website_junk` | built |
+//! | `layout` (or none), `author`, `title`, `hide_title`, `title_icon`, `corner_backlink`, `error-type`, `permalink`, `redirect_from`, `published`, `hide_website_junk` | built |
 //! | an HTML page's body, without Liquid | built: written as it is, as Jekyll converts only Markdown |
 //! | Liquid in an HTML page; a table of contents on one | refused as not built yet |
 //! | `cover` without a picture, shown behind the page, or after the title | built |
@@ -58,8 +59,9 @@ use folia_core::publish::{EntrySummary, ModeOutput, NO_LAYOUT_TEMPLATE, PageSpec
 use serde_json::{Value, json};
 
 /// The front matter keys a page may have, besides the switches.
-const KEYS: [&str; 12] = [
+const KEYS: [&str; 13] = [
     "layout",
+    "author",
     "title",
     "hide_title",
     "title_icon",
@@ -180,6 +182,7 @@ fn build_page(
         Some(_) => return Err(problem(&"hide_title should be true or false")),
     };
     let title_icon = doc.front.string("title_icon").map_err(|e| problem(&e))?;
+    let author = doc.front.string("author").map_err(|e| problem(&e))?;
     let corner_backlink = corner_backlink(doc).map_err(|message| problem(&message))?;
 
     let context = json!({
@@ -197,7 +200,7 @@ fn build_page(
         "corner_backlink": corner_backlink,
         "date": null,
         "description": null,
-        "author": null,
+        "author": author,
         "categories": [],
         "tags": [],
         "syndications": [],
@@ -392,6 +395,32 @@ mod tests {
         );
         assert_eq!(output.pages[0].template, "error.html");
         assert_eq!(output.pages[0].context["error_type"], "404 Not Found");
+    }
+
+    #[test]
+    fn an_author_page_names_its_author_and_other_pages_none() {
+        let author = |front| {
+            let doc = page("me/index.html", front);
+            build(&[doc], &LastCommits::default(), &clock()).map(|output| {
+                (
+                    output.pages[0].template.clone(),
+                    output.pages[0].context["author"].clone(),
+                )
+            })
+        };
+        assert_eq!(
+            author("layout: author\ntitle: gg\nauthor: gg\npermalink: /").unwrap(),
+            ("author.html".to_owned(), json!("gg"))
+        );
+        assert_eq!(
+            author("layout: page\ntitle: T\npermalink: /p").unwrap().1,
+            Value::Null
+        );
+        let problems = author("layout: author\ntitle: gg\nauthor: [gg]").unwrap_err();
+        assert_eq!(
+            problems[0].to_string(),
+            "me/index.html: front matter key \"author\" should be a single value"
+        );
     }
 
     #[test]

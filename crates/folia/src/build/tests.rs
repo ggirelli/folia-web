@@ -128,14 +128,10 @@ fn config() -> Config {
         },
         authors: [(
             "gg".to_owned(),
-            Author {
-                name: "Gabriele Girelli".into(),
-                display_name: "GG".into(),
-                avatar: "gg.webp".into(),
-                web: "/".into(),
-                description: "Eclectic.".into(),
-                bluesky_did: None,
-            },
+            toml::from_str::<Author>(
+                "name = \"Gabriele Girelli\"\ndisplay-name = \"GG\"\navatar = \"gg.webp\"\nweb = \"/\"\ndescription = \"Eclectic.\"\n",
+            )
+            .unwrap(),
         )]
         .into_iter()
         .collect(),
@@ -426,4 +422,60 @@ fn an_output_built_twice_is_refused_not_overwritten() {
     .unwrap_err();
     assert_eq!(clash.to_string(), "a.html is built twice");
     assert!(matches!(&outputs["a.html"], Content::Bytes(bytes) if bytes == b"one"));
+}
+
+#[test]
+fn an_author_page_shows_its_author_s_fields_and_covers_and_an_unknown_author_is_skipped() {
+    const AUTHOR: &str = "{% extends \"base.html\" %}{% block body %}\
+        {% set author = site.authors[page.author] %}<h1>{{ author.name }}</h1>\
+        {% if author.nickname %}<p>{{ author.nickname }}</p>{% endif %}\
+        {% if author.facebook %}<a href=\"https://www.facebook.com/{{ author.facebook }}\">fb</a>{% endif %}\
+        {% if author.hacker_news %}<a href=\"https://news.ycombinator.com/user?id={{ author.hacker_news }}\">hn</a>{% endif %}\
+        {{ content | safe }}<script data-covers='{{ author.covers_json | safe }}'></script>{% endblock %}";
+    let fixture = Fixture::with(
+        "author",
+        &[
+            ("base.html", BASE),
+            ("page.html", PAGE),
+            ("author.html", AUTHOR),
+        ],
+        &[
+            (
+                "me/index.html",
+                "---\nlayout: author\ntitle: gg\nauthor: gg\npermalink: /\n---\n<p>Hi.</p>\n",
+            ),
+            (
+                "me/ghost.html",
+                "---\nlayout: author\ntitle: ghost\nauthor: nobody\npermalink: /ghost\n---\n<p>Boo.</p>\n",
+            ),
+        ],
+    );
+    let mut config = whole_site();
+    config.authors.insert(
+        "gg".to_owned(),
+        toml::from_str(
+            "name = \"Gabriele Girelli\"\ndisplay-name = \"GG\"\nnickname = \"GG\"\navatar = \"gg.webp\"\n\
+             web = \"/\"\ndescription = \"Eclectic.\"\nhacker-news = \"gg\"\n\
+             [[covers]]\npath = \"/c.webp\"\ndescription = \"A <a href=\\\"https://x.org\\\">lake</a> I took\\n\"\n",
+        )
+        .unwrap(),
+    );
+    let built = fixture.build_with(&config).unwrap();
+    assert!(built.pages.contains(&Route::html("/").unwrap()));
+    assert_eq!(
+        fixture.read("index.html"),
+        "<title>gg | Filopoetica</title><h1>Gabriele Girelli</h1><p>GG</p>\
+         <a href=\"https://news.ycombinator.com/user?id=gg\">hn</a><p>Hi.</p>\n\
+         <script data-covers='[{\"path\":\"/c.webp\",\"description\":\"A <a href=\\\"https://x.org\\\">lake</a> I took\\n\"}]'></script>\
+         <a href=\"/c#journal\">journal (2)</a><a href=\"/c#cinema\">cinema (1)</a><footer>2026</footer>"
+    );
+    let skipped: Vec<String> = built.skipped.iter().map(ToString::to_string).collect();
+    assert!(
+        skipped.contains(
+            &"me/ghost.html: the author nobody is not one of the configuration's authors"
+                .to_owned()
+        ),
+        "{skipped:#?}"
+    );
+    assert!(!fixture.dest().join("ghost.html").exists());
 }
