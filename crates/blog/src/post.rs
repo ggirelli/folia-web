@@ -19,6 +19,7 @@
 //! | `hide_website_junk` | the parts of the frame it hides, each `true` or `false` |
 //! | `syndications` | `{name, url}` for each of its front matter `syndications`, in order |
 //! | `narrow_post` | whether the article is narrower (front matter `narrow_post`), `false` by default |
+//! | `footer` | `{extra}`: the line front matter `footer.extra` adds to the page's footer, or none |
 //!
 //! Every post shows its author box and its previous and next posts, so `show_author` and
 //! `pagination`, which the site's posts never set otherwise, are not read.
@@ -54,10 +55,12 @@ const KEYS: [&str; 8] = [
 
 /// Keys that change nothing on a post's own page, each with the kind of value it takes: `trip`
 /// (which no template of the site reads), `featured` (read by the blog's index) and `hidden`
-/// (by pagination). Their posts are built; listings read them when they are built.
-const INERT_KEYS: [(&str, Kind); 3] = [
+/// (by pagination); and `use_dark_layout: true`, every page's default. Their posts are built;
+/// listings read them when they are built.
+const INERT_KEYS: [(&str, Kind); 4] = [
     ("trip", Kind::Text),
     ("featured", Kind::Switch),
+    ("use_dark_layout", Kind::On),
     ("hidden", Kind::Switch),
 ];
 
@@ -66,10 +69,14 @@ const INERT_KEYS: [(&str, Kind); 3] = [
 enum Kind {
     Text,
     Switch,
+    /// `true` only: the site's default for every page (`use_dark_layout`); `false` would change
+    /// the page, which is not built yet.
+    On,
 }
 
 /// The presentation keys the post template can show.
-const PRESENTATION_KEYS: [&str; 5] = [
+const PRESENTATION_KEYS: [&str; 6] = [
+    "footer",
     "cover",
     "toc",
     "hide_website_junk",
@@ -152,6 +159,7 @@ fn build_post(
     let modified = modified(doc, commits, Some(post.published), clock)?;
     let author = doc.front.string("author").map_err(|e| problem(&e))?;
     let narrow_post = narrow_post(doc).map_err(|message| problem(&message))?;
+    let footer = footer(doc).map_err(|message| problem(&message))?;
 
     let context = json!({
         "url": post.route.url(),
@@ -170,6 +178,7 @@ fn build_post(
         "hide_website_junk": hide_website_junk(doc),
         "syndications": syndications(doc),
         "narrow_post": narrow_post,
+        "footer": footer,
     });
 
     let page = PageSpec {
@@ -195,9 +204,16 @@ fn unsupported(doc: &SourceDoc, toc: Option<&Toc>, cover: &Cover) -> Result<(), 
     for key in doc.front.keys() {
         if let Some((_, kind)) = INERT_KEYS.iter().find(|(name, _)| *name == key) {
             match (kind, doc.front.json(key)) {
-                (Kind::Text, Some(Value::String(_))) | (Kind::Switch, Some(Value::Bool(_))) => {}
+                (Kind::Text, Some(Value::String(_)))
+                | (Kind::Switch, Some(Value::Bool(_)))
+                | (Kind::On, Some(Value::Bool(true))) => {}
                 (Kind::Text, _) => return Err(format!("{key} should be text")),
-                (Kind::Switch, _) => return Err(format!("{key} should be true or false")),
+                (Kind::On, Some(Value::Bool(false))) => {
+                    return Err(format!("{key}: false is not built yet"));
+                }
+                (Kind::Switch | Kind::On, _) => {
+                    return Err(format!("{key} should be true or false"));
+                }
             }
         } else if !KEYS.contains(&key) && !PRESENTATION_KEYS.contains(&key) {
             return Err(format!("the front matter key {key} is not built yet"));
@@ -231,6 +247,26 @@ fn narrow_post(doc: &SourceDoc) -> Result<bool, String> {
         Some(Value::Bool(narrow)) => Ok(narrow),
         Some(_) => Err("narrow_post should be true or false".to_owned()),
     }
+}
+
+/// The post's footer: `{extra}`, the line its front matter `footer.extra` adds to the page's
+/// footer, or none.
+fn footer(doc: &SourceDoc) -> Result<Value, String> {
+    let extra = match doc.front.json("footer") {
+        None | Some(Value::Null) => None,
+        Some(Value::Object(footer)) => {
+            if let Some(key) = footer.keys().find(|key| *key != "extra") {
+                return Err(format!("footer: the key {key} is not built yet"));
+            }
+            match footer.get("extra") {
+                None | Some(Value::Null) => None,
+                Some(Value::String(extra)) => Some(extra.clone()),
+                Some(_) => return Err("footer: extra should be text".to_owned()),
+            }
+        }
+        Some(_) => return Err("footer should be a mapping".to_owned()),
+    };
+    Ok(json!({ "extra": extra }))
 }
 
 /// The syndications as `{name, url}`, in their front matter's order: a JSON mapping would sort
