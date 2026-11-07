@@ -39,7 +39,8 @@ Each mode crate depends on `folia-core` only, never on another mode.
   redirect stubs. `build` is the pipeline: of the configuration's slice (plan v9, §12.2), each
   document of which must build, or, without a slice, of every document, skipping those Folia
   cannot build yet. `render` renders pages with MiniJinja from the site's templates
-  (`_folia/templates` in the site), and `output` writes the destination whole or not at all.
+  (`_folia/templates` in the site), `redirects` serializes `/redirects.json` as
+  `jekyll-redirect-from` writes it, and `output` writes the destination whole or not at all.
 - **`crates/parity`**: the dev-only parity tool (`just routes`, `just markdown`, `just pages`,
   `just determinism`), and the content lint (`just liquid`).
   It reads baselines as black boxes and calls only Folia's public API. `markdown` holds spike 1's
@@ -105,6 +106,24 @@ Each mode crate depends on `folia-core` only, never on another mode.
   configuration.
 - **`docs/`**: this documentation, and the versioned plans in `docs/planning/`.
 - **`assets/brand/`**: logos and the banner.
+
+## Building a site
+
+```sh
+cargo run --release -p folia -- build --site ../my-site --dest ../my-site-out
+```
+
+Without a `[slice]` in the site's `folia.toml`, the whole site is built; documents Folia cannot
+build yet are skipped, each named with the reason.
+
+**Stylesheets need Dart Sass 1.100.0** (plan v12, Q7): the version Jekyll's `sass-embedded`
+runs, so that the CSS and its source maps are Jekyll's, byte for byte. Install the standalone
+release from <https://github.com/sass/dart-sass/releases/tag/1.100.0> and put its `sass` on
+`PATH`, or set `FOLIA_SASS` to the program. A site with Sass stylesheets fails to build, saying
+so, when Dart Sass is missing or another version; no other compiler is used. The site's Sass
+settings are its configuration's `[sass]` table: `dir`, the directory imports are found in
+(default `_sass`), and `style`, `expanded` (default) or `compressed`. Stylesheets are compiled in
+whole-site builds only, so a slice's output is unchanged.
 
 ## A site's private inputs
 
