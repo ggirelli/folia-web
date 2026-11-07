@@ -595,3 +595,38 @@ fn the_claimed_blog_index_and_the_archives_are_built_by_the_blog() {
             .contains("category cinema:<li>&#x2f;blog&#x2f;2014&#x2f;01&#x2f;08&#x2f;b</li>")
     );
 }
+
+#[test]
+fn the_claimed_tags_page_lists_the_posts_by_tag() {
+    const TAGS: &str = "{% extends \"base.html\" %}{% block body %}\
+        {% for group in page.groups %}<h2>{{ group.name }} ({{ group.count }})</h2>{% endfor %}{% endblock %}";
+    let fixture = Fixture::with(
+        "tags",
+        &[
+            ("base.html", BASE),
+            ("page.html", PAGE),
+            ("tags.html", TAGS),
+        ],
+        &[
+            (
+                "_posts/2020/2020-01-01-t.md",
+                "---\ntags: [note, film]\n---\nT\n",
+            ),
+            (
+                "blog/tags.html",
+                "---\nlayout: default\ntitle: Tags\npermalink: /blog/tags.html\nadditional_body_class: tags-index\n---\n{% for tag in site.tags %}{% endfor %}\n",
+            ),
+        ],
+    );
+    let mut config = whole_site();
+    config.blog.tags = Some(crate::config::ClaimedPage {
+        source: "blog/tags.html".to_owned(),
+        template: "tags.html".to_owned(),
+    });
+    fixture.build_with(&config).unwrap();
+    assert!(
+        fixture
+            .read("blog/tags.html")
+            .contains("<h2>film (1)</h2><h2>note (1)</h2>")
+    );
+}

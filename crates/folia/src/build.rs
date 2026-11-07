@@ -238,6 +238,12 @@ fn build_documents(
         .listings
         .iter()
         .map(|listing| (listing.source.clone(), listing.template.clone()))
+        .chain(
+            config
+                .blog
+                .grouped()
+                .map(|(page, _)| (page.source.clone(), page.template.clone())),
+        )
         .collect();
     let mut output = ModeOutput::default();
     let mut problems = Vec::new();
@@ -293,7 +299,8 @@ fn build_documents(
 }
 
 /// Adds the blog's listing pages to `pages`: its index's, when the configuration claims one, and
-/// its category archives, when it names their template.
+/// its category archives, when it names their template; and gives its claimed categories and
+/// tags pages, among `pages`, their posts by category or tag as `groups`.
 fn list_blog(
     config: &Config,
     site: &Site,
@@ -321,6 +328,19 @@ fn list_blog(
     match folia_blog::listings(documents(site, Mode::Blog), index, archive, clock) {
         Ok(more) => pages.extend(more),
         Err(more) => problems.extend(more),
+    }
+    for (claim, by) in config.blog.grouped() {
+        let Some(page) = pages.iter_mut().find(|page| {
+            page.source
+                .as_ref()
+                .is_some_and(|id| id.as_str() == claim.source)
+        }) else {
+            continue;
+        };
+        match folia_blog::groups(documents(site, Mode::Blog), by, clock) {
+            Ok(groups) => page.context["groups"] = groups,
+            Err(more) => problems.extend(more),
+        }
     }
 }
 

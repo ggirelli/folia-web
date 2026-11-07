@@ -25,7 +25,7 @@ use folia_core::publish::PlannedOutput;
 use jiff::Timestamp;
 use jiff::civil::Date;
 
-pub use listing::listings;
+pub use listing::{Grouping, groups, listings};
 pub use post::{POST_TEMPLATE, build};
 
 /// Posts per listing page.

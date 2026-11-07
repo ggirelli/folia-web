@@ -58,6 +58,25 @@ pub struct BlogConfig {
     /// The template of the category archives (`archive.html`).
     #[serde(default)]
     pub archive_template: Option<String>,
+    /// The page listing the posts by category, which the blog claims (`page.groups`).
+    #[serde(default)]
+    pub categories: Option<ClaimedPage>,
+    /// The page listing the posts by tag, which the blog claims (`page.groups`).
+    #[serde(default)]
+    pub tags: Option<ClaimedPage>,
+}
+
+impl BlogConfig {
+    /// The pages the blog claims whose frame the pages mode builds: the categories and tags
+    /// pages, each with what groups its posts.
+    pub fn grouped(&self) -> impl Iterator<Item = (&ClaimedPage, folia_blog::Grouping)> {
+        [
+            (self.categories.as_ref(), folia_blog::Grouping::Categories),
+            (self.tags.as_ref(), folia_blog::Grouping::Tags),
+        ]
+        .into_iter()
+        .filter_map(|(page, by)| page.map(|page| (page, by)))
+    }
 }
 
 /// A page of the site a mode claims: the page keeps its route and front matter, its body

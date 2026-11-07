@@ -29,6 +29,7 @@
 //! | `corner_backlink` | `{show, url, icon_class}`: the link back in its corner, its front matter over the site's defaults (not shown, to `/`) |
 //! | `error_type` | its front matter `error-type`, the error an error page shows (`404 Not Found`), or none |
 //! | `author` | its front matter `author`, a key of the site's authors (the author page's, `layout: author`), or none |
+//! | `additional_body_class` | its front matter `additional_body_class`, a class the page's `<body>` adds, or none |
 //! | `date`, `description`, `previous`, `next` | none: a page has no date, excerpt or neighbours |
 //! | `categories`, `tags`, `syndications` | empty |
 //!
@@ -40,7 +41,7 @@
 //!
 //! | Front matter | Outcome |
 //! |-|-|
-//! | `layout` (or none), `author`, `title`, `hide_title`, `title_icon`, `corner_backlink`, `error-type`, `permalink`, `redirect_from`, `published`, `hide_website_junk` | built |
+//! | `layout` (or none), `author`, `additional_body_class`, `title`, `hide_title`, `title_icon`, `corner_backlink`, `error-type`, `permalink`, `redirect_from`, `published`, `hide_website_junk` | built |
 //! | an HTML page's body, without Liquid | built: written as it is, as Jekyll converts only Markdown |
 //! | a page another mode claims (`claimed`: its source and template) | built with that template, its body not rendered: the template lists what the other mode built, which the builder adds |
 //! | `show_author: true` | built: an author box shows whenever a page has an author |
@@ -63,9 +64,10 @@ use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
 /// The front matter keys a page may have, besides the switches.
-const KEYS: [&str; 13] = [
+const KEYS: [&str; 14] = [
     "layout",
     "author",
+    "additional_body_class",
     "title",
     "hide_title",
     "title_icon",
@@ -204,6 +206,10 @@ fn build_page(
     };
     let title_icon = doc.front.string("title_icon").map_err(|e| problem(&e))?;
     let author = doc.front.string("author").map_err(|e| problem(&e))?;
+    let body_class = doc
+        .front
+        .string("additional_body_class")
+        .map_err(|e| problem(&e))?;
     let corner_backlink = corner_backlink(doc).map_err(|message| problem(&message))?;
 
     let context = json!({
@@ -222,6 +228,7 @@ fn build_page(
         "date": null,
         "description": null,
         "author": author,
+        "additional_body_class": body_class,
         "categories": [],
         "tags": [],
         "syndications": [],
@@ -497,6 +504,19 @@ mod tests {
     }
 
     #[test]
+    fn an_additional_body_class_is_passed_on() {
+        let doc = page(
+            "blog/tags.html",
+            "layout: default\ntitle: Tags\nadditional_body_class: tags-index",
+        );
+        let output = build(&[doc], &LastCommits::default(), &clock(), &BTreeMap::new()).unwrap();
+        assert_eq!(
+            output.pages[0].context["additional_body_class"],
+            "tags-index"
+        );
+    }
+
+    #[test]
     fn show_author_is_built_only_on() {
         let shown = |value: &str| {
             build(
@@ -588,7 +608,7 @@ mod tests {
                 "hide_title": false,
                 "title_icon": null,
                 "corner_backlink": {"show": false, "url": "/", "icon_class": "fas fa-angle-double-left"},
-                "date": null, "description": null, "author": null, "categories": [], "tags": [],
+                "date": null, "description": null, "author": null, "additional_body_class": null, "categories": [], "tags": [],
                 "syndications": [], "previous": null, "next": null,
             })
         );
