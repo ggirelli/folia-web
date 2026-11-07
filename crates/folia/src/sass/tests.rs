@@ -95,10 +95,29 @@ fn a_missing_dart_sass_says_how_to_install_it() {
 
 #[test]
 fn another_version_of_dart_sass_is_refused() {
+    // `echo`, whatever it prints for `--version`, is not Dart Sass 1.100.0; no test writes it.
+    let error = Sass::with_program("echo".into()).unwrap_err();
+    assert!(error.contains("`echo` is version"), "{error}");
+    assert!(error.contains("Install 1.100.0"), "{error}");
+}
+
+#[test]
+fn the_required_version_is_accepted() {
     let dir = Dir::new("version");
-    let error = Sass::with_program(dir.fake_sass("1.99.0")).unwrap_err();
-    assert!(error.contains("is version \"1.99.0\""), "{error}");
-    assert!(Sass::with_program(dir.fake_sass(DART_SASS_VERSION)).is_ok());
+    let program = dir.fake_sass(DART_SASS_VERSION);
+    // A program just written can be busy while another test's child process still holds it
+    // open between fork and exec (ETXTBSY): try again shortly.
+    let mut result = Sass::with_program(program.clone());
+    for _ in 0..50 {
+        match &result {
+            Err(error) if error.contains("os error 26") => {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+                result = Sass::with_program(program.clone());
+            }
+            _ => break,
+        }
+    }
+    assert!(result.is_ok(), "{result:?}");
 }
 
 /// Needs Dart Sass 1.100.0 (`sass` on PATH, or `FOLIA_SASS`): `cargo test -- --ignored`.
