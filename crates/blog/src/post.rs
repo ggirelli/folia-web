@@ -41,15 +41,32 @@ use super::{Post, read_posts};
 pub const POST_TEMPLATE: &str = "post.html";
 
 /// The front matter keys the post template can show, besides the presentation keys.
-const KEYS: [&str; 7] = [
+const KEYS: [&str; 8] = [
     "layout",
     "title",
     "author",
+    "category",
     "categories",
     "tags",
     "lang",
     "last_modified_at",
 ];
+
+/// Keys that change nothing on a post's own page, each with the kind of value it takes: `trip`
+/// (which no template of the site reads), `featured` (read by the blog's index) and `hidden`
+/// (by pagination). Their posts are built; listings read them when they are built.
+const INERT_KEYS: [(&str, Kind); 3] = [
+    ("trip", Kind::Text),
+    ("featured", Kind::Switch),
+    ("hidden", Kind::Switch),
+];
+
+/// The kind of value a front matter key takes.
+#[derive(Clone, Copy)]
+enum Kind {
+    Text,
+    Switch,
+}
 
 /// The presentation keys the post template can show.
 const PRESENTATION_KEYS: [&str; 5] = [
@@ -176,7 +193,13 @@ fn build_post(
 /// yet, if it cannot.
 fn unsupported(doc: &SourceDoc, toc: Option<&Toc>, cover: &Cover) -> Result<(), String> {
     for key in doc.front.keys() {
-        if !KEYS.contains(&key) && !PRESENTATION_KEYS.contains(&key) {
+        if let Some((_, kind)) = INERT_KEYS.iter().find(|(name, _)| *name == key) {
+            match (kind, doc.front.json(key)) {
+                (Kind::Text, Some(Value::String(_))) | (Kind::Switch, Some(Value::Bool(_))) => {}
+                (Kind::Text, _) => return Err(format!("{key} should be text")),
+                (Kind::Switch, _) => return Err(format!("{key} should be true or false")),
+            }
+        } else if !KEYS.contains(&key) && !PRESENTATION_KEYS.contains(&key) {
             return Err(format!("the front matter key {key} is not built yet"));
         }
     }

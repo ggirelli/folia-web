@@ -267,6 +267,23 @@ fn a_post_without_a_toc_or_cover_has_none_and_the_default_cover() {
 }
 
 #[test]
+fn keys_that_change_nothing_on_the_page_are_accepted_and_not_shown() {
+    let plain = build_one(&[post(SAMPLE_POST, "title: T")]).unwrap();
+    let front = "title: T\ntrip: somewhere-2023\nfeatured: true\nhidden: false";
+    let output = build_one(&[post(SAMPLE_POST, front)]).unwrap();
+    assert_eq!(output.pages[0].context, plain.pages[0].context);
+}
+
+#[test]
+fn a_single_category_is_one_of_the_posts_categories() {
+    let output = build_one(&[post(SAMPLE_POST, "title: T\ncategory: travel")]).unwrap();
+    assert_eq!(
+        output.pages[0].context["categories"],
+        serde_json::json!([{"name": "travel", "anchor": "travel"}])
+    );
+}
+
+#[test]
 fn a_narrow_post_with_a_cover_after_its_title_is_built() {
     let front = "narrow_post: true\ncover:\n  path: /c.webp\n  unsplash: someone";
     let output = build_one(&[post(SAMPLE_POST, front)]).unwrap();
@@ -313,6 +330,9 @@ fn front_matter_the_template_cannot_show_is_not_built_yet() {
             "cover: unknown position \"top\"",
         ),
         ("narrow_post: maybe", "narrow_post should be true or false"),
+        ("featured: yes please", "featured should be true or false"),
+        ("hidden: 1", "hidden should be true or false"),
+        ("trip: [a, b]", "trip should be text"),
         (
             "toc:\n  enabled: true",
             "a table of contents not on the left is not built yet",
