@@ -10,6 +10,7 @@
 //! | `toc` | [`Toc`]: where it goes, its title, its entries; none when not enabled | none |
 //! | `cover` | [`Cover`]: its picture, position, whether it shows, its Unsplash credit | after the title, shown, no picture |
 //! | `hide_website_junk` | which parts of the frame to hide: `main_nav`, `title`, `cat_jumbotron`, `footer` | none hidden |
+//! | `syndications` | [`syndications`]: `{name, url}` of each, in order; [`interactions`]: those the interactions crawler pulls from | none |
 //!
 //! The TOC's title is display text: none here means the template's own.
 
@@ -180,6 +181,48 @@ pub fn hide_website_junk(doc: &SourceDoc) -> Value {
         })
         .collect::<serde_json::Map<_, _>>()
         .into()
+}
+
+/// Syndications whose links the site's template turns into an interactions crawler: each with
+/// its key in the document's `interactions`.
+const INTERACTIONS: [(&str, &str); 3] = [
+    ("mastodon", "mastodon"),
+    ("bluesky", "bluesky"),
+    ("hacker-news", "hacker_news"),
+];
+
+/// The URLs of the document's syndications that offer to pull interactions, by
+/// `INTERACTIONS`' keys (`{mastodon, bluesky, hacker_news}`, each a URL or none); none when it
+/// has none of them, as the site's template shows no crawler then.
+#[must_use]
+pub fn interactions(doc: &SourceDoc) -> Value {
+    let syndications = doc.front.entries("syndications").unwrap_or_default();
+    let url = |name: &str| {
+        syndications
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, url)| url.clone())
+    };
+    if INTERACTIONS.iter().all(|(name, _)| url(name).is_none()) {
+        return Value::Null;
+    }
+    INTERACTIONS
+        .iter()
+        .map(|(name, key)| ((*key).to_owned(), url(name).unwrap_or(Value::Null)))
+        .collect::<serde_json::Map<_, _>>()
+        .into()
+}
+
+/// The syndications as `{name, url}`, in their front matter's order: a JSON mapping would sort
+/// them. Without a mapping of its own, a document has its default's, which is none.
+#[must_use]
+pub fn syndications(doc: &SourceDoc) -> Value {
+    doc.front
+        .entries("syndications")
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(name, url)| json!({"name": name, "url": url}))
+        .collect()
 }
 
 #[cfg(test)]

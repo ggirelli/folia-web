@@ -1,8 +1,8 @@
 //! The build pipeline (plan v6, §11).
 //!
 //! 1. Plan every output of the site, and check the route table (`site::plan`).
-//! 2. Build the documents: pages with the pages mode, posts with the blog mode, and notes, with
-//!    the note graph, with the garden mode, dated with their last commits. A configured slice
+//! 2. Build the documents: pages with the pages mode, posts with the blog mode, notes, with
+//!    the note graph, with the garden mode, and micro entries with the microblog mode, dated with their last commits. A configured slice
 //!    ([`Slice`], plan v9, §12.2) names the documents to build, and each must build. Without one,
 //!    every document is built, except those Folia cannot build yet: each is skipped, with the
 //!    reason, in [`Built::skipped`].
@@ -187,7 +187,7 @@ fn add(
     }
 }
 
-/// The pages, posts and notes to build, built by their modes, with the git dates of their
+/// The pages, posts, notes and micro entries to build, built by their modes, with the git dates of their
 /// sources: the slice's, or, without one, every document, less those a mode reports it cannot
 /// build yet, which go to `skipped`.
 fn build_documents(
@@ -204,23 +204,24 @@ fn build_documents(
             .collect()
     };
     let named = |names: &[String]| names.iter().cloned().collect::<BTreeSet<_>>();
-    let (mut pages, mut posts, mut notes) = if let Some(slice) = &config.slice {
+    let (mut pages, mut posts, mut notes, mut micro) = if let Some(slice) = &config.slice {
         (
             named(&slice.pages),
             named(&slice.posts),
             named(&slice.notes),
+            named(&slice.micro),
         )
     } else {
         let mut pages = ids(Mode::Pages);
         pages.retain(|id| !is_sass(id));
-        (pages, ids(Mode::Blog), ids(Mode::Garden))
+        (pages, ids(Mode::Blog), ids(Mode::Garden), ids(Mode::Micro))
     };
-    let dated: Vec<_> = [Mode::Pages, Mode::Blog, Mode::Garden]
+    let dated: Vec<_> = [Mode::Pages, Mode::Blog, Mode::Garden, Mode::Micro]
         .into_iter()
         .flat_map(|mode| documents(site, mode))
         .map(|doc| &doc.id)
         .filter(|id| {
-            [&pages, &posts, &notes]
+            [&pages, &posts, &notes, &micro]
                 .iter()
                 .any(|s| s.contains(id.as_str()))
         })
@@ -250,6 +251,13 @@ fn build_documents(
             let only: Vec<&str> = only.iter().map(String::as_str).collect();
             let docs = documents(site, Mode::Garden);
             folia_garden::build(docs, &config.roots.garden, &only, &commits, clock)
+        }),
+        leniently(strict, &mut micro, skipped, |micro| {
+            let only = only(micro);
+            let only: Vec<&str> = only.iter().map(String::as_str).collect();
+            let docs = documents(site, Mode::Micro);
+            let author = config.micro.author.as_deref();
+            folia_micro::build(docs, &config.roots.micro, &only, author, &commits, clock)
         }),
     ];
     for built in results {

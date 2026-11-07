@@ -45,6 +45,7 @@ fn config(exclude: &[&str]) -> Config {
         authors: std::collections::BTreeMap::new(),
         slice: None,
         sass: crate::config::SassConfig::default(),
+        micro: crate::config::MicroConfig::default(),
     }
 }
 

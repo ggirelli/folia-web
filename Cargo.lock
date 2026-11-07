@@ -352,6 +352,7 @@ name = "folia-micro"
 version = "0.0.0"
 dependencies = [
  "folia-core",
+ "serde_json",
 ]
 
 [[package]]

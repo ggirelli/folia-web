@@ -142,8 +142,10 @@ fn config() -> Config {
                 "_digital_garden/topic/index.md".into(),
                 "_digital_garden/topic/note.md".into(),
             ],
+            micro: Vec::new(),
         }),
         sass: crate::config::SassConfig::default(),
+        micro: crate::config::MicroConfig::default(),
     }
 }
 
@@ -478,4 +480,35 @@ fn an_author_page_shows_its_author_s_fields_and_covers_and_an_unknown_author_is_
         "{skipped:#?}"
     );
     assert!(!fixture.dest().join("ghost.html").exists());
+}
+
+#[test]
+fn a_micro_note_is_built_with_the_configured_author() {
+    const NOTE: &str = "{% extends \"base.html\" %}{% block body %}\
+        <p>{{ page.author }} {{ page.date }} {{ page.corner_backlink.url }}</p>{{ content | safe }}{% endblock %}";
+    let fixture = Fixture::with(
+        "micro",
+        &[("base.html", BASE), ("page.html", NOTE)],
+        &[(
+            "_micro/notes/2025-06-11-foo_bar.md",
+            "---\ntitle: Foo\n---\nBar.\n",
+        )],
+    );
+    let mut config = whole_site();
+    config.micro.author = Some("gg".to_owned());
+    let built = fixture.build_with(&config).unwrap();
+    assert!(
+        built
+            .pages
+            .contains(&Route::html("/micro/2025-06-11-foo-bar").unwrap()),
+        "{:?}",
+        built.pages
+    );
+    assert!(
+        fixture
+            .read("micro/2025-06-11-foo-bar.html")
+            .contains("<p>gg 2025-06-11T00:00:00+02:00 &#x2f;micro</p><p>Bar.</p>"),
+        "{}",
+        fixture.read("micro/2025-06-11-foo-bar.html")
+    );
 }
