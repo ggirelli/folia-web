@@ -28,6 +28,16 @@ one class.
 | missing evidence | Folia writes the output but no check compares its contents | **no** |
 | unclassified | its coverage entry is invalid, pending or doubled | **no** |
 
+**What `just pages` fails on.** Every check still prints every difference it finds, classified
+or not, so the log stays complete. The run exits non-zero for what the checks cannot classify
+(the ledger's integrity: a stale or invalid entry, a page whose bytes are not what Folia's
+manifest records; the links; the expected warnings; an unknown source identity) and for any row
+the coverage report does not pass: an unclassified, known, defective or evidence-less one. An
+output with an approved *intentional* difference does not fail it, and that entry covers all that
+output's differences, so its rationale must say precisely what differs. A run that fails nothing
+ends "Page parity holds with documented differences: this is NOT exact parity", or, only when
+no output differs at all, "holds, exactly".
+
 Outputs Folia writes that Jekyll never did have no row. They pass only when an owner-approved
 `folia-only` entry names them, and the report lists them apart. The report ends with two
 verdicts: a *clean build* (every output accounted for, none a defect or lacking evidence) and
@@ -101,6 +111,17 @@ it; the coverage report lists it as Folia-only.
   it expects.
 - **Unknown front matter** is refused, except the one documented exception (see
   [Building a site](development.md#building-a-site)); Jekyll ignored it silently.
+
+### Recording a known source-content link defect
+
+The links check resolves every internal link and fails the run on each one that resolves to
+nothing. A site owner records a defect that is the source's own as a `check = "links"` entry of
+the deviation ledger (`class = "known-source-defect"`, `status = "recorded"`, with the `page`,
+`at` (`a@href`), `value`, `source` and `rationale`). An entry only relabels the one broken link
+it names exactly, and only when the Jekyll baseline's page has the same attribute value, so it
+is shown to be no change Folia made. Every other broken link still fails. An entry is stale, and
+fails the run, when its link is no longer broken or no longer there, when the baseline lacks it,
+or when two entries name one link. It approves nothing and changes no output.
 
 ## Not covered by parity checks
 

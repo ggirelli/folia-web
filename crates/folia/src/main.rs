@@ -13,7 +13,10 @@ use folia::config::Config;
 use jiff::Timestamp;
 
 #[derive(Parser)]
-#[command(about = "Folia: the static-site generator behind ggirelli.info")]
+#[command(
+    version,
+    about = "Folia: the static-site generator behind ggirelli.info"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
