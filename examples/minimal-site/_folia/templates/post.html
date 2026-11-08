@@ -2,7 +2,7 @@
 {% block body %}
 <article>
 <h1>{{ page.title }}</h1>
-<p><time datetime="{{ page.date }}">{{ page.date | date("%d %b %Y") }}</time>
+<p class="byline">{% if page.author %}<img class="avatar" src="/{{ site.authors[page.author].avatar }}" alt="" width="32" height="32"> {% endif %}<time datetime="{{ page.date }}">{{ page.date | date("%d %b %Y") }}</time>
 {% if page.author %} by {{ site.authors[page.author].display_name }}{% endif %}</p>
 {% if page.toc %}<nav class="toc"><p>{{ page.toc.title or "Contents" }}</p><ul>{% for entry in page.toc.entries %}<li><a href="#{{ entry.id }}">{{ entry.html | safe }}</a></li>{% endfor %}</ul></nav>{% endif %}
 {{ content | safe }}
