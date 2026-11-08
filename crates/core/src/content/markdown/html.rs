@@ -5,6 +5,8 @@
 //!   such as `u`, the source stays as written: no emphasis, no smart quotes.
 //! - **Self-closing tags.** `<u class="x" />` is an empty element, `<u class="x"></u>`, not an
 //!   open tag (HTML ignores the `/` on elements that are not void).
+//! - **Repeated attributes.** kramdown keeps an attribute once, the first: `<script defer … defer>`
+//!   is written with one `defer`. The attributes are otherwise left as written.
 //! - **Paragraphs.** A line starting with an inline element, such as `<a …>`, starts a
 //!   paragraph, where `CommonMark` starts an HTML block. An inline element left open is closed at
 //!   the end of its paragraph.
@@ -245,4 +247,38 @@ pub fn with_attributes(html: &str, attrs: &Attrs) -> String {
         }
     }
     tag
+}
+
+/// `html` with each repeated attribute of its opening tags dropped but the first (names compared
+/// without case), as kramdown, which reads attributes into a hash, writes them. Text outside tags
+/// is left as it is.
+pub fn without_repeated_attributes(html: &str) -> String {
+    static OPENING: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"<[A-Za-z][A-Za-z0-9-]*(?:\s(?:[^>\x22']|\x22[^\x22]*\x22|'[^']*')*)?/?>")
+            .expect("the expression is valid")
+    });
+    static ATTRIBUTE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"\s+([^\s\x22'<>/=]+)(?:\s*=\s*(?:\x22[^\x22]*\x22|'[^']*'|[^\s\x22'>]+))?")
+            .expect("the expression is valid")
+    });
+    OPENING
+        .replace_all(html, |caps: &regex::Captures| {
+            let tag = &caps[0];
+            let mut seen = Vec::new();
+            let mut cleaned = String::with_capacity(tag.len());
+            let mut at = 0;
+            for found in ATTRIBUTE.captures_iter(tag) {
+                let whole = found.get(0).expect("the whole match exists");
+                let name = found[1].to_ascii_lowercase();
+                if seen.contains(&name) {
+                    cleaned.push_str(&tag[at..whole.start()]);
+                    at = whole.end();
+                } else {
+                    seen.push(name);
+                }
+            }
+            cleaned.push_str(&tag[at..]);
+            cleaned
+        })
+        .into_owned()
 }
