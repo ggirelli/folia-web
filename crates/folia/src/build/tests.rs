@@ -708,3 +708,59 @@ fn the_planned_feeds_are_written_with_the_entries_built_only() {
         "{blog}"
     );
 }
+
+#[test]
+fn the_sitemap_lists_the_pages_and_documents_and_static_files_but_404_and_stubs() {
+    const NOTE: &str =
+        "{% extends \"base.html\" %}{% block body %}{{ content | safe }}{% endblock %}";
+    let fixture = Fixture::with(
+        "sitemap",
+        &[("base.html", BASE), ("page.html", NOTE)],
+        &[
+            (
+                "_micro/notes/2025-06-11-foo_bar.md",
+                "---\ntitle: Foo\n---\nBar.\n",
+            ),
+            ("404.html", "---\nlayout: page\ntitle: Lost\n---\nLost.\n"),
+            ("assets/pdf/paper.pdf", "pdf"),
+            ("yandex_0.html", "<html>static</html>\n"),
+        ],
+    );
+    let mut config = whole_site();
+    config.micro.author = Some("gg".to_owned());
+    let built = fixture.build_with(&config).unwrap();
+    assert!(
+        built
+            .artifacts
+            .contains(&Route::file("/sitemap.xml").unwrap())
+    );
+    let sitemap = fixture.read("sitemap.xml");
+    let locs: Vec<&str> = sitemap
+        .split("<loc>https://ggirelli.info")
+        .skip(1)
+        .map(|rest| rest.split('<').next().unwrap())
+        .collect();
+    // `/blog/about` is a stub, and `/404.html` is never listed.
+    assert!(locs.contains(&"/about"), "{locs:?}");
+    assert!(locs.contains(&"/micro/2025-06-11-foo-bar"), "{locs:?}");
+    assert!(!locs.contains(&"/blog/about"), "{locs:?}");
+    assert!(!locs.iter().any(|loc| loc.contains("404")), "{locs:?}");
+    assert_eq!(
+        &locs[locs.len() - 2..],
+        ["/assets/pdf/paper.pdf", "/yandex_0.html"]
+    );
+    assert!(
+        sitemap.contains(
+            "<loc>https://ggirelli.info/micro/2025-06-11-foo-bar</loc>\n\
+             <lastmod>2026-01-04T13:36:24+01:00</lastmod>\n</url>"
+        ),
+        "{sitemap}"
+    );
+    assert!(
+        sitemap.contains(
+            "<loc>https://ggirelli.info/assets/pdf/paper.pdf</loc>\n\
+             <lastmod>2026-01-04T13:36:24+01:00</lastmod>\n</url>"
+        ),
+        "{sitemap}"
+    );
+}

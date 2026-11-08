@@ -15,3 +15,4 @@ pub mod redirects;
 pub mod render;
 pub mod sass;
 pub mod site;
+pub mod sitemap;

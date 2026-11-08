@@ -171,6 +171,13 @@ Its `<updated>` is its latest item's, never the build time (plan v9, §7.3). Not
 configuration's `[garden]` `author`, as micro entries name `[micro]`'s, and their summaries show
 wiki-links resolved (D-003). The combined `/feed.xml` is not built yet.
 
+**The sitemap**, `/sitemap.xml`, is written by `folia::sitemap` as `jekyll-sitemap` 1.4 wrote it:
+every page rendered but `/404.html` (redirect stubs are not pages), by URL, then the static
+`.htm`, `.html`, `.xhtml` and `.pdf` files. A page's `<lastmod>` is its entry's `modified` or
+date, or its claimed source's last commit; a page without a source, such as a category archive,
+has none. A static file's is its last commit, where Jekyll used the file's modification time
+(plan v12, Q3g).
+
 ## A site's private inputs
 
 Folia's repository holds the generator and the generic parity tools, never a site's data. What
