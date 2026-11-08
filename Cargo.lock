@@ -297,7 +297,7 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "folia"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "clap",
  "folia-blog",
@@ -316,7 +316,7 @@ dependencies = [
 
 [[package]]
 name = "folia-blog"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "folia-core",
  "jiff",
@@ -325,7 +325,7 @@ dependencies = [
 
 [[package]]
 name = "folia-core"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "jiff",
  "pulldown-cmark",
@@ -339,7 +339,7 @@ dependencies = [
 
 [[package]]
 name = "folia-garden"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "folia-core",
  "jiff",
@@ -349,7 +349,7 @@ dependencies = [
 
 [[package]]
 name = "folia-micro"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "folia-core",
  "jiff",
@@ -358,7 +358,7 @@ dependencies = [
 
 [[package]]
 name = "folia-pages"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "folia-core",
  "serde_json",
@@ -586,7 +586,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "parity"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "clap",
  "folia",

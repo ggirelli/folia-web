@@ -53,6 +53,10 @@ enum Command {
         /// Folia's configuration for the site
         #[arg(long)]
         config: PathBuf,
+        /// The deviation ledger: its approved `folia-only` coverage entries name the outputs
+        /// Folia writes that Jekyll never did
+        #[arg(long)]
+        ledger: Option<PathBuf>,
     },
     /// Compare Folia's Markdown HTML and excerpts with kramdown's (spike 1)
     Markdown {
@@ -156,7 +160,8 @@ fn main() -> ExitCode {
             site,
             baseline,
             config,
-        } => routes::run(&site, &baseline, &config),
+            ledger,
+        } => routes::run(&site, &baseline, &config, ledger.as_deref()),
         Command::Markdown {
             site,
             baseline,
