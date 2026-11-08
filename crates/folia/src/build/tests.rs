@@ -147,6 +147,8 @@ fn config() -> Config {
         sass: crate::config::SassConfig::default(),
         micro: crate::config::MicroConfig::default(),
         blog: crate::config::BlogConfig::default(),
+        garden: crate::config::GardenConfig::default(),
+        feeds: None,
     }
 }
 
@@ -628,5 +630,81 @@ fn the_claimed_tags_page_lists_the_posts_by_tag() {
         fixture
             .read("blog/tags.html")
             .contains("<h2>film (1)</h2><h2>note (1)</h2>")
+    );
+}
+
+#[test]
+fn the_planned_feeds_are_written_with_the_entries_built_only() {
+    const NOTE: &str =
+        "{% extends \"base.html\" %}{% block body %}{{ content | safe }}{% endblock %}";
+    let fixture = Fixture::with(
+        "feeds",
+        &[("base.html", BASE), ("page.html", NOTE)],
+        &[(
+            "_micro/notes/2025-06-11-foo_bar.md",
+            "---\ntitle: Foo\n---\nBar.\n",
+        )],
+    );
+    let mut config = whole_site();
+    let without = fixture.build_with(&config).unwrap();
+    assert!(!fixture.dest().join("micro/feed.xml").exists());
+    config.micro.author = Some("gg".to_owned());
+    config.feeds = Some(
+        toml::from_str(
+            "generator = { name = \"Jekyll\", uri = \"https://jekyllrb.com/\", version = \"4.4.1\" }",
+        )
+        .unwrap(),
+    );
+    let built = fixture.build_with(&config).unwrap();
+    let feeds = [
+        "/blog/feed.xml",
+        "/micro/feed.xml",
+        "/feed/micro/notes.xml",
+        "/feed/micro/likes.xml",
+        "/feed/micro/bookmarks.xml",
+        "/feed/micro/rsvps.xml",
+        "/dg/feed.xml",
+    ];
+    for feed in feeds {
+        assert!(
+            built.artifacts.contains(&Route::file(feed).unwrap()),
+            "{feed}: {:?}",
+            built.artifacts
+        );
+    }
+    assert_eq!(without.not_built - built.not_built, feeds.len());
+    let micro = fixture.read("micro/feed.xml");
+    assert!(
+        micro.contains(
+            "<title type=\"html\">Filopoetica | Micro</title><subtitle>An eclectic blog.</subtitle>\
+             <entry><title type=\"html\">Foo</title>\
+             <link href=\"https://ggirelli.info/micro/2025-06-11-foo-bar\" rel=\"alternate\" type=\"text/html\" title=\"Foo\" />\
+             <published>2025-06-11T00:00:00+02:00</published><updated>2026-01-04T13:36:24+01:00</updated>\
+             <id>https://ggirelli.info/micro/foo_bar</id>"
+        ),
+        "{micro}"
+    );
+    assert!(micro.contains("<author><name>gg</name></author><category term=\"notes\" />"));
+    assert_eq!(
+        fixture
+            .read("feed/micro/notes.xml")
+            .matches("<entry>")
+            .count(),
+        1
+    );
+    assert_eq!(
+        fixture
+            .read("feed/micro/likes.xml")
+            .matches("<entry>")
+            .count(),
+        0
+    );
+    // The posts' template is missing, so they are skipped, and in no feed; the empty feed is
+    // as recent as the site's latest entry.
+    let blog = fixture.read("blog/feed.xml");
+    assert!(!blog.contains("<entry>"), "{blog}");
+    assert!(
+        blog.contains("<updated>2026-01-04T13:36:24+01:00</updated>"),
+        "{blog}"
     );
 }

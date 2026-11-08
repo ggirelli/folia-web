@@ -249,3 +249,24 @@ fn unpublished_and_future_entries_are_left_out_and_others_not_asked_for() {
     .unwrap();
     assert!(output.pages.is_empty(), "not in `only`");
 }
+
+#[test]
+fn an_entry_s_feed_item_is_filed_under_its_kind_with_jekyll_s_id() {
+    let like = entry(
+        "_micro/likes/2021-08-18-homebrew-club.md",
+        "title: \"Björn Wärmedal\"\nlike:\n  url: https://warmedal.se/~bjorn/",
+        "I met Björn.\n",
+    );
+    let output = built(&like, Some("gg")).unwrap();
+    let [item] = &output.feed[..] else {
+        panic!("{:?}", output.feed)
+    };
+    assert_eq!(item.collection, "micro");
+    assert_eq!(item.url, "/likes/2021-08-18-homebrew-club");
+    assert_eq!(item.id, "/likes/homebrew-club");
+    assert_eq!(item.title, "Björn Wärmedal");
+    assert_eq!(item.categories, ["likes"]);
+    assert_eq!(item.author.as_deref(), Some("gg"));
+    assert_eq!(item.published, item.updated);
+    assert_eq!(item.content_html, "<p>I met Björn.</p>\n");
+}

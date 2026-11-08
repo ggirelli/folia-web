@@ -11,7 +11,8 @@
 //! 4. Check every page's template, then render each page. Without a slice, a page whose template
 //!    is missing or fails, or whose `author` is not one of the configuration's, is skipped too.
 //! 5. Add a redirect stub for each `redirect_from` URL of a page rendered, the files the modes
-//!    generated (the note graph), and copy every static file.
+//!    generated (the note graph), the feeds the modes planned when the configuration has
+//!    `[feeds]` (module `feed`), and copy every static file.
 //! 6. Write it all to the destination (`output`).
 //!
 //! Every other planned output is not built yet; [`Built::not_built`] counts them. Nothing is
@@ -24,13 +25,14 @@ use std::fmt::Write;
 use std::path::Path;
 
 use folia_core::content::{Diagnostic, LastCommits, Mode, Route, SiteClock, SourceDoc};
-use folia_core::publish::{EntrySummary, ModeOutput, PageSpec};
+use folia_core::publish::{EntrySummary, FeedItem, ModeOutput, PageSpec};
 use jiff::Timestamp;
 use serde_json::json;
 
 use crate::config::Config;
 #[cfg(doc)]
 use crate::config::Slice;
+use crate::feed::{self, Feed};
 use crate::output::{self, Content};
 use crate::redirects::redirects_json;
 use crate::render::Renderer;
@@ -122,19 +124,14 @@ pub fn build(
             add(&mut outputs, path, Content::Bytes(text.into_bytes()))
                 .unwrap_or_else(|clash| problems.push(clash));
         }
-        // Site-wide files (`site::SITE_FILES`), each planned unless a file of the site takes
-        // its URL.
-        for planned in site.routes.outputs() {
-            if planned.generator == Some("redirects") {
-                let json = redirects_json(&config.site.url, &site);
-                add(
-                    &mut outputs,
-                    planned.route.output_path(),
-                    Content::Bytes(json.into_bytes()),
-                )
-                .unwrap_or_else(|clash| problems.push(clash));
-                built.artifacts.push(planned.route.clone());
-            }
+        for (route, text) in serialized(config, &site, &pages.feed, &built, &clock) {
+            add(
+                &mut outputs,
+                route.output_path(),
+                Content::Bytes(text.into_bytes()),
+            )
+            .unwrap_or_else(|clash| problems.push(clash));
+            built.artifacts.push(route);
         }
     }
     for id in &site.discovery.statics {
@@ -173,6 +170,51 @@ pub fn build(
 
 /// Adds the output `content` at `path`, unless another output is already there. The route table
 /// keeps outputs apart (`site::plan`); this keeps a clash it missed from overwriting one.
+/// The planned outputs Folia serializes, with their text: the site-wide files
+/// (`site::SITE_FILES`), each planned unless a file of the site takes its URL, and, with
+/// `[feeds]`, each feed the modes planned. A feed lists only the items whose pages were rendered
+/// (`built`), so a page skipped is in no feed.
+fn serialized(
+    config: &Config,
+    site: &Site,
+    items: &[FeedItem],
+    built: &Built,
+    clock: &SiteClock,
+) -> Vec<(Route, String)> {
+    let identity = feed::Site {
+        url: &config.site.url,
+        title: &config.site.title,
+        description: &config.site.description,
+    };
+    let rendered: BTreeSet<&str> = built.pages.iter().map(Route::url).collect();
+    let items: Vec<FeedItem> = items
+        .iter()
+        .filter(|item| rendered.contains(item.url.as_str()))
+        .cloned()
+        .collect();
+    site.routes
+        .outputs()
+        .iter()
+        .filter_map(|planned| {
+            let (url, generator) = (planned.route.url(), planned.generator?);
+            let text = if generator == "redirects" {
+                redirects_json(&config.site.url, site)
+            } else {
+                let feeds = config.feeds.as_ref()?;
+                feed::xml(
+                    feeds,
+                    &identity,
+                    &Feed::of(generator, url)?,
+                    url,
+                    &items,
+                    clock,
+                )
+            };
+            Some((planned.route.clone(), text))
+        })
+        .collect()
+}
+
 fn add(
     outputs: &mut BTreeMap<String, Content>,
     path: String,
@@ -266,7 +308,8 @@ fn build_documents(
             let only = only(notes);
             let only: Vec<&str> = only.iter().map(String::as_str).collect();
             let docs = documents(site, Mode::Garden);
-            folia_garden::build(docs, &config.roots.garden, &only, &commits, clock)
+            let author = config.garden.author.as_deref();
+            folia_garden::build(docs, &config.roots.garden, &only, author, &commits, clock)
         }),
         leniently(strict, &mut micro, skipped, |micro| {
             let only = only(micro);
@@ -283,6 +326,7 @@ fn build_documents(
                 output.pages.extend(built.pages);
                 output.artifacts.extend(built.artifacts);
                 output.warnings.extend(built.warnings);
+                output.feed.extend(built.feed);
             }
             Err(more) => problems.extend(more),
         }

@@ -47,6 +47,8 @@ fn config(exclude: &[&str]) -> Config {
         sass: crate::config::SassConfig::default(),
         micro: crate::config::MicroConfig::default(),
         blog: crate::config::BlogConfig::default(),
+        garden: crate::config::GardenConfig::default(),
+        feeds: None,
     }
 }
 

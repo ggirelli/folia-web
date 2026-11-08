@@ -436,3 +436,53 @@ fn front_matter_the_template_cannot_show_is_not_built_yet() {
         assert_eq!(problems[0].to_string(), format!("{SAMPLE_POST}: {message}"));
     }
 }
+
+#[test]
+fn a_post_s_feed_item_has_its_dates_author_terms_and_jekyll_s_id() {
+    let output = build_one(&[sample_post()]).unwrap();
+    let [item] = &output.feed[..] else {
+        panic!("{:?}", output.feed)
+    };
+    assert_eq!(item.collection, "posts");
+    assert_eq!(item.url, "/blog/2021/08/08/sample-post");
+    assert_eq!(item.id, "/blog/2021/08/08/sample-post");
+    assert_eq!(item.title, "Webmentions: letting Disqus go");
+    assert_eq!(
+        clock().xmlschema(item.published),
+        "2021-08-08T00:00:00+02:00"
+    );
+    assert_eq!(clock().xmlschema(item.updated), "2021-08-24T00:00:00+02:00");
+    assert_eq!(item.author.as_deref(), Some("gg"));
+    assert_eq!(item.categories, ["code", "announcement"]);
+    assert_eq!(item.tags, ["webmentions", "blog"]);
+    assert_eq!(item.content_html, output.entries[0].body_html);
+    assert_eq!(
+        item.excerpt_html,
+        folia_core::content::markdown::excerpt_html(&sample_post().body, None)
+    );
+    assert_eq!(item.lang, None);
+}
+
+#[test]
+fn the_feed_reads_a_post_s_singular_category_alone() {
+    let front = "title: T\ncategory: travel\ncategories: [journal]";
+    let output = build_one(&[post(SAMPLE_POST, front)]).unwrap();
+    assert_eq!(output.feed[0].categories, ["travel"]);
+}
+
+#[test]
+fn a_post_s_lang_is_its_text_or_its_list_s_texts_joined() {
+    let lang = |front: &str| {
+        let output = build_one(&[post(SAMPLE_POST, front)])
+            .map_err(|problems| problems.iter().map(ToString::to_string).collect::<Vec<_>>());
+        output.map(|output| output.feed[0].lang.clone())
+    };
+    assert_eq!(lang("lang: italian"), Ok(Some("italian".to_owned())));
+    assert_eq!(lang("lang: [italian]"), Ok(Some("italian".to_owned())));
+    assert_eq!(lang("lang: [it, aly]"), Ok(Some("italy".to_owned())));
+    let refused = lang("lang: 3").unwrap_err();
+    assert!(
+        refused[0].contains("lang should be text or a list of texts"),
+        "{refused:?}"
+    );
+}

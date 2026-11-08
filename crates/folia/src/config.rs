@@ -46,6 +46,21 @@ pub struct Config {
     /// The blog's settings.
     #[serde(default)]
     pub blog: BlogConfig,
+    /// The garden's settings.
+    #[serde(default)]
+    pub garden: GardenConfig,
+    /// The site's feeds; without it, none is written.
+    #[serde(default)]
+    pub feeds: Option<crate::feed::FeedsConfig>,
+}
+
+/// The garden's settings: what the site's front matter defaults gave every note.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct GardenConfig {
+    /// The author of every note, a key of `[authors]`, if any; the feeds name them.
+    #[serde(default)]
+    pub author: Option<String>,
 }
 
 /// The blog's listings (`folia_blog::listings`): each is built only when configured.
