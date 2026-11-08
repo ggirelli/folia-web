@@ -39,4 +39,10 @@ The documentation is published at <https://ggirelli.github.io/folia-web/>.
 - [Development](docs/development.md) and [manual testing](docs/development/manual-testing.md): how
   the repository is organized, and how to check it.
 
+## Support
+
+Folia is free and maintained for the author's own site. If it is useful to you, you can support its upkeep:
+[GitHub Sponsors](https://github.com/sponsors/ggirelli) or [Ko-fi](https://ko-fi.com/ggirelli).
+Sponsoring buys no support, features or warranty (see the [disclaimer](DISCLAIMER.md)).
+
 Contributions follow [CONTRIBUTING.md](CONTRIBUTING.md).

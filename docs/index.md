@@ -44,3 +44,9 @@ refuses to overwrite files it did not write. It is a release of the software: it
 Jekyll's for most of that site and differs, on purpose or by a known limitation, for the rest, so
 read [Known limitations](known-limitations.md) before replacing a Jekyll site. See the
 [release notes](release-notes/v0.1.0.md).
+
+## Support
+
+Folia is free and written for the author's own site. If it is useful to you, you can support its
+upkeep through [GitHub Sponsors](https://github.com/sponsors/ggirelli) or
+[Ko-fi](https://ko-fi.com/ggirelli). Sponsoring buys no support, features or warranty.
