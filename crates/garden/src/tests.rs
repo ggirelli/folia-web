@@ -280,10 +280,6 @@ fn front_matter_the_template_cannot_show_is_refused() {
         ),
         ("title: A", "a note without a date is not built yet"),
         (
-            "date: 2026-01-01",
-            "a note without a title is not built yet",
-        ),
-        (
             "title: A\ndate: 2026-01-01\nhide_garden_map: maybe",
             "hide_garden_map must be true or false",
         ),
@@ -522,4 +518,37 @@ fn a_note_s_feed_item_has_the_configured_author_and_its_wiki_links_resolved() {
         "{}",
         item.excerpt_html
     );
+}
+
+#[test]
+fn a_note_without_a_title_is_titled_from_its_file_name_as_jekyll_does() {
+    let output = build_all(&[
+        note("_digital_garden/topic/index.md", "date: 2026-01-01"),
+        note(
+            "_digital_garden/topic/Mixed-CASE-name.md",
+            "date: 2026-01-01",
+        ),
+        with_body(
+            "_digital_garden/topic/2026-01-05-dated-note.md",
+            "",
+            "Links to [[Index]] and [[mixed case name]].",
+        ),
+        note(
+            "_digital_garden/titled.md",
+            "title: Own title\ndate: 2026-01-01",
+        ),
+    ])
+    .unwrap();
+    let mut titles: Vec<String> = output
+        .pages
+        .iter()
+        .map(|p| p.context["title"].as_str().unwrap().to_owned())
+        .collect();
+    titles.sort();
+    assert_eq!(
+        titles,
+        ["Dated Note", "Index", "Mixed Case Name", "Own title"]
+    );
+    // Wiki-links find a note by the title Jekyll gave it: both links resolve, so none is broken.
+    assert_eq!(output.warnings.len(), 0, "{:?}", output.warnings);
 }
