@@ -173,7 +173,8 @@ just serve /tmp/folia-example          # http://127.0.0.1:8000/; just serve DIR 
   scrolls sideways but code blocks.
 - [ ] **Assets:** `/assets/css/style.css` is applied (code is coloured), the author's avatar shows
   in a post's byline and as the tab icon; the browser's console and network panel show no 404.
-- [ ] **Search:** on `/search`, typing `minijinja` lists the bookmark and the `/micro` listing that names it; `/search?q=leaf` searches on
+- [ ] **Search:** on `/search`, typing `minijinja` lists the bookmark and the `/micro` listing
+  that names it; `/search?q=leaf` searches on
   load. Its results link to the configured site URL, so they leave the local server.
 - [ ] **Feeds:** `/blog/feed.xml`, `/micro/feed.xml`, `/feed/micro/likes.xml` and `/dg/feed.xml`
   open as XML.
