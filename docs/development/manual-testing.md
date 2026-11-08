@@ -99,7 +99,7 @@ It prints one warning, which is expected: the example has a broken wiki-link on 
 
 ```text
 warning: _garden/topic/index.md: the wiki-link [[Missing note]] names no note, so it is shown as broken
-Built 18 pages, 1 redirect stubs, 13 generated files and 2 static files into /tmp/folia-example; 1 planned outputs are not built yet.
+Built 18 pages, 1 redirect stubs, 15 generated files and 2 static files into /tmp/folia-example; 1 planned outputs are not built yet.
 ```
 
 Folia also says which documents it skipped, and why (`skipped: <source>: <reason>`): a document
@@ -174,7 +174,8 @@ just serve /tmp/folia-example          # http://127.0.0.1:8000/; just serve DIR 
   scrolls sideways but code blocks.
 - [ ] **Assets:** `/assets/css/style.css` is applied (code is coloured), the author's avatar shows
   in a post's byline and as the tab icon; the browser's console and network panel show no 404.
-- [ ] **Search:** on `/search`, typing `minijinja` lists the bookmark; `/search?q=leaf` searches on
+- [ ] **Search:** on `/search`, typing `minijinja` lists the bookmark and the `/micro` listing
+  that names it; `/search?q=leaf` searches on
   load. Its results link to the configured site URL, so they leave the local server.
 - [ ] **Feeds:** `/blog/feed.xml`, `/micro/feed.xml`, `/feed/micro/likes.xml` and `/dg/feed.xml`
   open as XML.
@@ -249,7 +250,7 @@ directory, which it prints):
 | File | What it says |
 |-|-|
 | `dom-report.md`, `dom-report.json` | every whole-document difference, and the ledger's verdict on it |
-| `coverage.md`, `coverage.json` | every output of the baseline: built and checked, not built, waived or unclassified |
+| `coverage.md`, `coverage.json` | every output of the baseline and its class, the verdicts *clean build* and *exact parity*, and the Folia-only outputs ([coverage classes](../known-limitations.md#coverage-classes)) |
 | `warnings.json` | each warning Folia gave, and the expected-warnings entry that matches it |
 | `links.json` | internal links that resolve to nothing |
 | `build.json`, `sha256.txt` | the build's record (site and Folia commits, configuration and templates hashes) and manifest |

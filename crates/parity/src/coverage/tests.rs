@@ -122,7 +122,7 @@ fn every_row_gets_one_of_the_four_classes_and_the_approval_is_shown() {
             not_built_yet: 1,
             waived: 1,
             removed: 1,
-            unclassified: 0,
+            ..Counts::default()
         }
     );
     // A waived or removed row carries who approved it; one not built yet carries nothing.
@@ -148,7 +148,8 @@ fn every_row_gets_one_of_the_four_classes_and_the_approval_is_shown() {
     assert_eq!(json["rows"][3]["approval"]["entry"], "D-901");
     assert!(report.summary().starts_with(
         "ok: coverage of 4 manifest rows: 1 built and checked, 1 not built yet, 1 waived, 1 \
-         removed; 0 unclassified, 0 problems"
+         removed, 0 intentional, 0 known and excluded, 0 defects, 0 missing evidence; 0 \
+         unclassified, 0 problems"
     ));
 }
 
@@ -180,7 +181,7 @@ fn an_unclassified_row_fails() {
     // Not written, not planned, and no entry removes it: never removed by default.
     let report = Site::new().classify(OWNERS);
     assert!(!report.passed);
-    assert_eq!(class_of(&report, "removed.html"), None);
+    assert_eq!(class_of(&report, "removed.html"), Some(Class::Defect));
     assert_eq!(
         problems_of(&report, "removed.html"),
         ["Folia neither writes nor plans it, and no accepted entry removes it"]
@@ -190,8 +191,12 @@ fn an_unclassified_row_fails() {
     unchecked.checks = Checks::default();
     unchecked.checks.record("waived.html", ROUTE, true);
     let report = unchecked.classify(&both());
-    assert_eq!(class_of(&report, "built.html"), None);
-    assert_eq!(report.counts.unclassified, 1);
+    assert_eq!(
+        class_of(&report, "built.html"),
+        Some(Class::MissingEvidence)
+    );
+    assert_eq!(report.counts.missing_evidence, 1);
+    assert!(!report.clean_build);
     assert!(report.summary().starts_with("FAILS: "));
 }
 
@@ -202,7 +207,10 @@ fn a_built_row_without_its_output_or_its_checks_passing_is_not_built_and_checked
     site.checks = Checks::default();
     site.checks.record("waived.html", "route", true);
     let report = site.classify(&both());
-    assert_eq!(class_of(&report, "built.html"), None);
+    assert_eq!(
+        class_of(&report, "built.html"),
+        Some(Class::MissingEvidence)
+    );
     assert_eq!(
         problems_of(&report, "built.html"),
         ["Folia writes it, but no check compares its contents (a route check is no comparison)"]
@@ -211,10 +219,10 @@ fn a_built_row_without_its_output_or_its_checks_passing_is_not_built_and_checked
     let mut site = Site::new();
     site.checks.record("built.html", "dom", false);
     let report = site.classify(&both());
-    assert_eq!(class_of(&report, "built.html"), None);
+    assert_eq!(class_of(&report, "built.html"), Some(Class::Defect));
     assert_eq!(
         problems_of(&report, "built.html"),
-        ["Folia writes it, but it fails its checks: dom"]
+        ["Folia writes it, but it fails its checks, and no entry covers it: dom"]
     );
     assert!(!report.passed);
     // Checked, but not written: its checks do not make it built.
@@ -532,7 +540,10 @@ fn a_route_check_alone_is_no_comparison() {
     site.checks.record("built.html", ROUTE, true);
     site.checks.record("waived.html", ROUTE, true);
     let report = site.classify(&both());
-    assert_eq!(class_of(&report, "built.html"), None);
+    assert_eq!(
+        class_of(&report, "built.html"),
+        Some(Class::MissingEvidence)
+    );
     assert!(!report.passed);
     // Any check of its contents makes it compared.
     site.checks.record("built.html", "bytes", true);
@@ -651,8 +662,162 @@ fn a_withdrawn_entry_classifies_nothing_even_with_its_approval() {
     );
     let report = Site::new().classify(&ledger);
     // waived.html, written and checked only by its route, is then compared by nothing.
-    assert_eq!(class_of(&report, "waived.html"), None);
+    assert_eq!(
+        class_of(&report, "waived.html"),
+        Some(Class::MissingEvidence)
+    );
     assert_eq!(report.counts.waived, 0);
+}
+
+const RECORDED: &str = "status = \"recorded\"\nrationale = \"why\"";
+
+/// `built.html` fails its dom check, as a known or intentional difference does.
+fn differing() -> Site {
+    let mut site = Site::new();
+    site.checks.record("built.html", "dom", false);
+    site
+}
+
+#[test]
+fn a_known_difference_is_recorded_not_approved_and_still_fails_the_run() {
+    let ledger = entry("K-1", "known", &["built.html"], RECORDED);
+    let report = differing().classify(&format!("{}{}", both(), ledger));
+    assert_eq!(class_of(&report, "built.html"), Some(Class::KnownExcluded));
+    assert_eq!(report.counts.known_excluded, 1);
+    let row = report
+        .rows
+        .iter()
+        .find(|r| r.output == "built.html")
+        .unwrap();
+    assert_eq!(
+        row.approval, None,
+        "a known difference is approved by no one"
+    );
+    assert_eq!(row.entry.as_deref(), Some("K-1"));
+    // Accounted for, so a clean build; but neither passing nor exact.
+    assert!(report.clean_build, "{:?}", report.problems);
+    assert!(!report.passed);
+    assert!(!report.exact_parity);
+    assert!(
+        report
+            .verdict()
+            .contains("none a defect or lacking evidence): yes. Exact Jekyll parity: NO")
+    );
+}
+
+#[test]
+fn a_known_difference_is_never_accepted_and_an_approved_class_is_never_merely_recorded() {
+    let accepted = entry("K-1", "known", &["built.html"], APPROVED);
+    let report = differing().classify(&format!("{}{accepted}", both()));
+    assert_eq!(class_of(&report, "built.html"), None);
+    assert!(
+        report
+            .problems
+            .iter()
+            .any(|p| p.contains("recorded, not accepted"))
+    );
+    let recorded = entry("I-1", "intentional", &["built.html"], RECORDED);
+    let report = differing().classify(&format!("{}{recorded}", both()));
+    assert_eq!(class_of(&report, "built.html"), None);
+    assert!(
+        report
+            .problems
+            .iter()
+            .any(|p| p.contains("needs an owner's approval"))
+    );
+}
+
+#[test]
+fn an_intentional_difference_needs_an_owner_and_a_failing_check() {
+    let ledger = |rest: &str| {
+        format!(
+            "{}{}",
+            both(),
+            entry("I-1", "intentional", &["built.html"], rest)
+        )
+    };
+    let report = differing().classify(&ledger(APPROVED));
+    assert_eq!(class_of(&report, "built.html"), Some(Class::Intentional));
+    assert_eq!(
+        report
+            .rows
+            .iter()
+            .find(|r| r.output == "built.html")
+            .unwrap()
+            .approval
+            .as_ref()
+            .unwrap()
+            .entry,
+        "I-1"
+    );
+    assert!(report.clean_build);
+    assert!(report.passed, "{report:#?}");
+    // Approved, but not parity.
+    assert!(!report.exact_parity);
+    // Not approved by an owner: no class.
+    let report = differing().classify(&ledger(&APPROVED.replace("Project owner (GG)", "Someone")));
+    assert_eq!(class_of(&report, "built.html"), None);
+    // Every check passes: the entry is stale, and no class.
+    let report = Site::new().classify(&ledger(APPROVED));
+    assert_eq!(class_of(&report, "built.html"), None);
+    assert!(
+        report
+            .problems
+            .iter()
+            .chain(problems_of(&report, "built.html"))
+            .any(|p| p.contains("stale"))
+    );
+    assert!(!report.passed);
+}
+
+#[test]
+fn a_folia_only_output_is_listed_apart_and_needs_approval_and_no_manifest_row() {
+    let mut site = Site::new();
+    site.written.insert("extra.xml".to_owned());
+    let with = |rest: &str, output: &str| {
+        format!("{}{}", both(), entry("F-1", "folia-only", &[output], rest))
+    };
+    let report = site.classify(&with(APPROVED, "extra.xml"));
+    assert!(report.passed, "{:?}", report.problems);
+    assert_eq!(report.folia_only.len(), 1);
+    assert_eq!(report.folia_only[0].output, "extra.xml");
+    assert_eq!(report.counts.rows, 4, "a Folia-only output is no row");
+    assert!(!report.exact_parity, "a Folia-only output is not parity");
+    // Without an entry, or without approval, it is a problem.
+    assert!(!site.classify(&both()).passed);
+    let report = site.classify(&with(
+        &APPROVED.replace("Project owner (GG)", "Someone"),
+        "extra.xml",
+    ));
+    assert!(!report.passed);
+    assert_eq!(report.folia_only.len(), 0);
+    // A manifest row is not Folia-only, and an output Folia does not write is stale.
+    let report = site.classify(&with(APPROVED, "built.html"));
+    assert!(report.problems.iter().any(|p| p.contains("not Folia-only")));
+    let report = Site::new().classify(&with(APPROVED, "extra.xml"));
+    assert!(report.problems.iter().any(|p| p.contains("stale")));
+}
+
+#[test]
+fn a_row_with_ledger_accepted_differences_is_built_and_checked_but_not_exact() {
+    let mut site = Site::new();
+    site.checks.accepted("built.html", 3);
+    let report = site.classify(&both());
+    assert_eq!(
+        class_of(&report, "built.html"),
+        Some(Class::BuiltAndChecked)
+    );
+    assert_eq!(report.counts.built_with_accepted_differences, 1);
+    assert!(report.clean_build && report.passed);
+    assert!(!report.exact_parity);
+    // Only the identical rows count as exact.
+    let mut exact = Site::new();
+    exact.rows.truncate(1);
+    exact.planned = set(&["built.html"]);
+    exact.written = set(&["built.html"]);
+    exact.accounted = set(&["built.html"]);
+    let report = exact.classify(OWNERS);
+    assert!(report.exact_parity, "{report:#?}");
 }
 
 #[test]

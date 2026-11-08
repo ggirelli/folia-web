@@ -8,6 +8,22 @@
 //!   comparison.
 //! - **Removed:** Folia does not write the output because it has been intentionally removed from
 //!   the site, with explicit owner approval.
+//! - **Intentional:** Folia writes the output and it differs from Jekyll's on purpose; an
+//!   owner-approved entry says so. The difference stays visible: it is not parity.
+//! - **Known, excluded:** Folia writes the output and it differs from Jekyll's; the difference is
+//!   recorded (`status = "recorded"`, a rationale) and approved by no one. It fails the run.
+//! - **Defect:** Folia writes the output and it fails a check no entry covers, or it neither
+//!   writes nor plans an output Jekyll writes: an unresolved defect.
+//! - **Missing evidence:** Folia writes the output, but no check compares its contents.
+//!
+//! An output Folia writes that is no manifest row is a problem, unless an owner-approved
+//! `folia-only` entry names it: it has no Jekyll baseline, so nothing compares it, and the report
+//! lists it apart from the rows.
+//!
+//! A run is a *clean build* when no row is unclassified, a defect or missing evidence and nothing
+//! else is a problem; it has *exact parity* only when every row is built and checked with no
+//! ledger-accepted difference, and Folia writes nothing a baseline lacks. Zero failed assertions
+//! is a clean build at most; documented differences are not identical output.
 //!
 //! Enforced as: the route check ([`ROUTE`]) compares no contents, so *built and checked* needs
 //! another verdict too (page checks, whole-document comparison, assertions, bytes, note graph),
@@ -28,8 +44,7 @@
 //! listing an output twice, an output Folia writes that is no manifest row.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
@@ -49,6 +64,9 @@ pub const ROUTE: &str = "route";
 pub enum Decided {
     Waived,
     Removed,
+    Intentional,
+    Known,
+    FoliaOnly,
 }
 
 /// An entry's status.
@@ -57,6 +75,8 @@ pub enum Decided {
 pub enum Status {
     Proposed,
     Accepted,
+    /// Only for a `known` entry: a difference noted, not approved.
+    Recorded,
     Withdrawn,
 }
 
@@ -224,10 +244,11 @@ fn entry(value: &toml::Value, index: usize, owners: &[String]) -> Entry {
     let status = match raw.status.as_str() {
         "proposed" => Some(Status::Proposed),
         "accepted" => Some(Status::Accepted),
+        "recorded" => Some(Status::Recorded),
         "withdrawn" => Some(Status::Withdrawn),
         other => {
             problems.push(format!(
-                "status {other:?} is not proposed, accepted or withdrawn"
+                "status {other:?} is not proposed, accepted, recorded or withdrawn"
             ));
             None
         }
@@ -235,14 +256,29 @@ fn entry(value: &toml::Value, index: usize, owners: &[String]) -> Entry {
     let class = match raw.class.as_str() {
         "waived" => Some(Decided::Waived),
         "removed" => Some(Decided::Removed),
+        "intentional" => Some(Decided::Intentional),
+        "known" => Some(Decided::Known),
+        "folia-only" => Some(Decided::FoliaOnly),
         other => {
             problems.push(format!(
-                "class {other:?} is not a coverage classification an entry can decide (waived or \
-                 removed)"
+                "class {other:?} is not a coverage classification an entry can decide (waived, \
+                 removed, intentional, known or folia-only)"
             ));
             None
         }
     };
+    // A difference is recorded, never approved, and only a known one is: the two never mix.
+    match (class, status) {
+        (Some(Decided::Known), Some(Status::Accepted)) => problems.push(
+            "a known difference is recorded, not accepted: use status \"recorded\"".to_owned(),
+        ),
+        (Some(c), Some(Status::Recorded)) if c != Decided::Known => problems.push(
+            "status \"recorded\" is for a known difference; this class needs an owner's \
+             approval"
+                .to_owned(),
+        ),
+        _ => {}
+    }
     if raw.outputs.is_empty() {
         problems.push("lists no output".to_owned());
     }
@@ -333,9 +369,20 @@ fn is_date(value: &str) -> bool {
 /// Each check's verdict on each output it compared, by output path and check name; a check that
 /// compares an output more than once passes it only when every time it does.
 #[derive(Clone, Debug, Default)]
-pub struct Checks(BTreeMap<String, BTreeMap<&'static str, bool>>);
+pub struct Checks(
+    BTreeMap<String, BTreeMap<&'static str, bool>>,
+    BTreeMap<String, usize>,
+);
 
 impl Checks {
+    /// Notes that `count` differences between Jekyll's output and Folia's were accepted by the
+    /// ledger: the output passes its checks, but is not identical.
+    pub fn accepted(&mut self, output: &str, count: usize) {
+        if count > 0 {
+            *self.1.entry(output.to_owned()).or_default() += count;
+        }
+    }
+
     pub fn record(&mut self, output: &str, check: &'static str, passed: bool) {
         *self
             .0
@@ -354,6 +401,10 @@ pub enum Class {
     NotBuiltYet,
     Waived,
     Removed,
+    Intentional,
+    KnownExcluded,
+    Defect,
+    MissingEvidence,
 }
 
 impl Class {
@@ -363,6 +414,10 @@ impl Class {
             Class::NotBuiltYet => "not built yet",
             Class::Waived => "waived",
             Class::Removed => "removed",
+            Class::Intentional => "intentional difference (approved)",
+            Class::KnownExcluded => "known difference (excluded, unapproved)",
+            Class::Defect => "unresolved defect",
+            Class::MissingEvidence => "missing evidence",
         }
     }
 }
@@ -386,10 +441,25 @@ pub struct RowReport {
     /// For a waived or removed row, the entry and its approval.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval: Option<Approval>,
+    /// The entry that classifies it, when one does (a known difference has no approval).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry: Option<String>,
     /// The checks that compared it.
     pub checks: Vec<Verdict>,
+    /// How many differences from Jekyll's output the ledger accepted (it is built and checked,
+    /// but not identical).
+    #[serde(skip_serializing_if = "is_zero")]
+    pub accepted_differences: usize,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub problems: Vec<String>,
+}
+
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "serde passes a reference"
+)]
+fn is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 /// How many rows have each class.
@@ -400,7 +470,14 @@ pub struct Counts {
     pub not_built_yet: usize,
     pub waived: usize,
     pub removed: usize,
+    pub intentional: usize,
+    pub known_excluded: usize,
+    pub defects: usize,
+    pub missing_evidence: usize,
+    /// No class: its entry is invalid, pending or doubled.
     pub unclassified: usize,
+    /// Of `built_and_checked`, the rows with differences the ledger accepted.
+    pub built_with_accepted_differences: usize,
 }
 
 /// The coverage report.
@@ -415,7 +492,22 @@ pub struct Report {
     pub problems: Vec<String>,
     /// Every manifest row, once, in the manifest's order of output paths.
     pub rows: Vec<RowReport>,
+    /// Outputs Folia writes that Jekyll never wrote, named by an approved `folia-only` entry.
+    pub folia_only: Vec<FoliaOnly>,
+    /// No unclassified row, defect or missing evidence, and no problem: every output is
+    /// accounted for. Says nothing of parity.
+    pub clean_build: bool,
+    /// Every row built and checked with no ledger-accepted difference, and nothing Folia-only.
+    pub exact_parity: bool,
+    /// A clean build with no known difference left unapproved.
     pub passed: bool,
+}
+
+/// An output with no Jekyll baseline, and the approval of its being written.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct FoliaOnly {
+    pub output: String,
+    pub approval: Approval,
 }
 
 /// What Folia did with the site: what it plans and what it wrote.
@@ -427,6 +519,65 @@ pub struct Folia<'a> {
     pub accounted: &'a BTreeSet<String>,
     /// Folia's own count of planned outputs it did not write.
     pub not_built: usize,
+}
+
+/// Checks a `folia-only` entry: each output is no manifest row, is written and approved, and is
+/// named by no other such entry. Those that pass go into `named`.
+fn check_folia_only<'a>(
+    entry: &'a Entry,
+    manifest: &BTreeSet<&str>,
+    folia: &Folia,
+    named: &mut BTreeMap<&'a str, &'a Entry>,
+    problems: &mut Vec<String>,
+) {
+    for output in &entry.outputs {
+        if manifest.contains(output.as_str()) {
+            problems.push(format!(
+                "{}: {output} is a manifest row, so Jekyll writes it: it is not Folia-only",
+                entry.id
+            ));
+        } else if !folia.written.contains(output) {
+            problems.push(format!(
+                "{}: {output} is not written, so the Folia-only entry is stale",
+                entry.id
+            ));
+        } else if entry.approval.is_none() {
+            problems.push(format!(
+                "{}: {output} is not approved by an owner",
+                entry.id
+            ));
+        } else if let Some(other) = named.insert(output.as_str(), entry) {
+            problems.push(format!(
+                "{output} is named by two Folia-only entries: {}, {}",
+                other.id, entry.id
+            ));
+        }
+    }
+}
+
+/// How many rows have each class.
+fn count(report_rows: &[RowReport]) -> Counts {
+    let mut counts = Counts {
+        rows: report_rows.len(),
+        ..Counts::default()
+    };
+    for row in report_rows {
+        *match row.class {
+            Some(Class::BuiltAndChecked) => &mut counts.built_and_checked,
+            Some(Class::NotBuiltYet) => &mut counts.not_built_yet,
+            Some(Class::Waived) => &mut counts.waived,
+            Some(Class::Removed) => &mut counts.removed,
+            Some(Class::Intentional) => &mut counts.intentional,
+            Some(Class::KnownExcluded) => &mut counts.known_excluded,
+            Some(Class::Defect) => &mut counts.defects,
+            Some(Class::MissingEvidence) => &mut counts.missing_evidence,
+            None => &mut counts.unclassified,
+        } += 1;
+        if row.class == Some(Class::BuiltAndChecked) && row.accepted_differences > 0 {
+            counts.built_with_accepted_differences += 1;
+        }
+    }
+    counts
 }
 
 /// Classifies every row of `rows`.
@@ -441,9 +592,14 @@ pub fn classify(rows: &[Row], folia: &Folia, checks: &Checks, ledger: &Ledger) -
     }
     // Which active entries name each output.
     let mut naming: BTreeMap<&str, Vec<&Entry>> = BTreeMap::new();
+    let mut folia_only: BTreeMap<&str, &Entry> = BTreeMap::new();
     for entry in ledger.entries.iter().filter(|e| e.active()) {
         for problem in &entry.problems {
             problems.push(format!("{}: {problem}", entry.id));
+        }
+        if entry.class == Some(Decided::FoliaOnly) {
+            check_folia_only(entry, &manifest, folia, &mut folia_only, &mut problems);
+            continue;
         }
         for output in &entry.outputs {
             if manifest.contains(output.as_str()) {
@@ -462,11 +618,21 @@ pub fn classify(rows: &[Row], folia: &Folia, checks: &Checks, ledger: &Ledger) -
             problems.push(format!("{}: {problem}", entry.id));
         }
     }
+    let mut folia_only_report = Vec::new();
     for output in folia
         .written
         .difference(&manifest.iter().map(|o| (*o).to_owned()).collect())
     {
-        problems.push(format!("Folia writes {output}, which is no manifest row"));
+        match folia_only
+            .get(output.as_str())
+            .and_then(|e| e.approval.clone())
+        {
+            Some(approval) => folia_only_report.push(FoliaOnly {
+                output: output.clone(),
+                approval,
+            }),
+            None => problems.push(format!("Folia writes {output}, which is no manifest row")),
+        }
     }
     let unwritten = folia.planned.difference(folia.written).count();
     if unwritten != folia.not_built {
@@ -482,26 +648,23 @@ pub fn classify(rows: &[Row], folia: &Folia, checks: &Checks, ledger: &Ledger) -
         .map(|row| classify_row(row, folia, checks, naming.get(row.output.as_str())))
         .collect();
     report_rows.sort_by(|a, b| a.output.cmp(&b.output));
-    let mut counts = Counts {
-        rows: report_rows.len(),
-        ..Counts::default()
-    };
-    for row in &report_rows {
-        *match row.class {
-            Some(Class::BuiltAndChecked) => &mut counts.built_and_checked,
-            Some(Class::NotBuiltYet) => &mut counts.not_built_yet,
-            Some(Class::Waived) => &mut counts.waived,
-            Some(Class::Removed) => &mut counts.removed,
-            None => &mut counts.unclassified,
-        } += 1;
-    }
-    let passed = problems.is_empty() && counts.unclassified == 0;
+    let counts = count(&report_rows);
+    let clean_build =
+        problems.is_empty() && counts.unclassified + counts.defects + counts.missing_evidence == 0;
+    let passed = clean_build && counts.known_excluded == 0;
+    let exact_parity = passed
+        && counts.built_and_checked == counts.rows
+        && counts.built_with_accepted_differences == 0
+        && folia_only_report.is_empty();
     Report {
-        format: 1,
+        format: 2,
         owners: ledger.owners.clone(),
         counts,
         problems,
         rows: report_rows,
+        folia_only: folia_only_report,
+        clean_build,
+        exact_parity,
         passed,
     }
 }
@@ -528,6 +691,7 @@ fn classify_row(
         .unwrap_or_default();
     let mut problems = Vec::new();
     let mut approval = None;
+    let mut entry_id = None;
     let class = match entries.map(Vec::as_slice).unwrap_or_default() {
         [] if written => {
             let failed: Vec<&str> = verdicts
@@ -541,13 +705,13 @@ fn classify_row(
                      comparison)"
                         .to_owned(),
                 );
-                None
+                Some(Class::MissingEvidence)
             } else if !failed.is_empty() {
                 problems.push(format!(
-                    "Folia writes it, but it fails its checks: {}",
+                    "Folia writes it, but it fails its checks, and no entry covers it: {}",
                     failed.join(", ")
                 ));
-                None
+                Some(Class::Defect)
             } else {
                 Some(Class::BuiltAndChecked)
             }
@@ -557,7 +721,7 @@ fn classify_row(
             problems.push(
                 "Folia neither writes nor plans it, and no accepted entry removes it".to_owned(),
             );
-            None
+            Some(Class::Defect)
         }
         [entry] => {
             let route = verdicts.iter().find(|v| v.check == ROUTE).map(|v| v.passed);
@@ -567,9 +731,11 @@ fn classify_row(
                 accounted: folia.accounted.contains(&row.output),
                 route,
             };
-            let decided = decided_class(entry, &found, &mut problems);
+            let failed = verdicts.iter().any(|v| !v.passed);
+            let decided = decided_class(entry, &found, failed, &mut problems);
             if decided.is_some() {
                 approval.clone_from(&entry.approval);
+                entry_id = Some(entry.id.clone());
             }
             decided
         }
@@ -588,7 +754,13 @@ fn classify_row(
         kind: row.kind.clone(),
         class,
         approval,
+        entry: entry_id,
         checks: verdicts,
+        accepted_differences: if class == Some(Class::BuiltAndChecked) {
+            checks.1.get(&row.output).copied().unwrap_or(0)
+        } else {
+            0
+        },
         problems,
     }
 }
@@ -607,7 +779,12 @@ struct Found {
 /// approved, with no problem, gives one: a waiver to an output Folia writes, whose bytes its
 /// manifest records and whose route check passes; a removal to an output Folia neither writes
 /// nor plans, so that a removal cannot stand for an output that is merely not built yet.
-fn decided_class(entry: &Entry, found: &Found, problems: &mut Vec<String>) -> Option<Class> {
+fn decided_class(
+    entry: &Entry,
+    found: &Found,
+    failed: bool,
+    problems: &mut Vec<String>,
+) -> Option<Class> {
     let id = &entry.id;
     if !entry.problems.is_empty() || entry.class.is_none() {
         problems.push(format!("{id} classifies it, but is not valid"));
@@ -619,7 +796,7 @@ fn decided_class(entry: &Entry, found: &Found, problems: &mut Vec<String>) -> Op
         ));
         return None;
     }
-    if entry.approval.is_none() {
+    if entry.approval.is_none() && entry.class != Some(Decided::Known) {
         problems.push(format!("{id} is not approved by an owner"));
         return None;
     }
@@ -649,6 +826,31 @@ fn decided_class(entry: &Entry, found: &Found, problems: &mut Vec<String>) -> Op
             }
             None
         }
+        Some(Decided::Intentional | Decided::Known) => {
+            let kind = if entry.class == Some(Decided::Known) {
+                "records a known difference"
+            } else {
+                "approves an intentional difference"
+            };
+            if !found.written {
+                problems.push(format!("{id} {kind}, but Folia does not write it"));
+            } else if !failed {
+                problems.push(format!(
+                    "{id} {kind}, but every check on it passes: the entry is stale"
+                ));
+            } else if entry.class == Some(Decided::Known) {
+                return Some(Class::KnownExcluded);
+            } else {
+                return Some(Class::Intentional);
+            }
+            None
+        }
+        Some(Decided::FoliaOnly) => {
+            problems.push(format!(
+                "{id} is a Folia-only entry, but this is a manifest row: Jekyll writes it"
+            ));
+            None
+        }
         Some(Decided::Removed) => {
             if found.written {
                 problems.push(format!("{id} removes it, but Folia writes it"));
@@ -666,96 +868,7 @@ fn decided_class(entry: &Entry, found: &Found, problems: &mut Vec<String>) -> Op
     }
 }
 
-impl Report {
-    /// The summary line `parity pages` prints on every run.
-    pub fn summary(&self) -> String {
-        let c = &self.counts;
-        format!(
-            "{}: coverage of {} manifest rows: {} built and checked, {} not built yet, {} waived, \
-             {} removed; {} unclassified, {} problems",
-            if self.passed { "ok" } else { "FAILS" },
-            c.rows,
-            c.built_and_checked,
-            c.not_built_yet,
-            c.waived,
-            c.removed,
-            c.unclassified,
-            self.problems.len()
-        )
-    }
-
-    /// Writes `coverage.json` and `coverage.md` into `dir`, and returns their paths.
-    ///
-    /// # Errors
-    ///
-    /// Fails when a file cannot be written.
-    pub fn write(&self, dir: &Path) -> Result<(PathBuf, PathBuf), String> {
-        let json = dir.join("coverage.json");
-        let md = dir.join("coverage.md");
-        let text = serde_json::to_string_pretty(self).map_err(|e| e.to_string())? + "\n";
-        std::fs::write(&json, text).map_err(|e| format!("{}: {e}", json.display()))?;
-        std::fs::write(&md, self.markdown()).map_err(|e| format!("{}: {e}", md.display()))?;
-        Ok((json, md))
-    }
-
-    /// The report as Markdown: the counts, the problems, and every row with its class.
-    pub fn markdown(&self) -> String {
-        let c = &self.counts;
-        let mut out = String::from("# Coverage\n\n");
-        let _ = writeln!(out, "{}.\n", self.summary());
-        let _ = writeln!(
-            out,
-            "Owners, who alone approve a waiver or a removal: {}.\n",
-            if self.owners.is_empty() {
-                "none".to_owned()
-            } else {
-                self.owners.join(", ")
-            }
-        );
-        out.push_str("| Class | Rows |\n|-|-:|\n");
-        for (name, count) in [
-            ("built and checked", c.built_and_checked),
-            ("not built yet", c.not_built_yet),
-            ("waived (written, comparison waived; approved)", c.waived),
-            ("removed (approved)", c.removed),
-            ("**unclassified** (fails)", c.unclassified),
-        ] {
-            let _ = writeln!(out, "| {name} | {count} |");
-        }
-        let _ = writeln!(out, "| total | {} |", c.rows);
-        if !self.problems.is_empty() {
-            out.push_str("\n## Problems\n\n");
-            for problem in &self.problems {
-                let _ = writeln!(out, "- FAILS: {problem}");
-            }
-        }
-        out.push_str("\n## Rows\n\n| Output | Class | Approval or checks |\n|-|-|-|\n");
-        for row in &self.rows {
-            let class = row
-                .class
-                .map_or_else(|| "**UNCLASSIFIED**".to_owned(), |c| c.name().to_owned());
-            let detail = match (&row.approval, row.problems.is_empty()) {
-                (Some(a), _) => {
-                    format!("{}, accepted {} by {}", a.entry, a.accepted, a.accepted_by)
-                }
-                (None, false) => row.problems.join("; "),
-                (None, true) => row
-                    .checks
-                    .iter()
-                    .map(|v| v.check)
-                    .collect::<Vec<_>>()
-                    .join(", "),
-            };
-            let _ = writeln!(
-                out,
-                "| `{}` | {class} | {} |",
-                row.output.replace('|', "\\|"),
-                detail.replace('|', "\\|")
-            );
-        }
-        out
-    }
-}
+mod render;
 
 #[cfg(test)]
 mod tests;

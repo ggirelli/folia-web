@@ -1,0 +1,113 @@
+# Known limitations and compatibility decisions
+
+What Folia does differently from the Jekyll site it replaces, and what it does not do yet. It is
+for developers: read it before treating a difference as a bug, or a green run as proof of parity.
+
+**A clean build is not exact parity.** Zero failed assertions, zero unclassified rows and a
+successful build say that Folia wrote every output and that nothing failed unexplained. They do
+not say the output equals Jekyll's. Every difference below is documented and most were approved,
+and a documented difference is still a difference: the real-site coverage report counts them
+apart from the identical rows (see [coverage classes](#coverage-classes)).
+
+This page describes behaviour only. The reference site's content, its evidence and the owner's
+decision records are private and kept outside this repository (see
+[a site's private inputs](development.md#a-sites-private-inputs)).
+
+## Coverage classes
+
+`just pages` writes `coverage.json` and `coverage.md`: every row of the baseline's manifest gets
+one class.
+
+| Class | Meaning | Passes the run? |
+|-|-|-|
+| built and checked | Folia writes it and every check on it passes. Rows with *ledger-accepted differences* (output that differs from Jekyll's only as the ledger's accepted entries describe) are counted apart from the identical ones | yes |
+| not built yet / waived / removed | planned but not written; owner-waived comparison; owner-removed output | the last two, with the owner's approval |
+| intentional difference | Folia differs on purpose; an owner-approved ledger entry says so. It stays a failing check, and the entry is stale (an error) once the output matches | yes |
+| known difference, excluded | Folia differs, the difference is recorded (`status = "recorded"`) and nobody has approved it, nor any ledger entry covers it | **no** |
+| unresolved defect | a check fails and no entry covers it, or Jekyll writes an output Folia neither writes nor plans | **no** |
+| missing evidence | Folia writes the output but no check compares its contents | **no** |
+| unclassified | its coverage entry is invalid, pending or doubled | **no** |
+
+Outputs Folia writes that Jekyll never did have no row. They pass only when an owner-approved
+`folia-only` entry names them, and the report lists them apart. The report ends with two
+verdicts: a *clean build* (every output accounted for, none a defect or lacking evidence) and
+*exact parity* (every row built and checked with no accepted difference, and no Folia-only
+output). Only the second says the output is Jekyll's.
+
+## Differences from Jekyll
+
+### Notes that are known to differ
+
+A few garden notes differ from Jekyll's page in the whitespace of their `description` and
+`og:title` meta values. They are recorded as known differences and deliberately not part of the
+ledger's approved page extensions: nobody approved them, so they stay visible as such. Nothing
+else on those pages differs.
+
+### Category and tag listings
+
+The category and tag listing pages link differently on purpose:
+
+- Jekyll linked a feed for every category, but only tags have feeds; those links were dead, and
+  Folia does not write them.
+- A tag with a space in its name has a feed, which Folia writes (`/blog/tag/<tag with space>.xml`)
+  and links percent-encoded. Jekyll's link to it was dead (see [Folia-only outputs](#folia-only-outputs)).
+
+### Feeds
+
+- A feed's `<updated>` is its newest item's date, never the build time (plan v9, §7.3), so that
+  builds are reproducible. `jekyll-feed` wrote the build time.
+- Entries match Jekyll's in count, ids, order, links, dates, categories and authors. Entry bodies
+  differ in syntax-highlighting tokens, in raw-HTML serialization (Jekyll's kramdown rewrote some
+  attributes and void elements; Folia passes raw HTML through) and in whitespace. A duplicated
+  attribute that kramdown dropped is written once.
+- The combined feed lists the newest items of its configured collections, with a summary and no
+  content, under the title Jekyll's layout gave it, trailing separator kept.
+- Notes' summaries show wiki-links resolved.
+
+### Sitemap
+
+The URL set equals Jekyll's. The order differs: Folia lists every page by URL, then static files,
+where Jekyll listed collections, then pages by file name, then generated pages. A page's
+`<lastmod>` is the same as Jekyll's; a static file's is its last commit, where Jekyll used the
+file's modification time, which changes with every checkout.
+
+### Search
+
+- Micro entries are indexed; Jekyll's index omitted them.
+- Redirect stubs are indexed with an empty body.
+- A listing page's body is the text of its template's content block (`content-block` in
+  `[search]`), not the whole page; without that setting it is the rendered page.
+- Strings are JSON-escaped and never run through `markdownify`, so curly quotes from Jekyll's
+  smart punctuation and raw backslashes in code differ.
+- A body's line breaks are removed without a space, as Jekyll's `strip_newlines` did, so the last
+  word of a hard-wrapped line and the first of the next one are indexed as one word. Jekyll's
+  index has the same flaw; Folia keeps it for parity.
+- The order of records is not Jekyll's, which varied between two of its own builds.
+
+### Folia-only outputs
+
+Folia writes a tag feed for a tag whose name has a space, where `jekyll-feed` wrote none (it
+names tag feeds for letters, digits and `_` only). It has no Jekyll baseline, so nothing compares
+it; the coverage report lists it as Folia-only.
+
+## Source-content issues Folia reproduces
+
+- **Bare-domain references.** Reference-style link definitions written without a scheme
+  (`[Name]: github.com`) are relative URLs, and Jekyll rendered them as such. Folia does the same,
+  so the link check reports them as internal links that resolve to nothing. They are a defect in the
+  site's Markdown, to be fixed there; Folia does not guess a scheme. Three exist in the reference
+  site.
+- **Broken wiki-links** are shown as broken and warned about, once each. A site lists the warnings
+  it expects.
+- **Unknown front matter** is refused, except the one documented exception (see
+  [Building a site](development.md#building-a-site)); Jekyll ignored it silently.
+
+## Not covered by parity checks
+
+- Stylesheets need Dart Sass exactly 1.100.0.
+- Syntax highlighting uses syntect, not Rouge. Token classes agree with Jekyll's on about 98% of
+  blocks; the rest differ in class names or span splits.
+- Only Markdown and HTML pages are built from `pages/`; other page types are skipped, each named
+  with the reason.
+- The parity tooling compares a build with one recorded Jekyll baseline. A site that changed since
+  the baseline needs a new baseline first.

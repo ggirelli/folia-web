@@ -612,6 +612,13 @@ fn judge_documents(
                 .iter()
                 .all(|d| matches!(d.ledger, Some(ledger::Verdict::Accepted(_))));
         checks.record(&file.path, "dom", accepted);
+        checks.accepted(
+            &file.path,
+            file.differences
+                .iter()
+                .filter(|d| matches!(d.ledger, Some(ledger::Verdict::Accepted(_))))
+                .count(),
+        );
     }
     for outcome in &report.assertions {
         checks.record(&outcome.file, "assertions", outcome.passed);
@@ -663,13 +670,24 @@ fn report_coverage(
     for problem in &report.problems {
         println!("  {problem}");
     }
-    for row in report.rows.iter().filter(|row| row.class.is_none()) {
+    for row in report.rows.iter().filter(|row| {
+        matches!(
+            row.class,
+            None | Some(
+                coverage::Class::Defect
+                    | coverage::Class::MissingEvidence
+                    | coverage::Class::KnownExcluded
+            )
+        )
+    }) {
         println!(
-            "  {}: unclassified: {}",
+            "  {}: {}: {}",
             row.output,
+            row.class.map_or("unclassified", coverage::Class::name),
             row.problems.join("; ")
         );
     }
+    println!("{}", report.verdict());
     Ok(report.passed)
 }
 
