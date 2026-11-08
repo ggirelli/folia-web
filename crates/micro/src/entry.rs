@@ -187,6 +187,7 @@ fn build_entry(
         categories: vec![kind.to_owned()],
         tags: Vec::new(),
         lang: None,
+        search_text: (kind == "rsvps").then(|| rsvp_text(doc)),
     };
     let entry = EntrySummary {
         doc: doc.id.clone(),
@@ -225,6 +226,26 @@ pub(super) fn rsvp(doc: &SourceDoc) -> Result<Value, String> {
         Some(Value::String(answer)) => Ok(answer.into()),
         _ => Err("rsvp should be text, such as yes".to_owned()),
     }
+}
+
+/// What search shows of an RSVP, as the site's search script wrote it: its answer and its event's
+/// date, time, name and organizer, as written (`RSVPed yes - 2021-08-20, 18:00: Gardens by Anna`).
+fn rsvp_text(doc: &SourceDoc) -> String {
+    let event = doc.front.json("event");
+    let field = |name: &str| {
+        event
+            .as_ref()
+            .and_then(|event| event.get(name)?.as_str().map(str::to_owned))
+            .unwrap_or_default()
+    };
+    let answer = doc.front.string("rsvp").ok().flatten().unwrap_or_default();
+    format!(
+        "RSVPed {answer} - {}, {}: {} by {}",
+        field("date"),
+        field("time"),
+        field("name"),
+        field("organizer")
+    )
 }
 
 /// The event an RSVP answers: `{date, time, name, organizer, url}`, each text but `date`, a date

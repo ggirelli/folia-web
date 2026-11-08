@@ -49,6 +49,7 @@ fn config(exclude: &[&str]) -> Config {
         blog: crate::config::BlogConfig::default(),
         garden: crate::config::GardenConfig::default(),
         feeds: None,
+        search: None,
     }
 }
 

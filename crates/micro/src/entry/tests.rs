@@ -270,3 +270,19 @@ fn an_entry_s_feed_item_is_filed_under_its_kind_with_jekyll_s_id() {
     assert_eq!(item.published, item.updated);
     assert_eq!(item.content_html, "<p>I met Björn.</p>\n");
 }
+
+#[test]
+fn an_rsvp_s_search_text_is_its_answer_and_event_as_written_and_others_have_none() {
+    let rsvp = entry(
+        "_micro/rsvps/2021-08-18-homebrew-club.md",
+        "title: \"Impromptu Homebrew Website Club\"\nrsvp: \"yes\"\nevent:\n    date: 2018-08-18\n    time: \"18:30 UTC\"\n    name: \"Impromptu HWC - Europe\"\n    organizer: \"IndieWeb\"\n    url: https://events.indieweb.org/x",
+        "",
+    );
+    let output = built(&rsvp, None).unwrap();
+    assert_eq!(
+        output.feed[0].search_text.as_deref(),
+        Some("RSVPed yes - 2018-08-18, 18:30 UTC: Impromptu HWC - Europe by IndieWeb")
+    );
+    let output = built(&note(), None).unwrap();
+    assert_eq!(output.feed[0].search_text, None);
+}

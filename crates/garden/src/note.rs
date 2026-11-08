@@ -131,6 +131,7 @@ pub fn build(
                     categories: Vec::new(),
                     tags: Vec::new(),
                     lang: None,
+                    search_text: None,
                 });
                 output.entries.push(entry);
                 output.pages.push(page);

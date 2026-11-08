@@ -178,6 +178,16 @@ date, or its claimed source's last commit; a page without a source, such as a ca
 has none. A static file's is its last commit, where Jekyll used the file's modification time
 (plan v12, Q3g).
 
+**The search script** is written by `folia::search` when the configuration has `[search]`: it
+claims the script's `source` (`assets/js/lunrsearchengine.js`) and writes, at its route, the
+`documents` array the site's Liquid made, followed by `fragment`, the script's code after the
+array, read as it is from the site (`_folia/`; plan v12, Q20). The records are the site's pages
+by URL (with the stubs and `redirects.json`; not `.xml`, `assets`, `category` or `tag` URLs),
+then the RSVPs, likes and bookmarks, the notes and the posts, oldest first, each with its body's
+text by the script's filter chain. Following the plan's recommendations, micro entries are listed
+(Q3c; an RSVP's body is its answer and event), listing pages show their rendered text (Q3f),
+and strings are JSON-escaped, with no `markdownify` (Q3q).
+
 ## A site's private inputs
 
 Folia's repository holds the generator and the generic parity tools, never a site's data. What

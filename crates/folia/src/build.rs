@@ -37,6 +37,7 @@ use crate::output::{self, Content};
 use crate::redirects::redirects_json;
 use crate::render::Renderer;
 use crate::sass::Sass;
+use crate::search;
 use crate::site::{Site, plan, redirect_stub};
 use crate::sitemap;
 
@@ -120,21 +121,14 @@ pub fn build(
         built.artifacts.push(artifact.route.clone());
     }
     if !strict {
-        for (route, path, text) in stylesheets(root, config, &site)? {
-            built.artifacts.push(route);
-            add(&mut outputs, path, Content::Bytes(text.into_bytes()))
-                .unwrap_or_else(|clash| problems.push(clash));
-        }
-        let urls = sitemap_urls(root, &site, &pages, &built).map_err(|e| vec![e])?;
-        for (route, text) in serialized(config, &site, &pages.feed, &urls, &built, &clock) {
-            add(
-                &mut outputs,
-                route.output_path(),
-                Content::Bytes(text.into_bytes()),
-            )
-            .unwrap_or_else(|clash| problems.push(clash));
-            built.artifacts.push(route);
-        }
+        let generated = Generated {
+            root,
+            config,
+            site: &site,
+            pages: &pages,
+            clock: &clock,
+        };
+        generated.write(&mut built, &mut outputs, &mut problems)?;
     }
     for id in &site.discovery.statics {
         let copy = Content::Copy(root.join(id.as_str()));
@@ -172,6 +166,124 @@ pub fn build(
 
 /// Adds the output `content` at `path`, unless another output is already there. The route table
 /// keeps outputs apart (`site::plan`); this keeps a clash it missed from overwriting one.
+/// What a whole-site build generates after rendering, from what it built.
+struct Generated<'a> {
+    root: &'a Path,
+    config: &'a Config,
+    site: &'a Site,
+    pages: &'a ModeOutput,
+    clock: &'a SiteClock,
+}
+
+impl Generated<'_> {
+    /// Adds to `outputs` the stylesheets, the serialized files (sitemap, `redirects.json`,
+    /// feeds), then the search script, which reads them; a file built twice is a problem.
+    fn write(
+        &self,
+        built: &mut Built,
+        outputs: &mut BTreeMap<String, Content>,
+        problems: &mut Vec<Diagnostic>,
+    ) -> Result<(), Vec<Diagnostic>> {
+        let mut generated = Vec::new();
+        for (route, path, text) in stylesheets(self.root, self.config, self.site)? {
+            generated.push((route, path, text));
+        }
+        let (config, site, clock) = (self.config, self.site, self.clock);
+        let urls = sitemap_urls(self.root, site, self.pages, built).map_err(|e| vec![e])?;
+        for (route, text) in serialized(config, site, &self.pages.feed, &urls, built, clock) {
+            generated.push((route.clone(), route.output_path(), text));
+        }
+        for (route, path, text) in generated {
+            add(outputs, path, Content::Bytes(text.into_bytes()))
+                .unwrap_or_else(|clash| problems.push(clash));
+            built.artifacts.push(route);
+        }
+        if config.search.is_some() {
+            let script = search_script(self.root, config, site, self.pages, built, outputs, clock);
+            let (route, js) = script.map_err(|e| vec![e])?;
+            add(
+                outputs,
+                route.output_path(),
+                Content::Bytes(js.into_bytes()),
+            )
+            .unwrap_or_else(|clash| problems.push(clash));
+            built.artifacts.push(route);
+        }
+        Ok(())
+    }
+}
+
+/// The search script (module `search`), at its claimed source's route: the records of the pages
+/// rendered (`built`), with their content as written to `outputs` unless they are entries, of
+/// the stubs and `redirects.json`, and of the collections' entries rendered.
+fn search_script(
+    root: &Path,
+    config: &Config,
+    site: &Site,
+    pages: &ModeOutput,
+    built: &Built,
+    outputs: &BTreeMap<String, Content>,
+    clock: &SiteClock,
+) -> Result<(Route, String), Diagnostic> {
+    let Some(search) = &config.search else {
+        return Err(Diagnostic::site("no [search] is configured"));
+    };
+    let source = DocId::new(&search.source);
+    let route = site
+        .routes
+        .outputs()
+        .iter()
+        .find(|o| o.generator.is_none() && o.source.as_ref() == Some(&source))
+        .map(|o| o.route.clone())
+        .ok_or_else(|| Diagnostic::site(format!("search: {source} is not a page of the site")))?;
+    let fragment = std::fs::read_to_string(root.join(&search.fragment))
+        .map_err(|e| Diagnostic::site(format!("search: cannot read {}: {e}", search.fragment)))?;
+    let written = |route: &Route| match outputs.get(&route.output_path()) {
+        Some(Content::Bytes(bytes)) => String::from_utf8_lossy(bytes).into_owned(),
+        _ => String::new(),
+    };
+    let rendered: BTreeSet<&str> = built.pages.iter().map(Route::url).collect();
+    let items: Vec<FeedItem> = pages
+        .feed
+        .iter()
+        .filter(|item| rendered.contains(item.url.as_str()))
+        .cloned()
+        .collect();
+    let in_collection: BTreeSet<&str> = items.iter().map(|item| item.url.as_str()).collect();
+    let mut listed: Vec<search::Page> = built
+        .pages
+        .iter()
+        .filter(|route| !in_collection.contains(route.url()))
+        .filter_map(|route| pages.pages.iter().find(|page| &page.route == route))
+        .map(|page| search::Page {
+            url: page.route.url().to_owned(),
+            title: page.context["title"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned(),
+            content: pages
+                .entries
+                .iter()
+                .find(|entry| Some(&entry.doc) == page.source.as_ref())
+                .map_or_else(|| written(&page.route), |entry| entry.body_html.clone()),
+        })
+        .collect();
+    let redirects = Route::file("/redirects.json").map_err(Diagnostic::site)?;
+    let files = built.stubs.iter().chain(
+        built
+            .artifacts
+            .iter()
+            .filter(|artifact| **artifact == redirects),
+    );
+    listed.extend(files.map(|route| search::Page {
+        url: route.url().to_owned(),
+        title: String::new(),
+        content: written(route),
+    }));
+    let js = search::script(&config.site.url, &listed, &items, &fragment, clock);
+    Ok((route, js))
+}
+
 /// What the sitemap lists (module `sitemap`): each page rendered (`built`) but the 404 page, by
 /// URL, dated by its entry or its source's last commit, then each static file of the sitemap's
 /// extensions, by path, dated by its last commit.
@@ -311,11 +423,12 @@ fn build_documents(
         )
     } else {
         let mut pages = ids(Mode::Pages);
-        pages.retain(|id| !is_sass(id));
-        // The blog builds its claimed index's pages.
-        if let Some(index) = &config.blog.index {
-            pages.remove(&index.source);
-        }
+        // The blog builds its claimed index's pages, and search its script.
+        let claimed = [
+            config.blog.index.as_ref().map(|index| &index.source),
+            config.search.as_ref().map(|search| &search.source),
+        ];
+        pages.retain(|id| !is_sass(id) && !claimed.contains(&Some(id)));
         (pages, ids(Mode::Blog), ids(Mode::Garden), ids(Mode::Micro))
     };
     let dated: Vec<_> = [Mode::Pages, Mode::Blog, Mode::Garden, Mode::Micro]

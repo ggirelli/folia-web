@@ -33,6 +33,7 @@ fn item(collection: &str, url: &str, published: &str) -> FeedItem {
         categories: Vec::new(),
         tags: Vec::new(),
         lang: None,
+        search_text: None,
     }
 }
 

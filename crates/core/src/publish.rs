@@ -91,6 +91,8 @@ pub struct FeedItem {
     pub tags: Vec<String>,
     /// Its front matter `lang`, if any.
     pub lang: Option<String>,
+    /// The text the search index shows for it instead of its body's, if any (an RSVP's).
+    pub search_text: Option<String>,
 }
 
 impl FeedItem {
