@@ -113,6 +113,8 @@ Each mode crate depends on `folia-core` only, never on another mode.
 
 ## Building a site
 
+Every key of the site's configuration is in the [configuration reference](configuration.md).
+
 ```sh
 cargo run --release -p folia -- build --site ../my-site --dest ../my-site-out
 ```
