@@ -134,3 +134,17 @@ fn the_example_site_builds_every_mode_with_one_expected_warning() {
     assert!(!combined.contains("example.org/about\""), "no page");
     assert!(!dest.0.join("README.md").exists(), "the README is excluded");
 }
+
+/// The example's configuration names Folia's own version as the feeds' generator; it follows the
+/// workspace version, so a version bump cannot leave it behind.
+#[test]
+fn the_example_names_the_workspace_version_as_its_feeds_generator() {
+    let config = std::fs::read_to_string(example_site().join("_folia/folia.toml")).unwrap();
+    let wanted = format!("version = \"{}\"", env!("CARGO_PKG_VERSION"));
+    assert!(
+        config
+            .lines()
+            .any(|l| l.starts_with("generator") && l.contains(&wanted)),
+        "the example's `generator` should say {wanted}"
+    );
+}
