@@ -5,7 +5,7 @@ members = ["crates/*"]
 resolver = "3"
 
 [workspace.package]
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/ggirelli/folia-web"
@@ -13,12 +13,12 @@ publish = false
 
 # Versions shared by several crates of the workspace.
 [workspace.dependencies]
-folia = { path = "crates/folia", version = "0.0.0" }
-folia-blog = { path = "crates/blog", version = "0.0.0" }
-folia-core = { path = "crates/core", version = "0.0.0" }
-folia-garden = { path = "crates/garden", version = "0.0.0" }
-folia-micro = { path = "crates/micro", version = "0.0.0" }
-folia-pages = { path = "crates/pages", version = "0.0.0" }
+folia = { path = "crates/folia", version = "0.1.0" }
+folia-blog = { path = "crates/blog", version = "0.1.0" }
+folia-core = { path = "crates/core", version = "0.1.0" }
+folia-garden = { path = "crates/garden", version = "0.1.0" }
+folia-micro = { path = "crates/micro", version = "0.1.0" }
+folia-pages = { path = "crates/pages", version = "0.1.0" }
 clap = { version = "4.6", features = ["derive"] }
 globset = "0.4.20"
 jiff = "0.2.38"
