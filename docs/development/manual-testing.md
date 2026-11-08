@@ -95,6 +95,8 @@ just build-example /tmp/folia-example
 # or: cargo run --locked -p folia -- build --site examples/minimal-site --dest /tmp/folia-example
 ```
 
+`folia --version` (or `-V`) prints the package version, `folia 0.0.0` until a release is tagged.
+
 It prints one warning, which is expected: the example has a broken wiki-link on purpose.
 
 ```text
