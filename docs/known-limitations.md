@@ -46,12 +46,15 @@ output). Only the second says the output is Jekyll's.
 
 ## Differences from Jekyll
 
-### Notes that are known to differ
+### Garden notes: whitespace in two meta values
 
-A few garden notes differ from Jekyll's page in the whitespace of their `description` and
-`og:title` meta values. They are recorded as known differences and deliberately not part of the
-ledger's approved page extensions: nobody approved them, so they stay visible as such. Nothing
-else on those pages differs.
+Six garden notes (the four `dg/book-club/…-books_list` pages, `dg/book-club/book-quotes` and
+`dg/coding/python`) differ from Jekyll's page only in the whitespace around the `description` and
+`og:title` meta values: Jekyll's value is Folia's wrapped in two newlines on each side, because its
+head template's `{% capture %}` blocks keep the newlines around their tags. The project owner
+approved these six outputs as ledger-accepted differences on 2026-11-08, the same two attributes as
+the other pages that differ this way, and nothing else on them differs. Like those pages, they are
+*accepted differences*, not identical output.
 
 ### Category and tag listings
 
