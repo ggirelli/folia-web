@@ -117,8 +117,24 @@ Each mode crate depends on `folia-core` only, never on another mode.
 cargo run --release -p folia -- build --site ../my-site --dest ../my-site-out
 ```
 
-Without a `[slice]` in the site's `folia.toml`, the whole site is built; documents Folia cannot
-build yet are skipped, each named with the reason.
+Without a `[slice]` in the site's `folia.toml`, the whole site is built; documents Folia does not
+support yet are skipped, each named with the reason. A document that is supported but fails (its
+template is missing or fails to render, its author is unknown) is never skipped: it fails the
+build, with every such problem listed, and the destination is left as it was.
+
+### The destination
+
+`--dest` must be outside the site. Folia writes the site into `.<name>.folia-new` beside it and
+swaps it in only when everything was written, so a failed build never touches the destination.
+It deletes nothing it did not write:
+
+- an absent or empty destination is written;
+- a non-empty one is replaced only if its record, `.<name>.folia-output` beside it (not in it,
+  so that it is never deployed), names that directory and lists every top-level entry it holds;
+  user files, a moved copy or any other directory are refused, with nothing changed;
+- a leftover `.<name>.folia-new` or `.<name>.folia-old` is refused, never deleted.
+
+To rebuild into a directory that holds something else, empty it yourself.
 
 **Stylesheets need Dart Sass 1.100.0** (plan v12, Q7): the version Jekyll's `sass-embedded`
 runs, so that the CSS and its source maps are Jekyll's, byte for byte. Install the standalone

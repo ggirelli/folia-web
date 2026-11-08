@@ -86,8 +86,9 @@ is a small public site with every kind of content Folia builds. Its configuratio
 
 ### Build it
 
-Build into a directory outside the site; Folia replaces what the directory holds, and writes
-nothing if the build fails:
+Build into a directory outside the site that is absent, empty, or one a previous Folia build
+wrote (see [the destination](../development.md#the-destination)). A failed build exits non-zero
+and leaves the destination as it was:
 
 ```sh
 just build-example /tmp/folia-example
@@ -102,8 +103,8 @@ Built 18 pages, 1 redirect stubs, 13 generated files and 2 static files into /tm
 ```
 
 Folia also says which documents it skipped, and why (`skipped: <source>: <reason>`): a document
-it cannot build yet, or one its template fails on. The example has none; a new one, after a
-change, is a bug in that change, or in the example.
+it does not support yet (a template that fails is an error, not a skip). The example has
+none; a new one, after a change, is a bug in that change, or in the example.
 
 ### Inspect the output
 
@@ -295,7 +296,11 @@ directory, which it prints):
 | `git log -- <file> failed: fatal: not a git repository …` | the site must be a git repository: `git init`, then commit |
 | `cannot write the site to <dest>: it is inside the site` | build into a directory outside the site |
 | `Dart Sass 1.100.0 is needed to compile the site's stylesheets, and …` | `sass` is missing or another version: install Dart Sass 1.100.0, or set `FOLIA_SASS` to it |
-| `skipped: <source>: … cannot be rendered with <template>: undefined value (in <template>:<line>)` | the template reads a key the page does not have: templates are strict; test it with `is defined` |
+| `… cannot be rendered with <template>: undefined value (in <template>:<line>)` and `The build failed with N problems` | the template reads a key the page does not have: templates are strict; test it with `is defined`. The build fails and the destination is as it was |
+| `these templates cannot be used: <template>: missing; used by …` | a page's layout has no template: add it, or fix the page's `layout` |
+| `cannot write the site to <dir>: it is not empty, and no record shows a Folia build wrote it` | Folia replaces only what it wrote: choose a new or empty directory, or remove this one yourself |
+| `… it holds N entries Folia did not write` | the previous output has files added to it: move them out, or build elsewhere |
+| `… .<name>.folia-new exists, left by an interrupted build or not Folia's` | Folia never deletes it: look at it, remove it, and build again |
 | `skipped: <source>: only Markdown and HTML pages are built yet` (or another reason) | Folia cannot build that document yet; the rest of the site is still built |
 | `warning: <note>: the wiki-link [[…]] names no note, so it is shown as broken` | fix the link, or, for a real site, record it as an expected warning |
 | a recipe fails with `uvx`, `npx` or `bundle` not found | install uv, Node.js or Ruby with Bundler ([prerequisites](#prerequisites)) |

@@ -21,7 +21,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Build the site into a directory, replacing what it holds
+    /// Build the site into a new or empty directory, or one a previous build wrote
     Build {
         /// The site
         #[arg(long, default_value = ".")]
@@ -29,7 +29,7 @@ enum Command {
         /// Folia's configuration for the site [default: <SITE>/_folia/folia.toml]
         #[arg(long)]
         config: Option<PathBuf>,
-        /// Where to write the site: a directory outside it
+        /// Where to write the site: a directory outside it, absent, empty or written by Folia
         #[arg(long)]
         dest: PathBuf,
     },
@@ -55,7 +55,7 @@ fn main() -> ExitCode {
             }
             if !built.skipped.is_empty() {
                 eprintln!(
-                    "{} documents are skipped: Folia cannot build them yet.",
+                    "{} documents are skipped: Folia does not support them yet (nothing else failed).",
                     built.skipped.len()
                 );
             }
@@ -75,8 +75,9 @@ fn main() -> ExitCode {
                 eprintln!("{problem}");
             }
             eprintln!(
-                "The build failed with {} problems; nothing was written.",
-                problems.len()
+                "The build failed with {} problems; nothing was written, and {} is as it was.",
+                problems.len(),
+                dest.display()
             );
             ExitCode::FAILURE
         }

@@ -12,6 +12,9 @@ const BASE: &str = "<title>{{ page.title }} | {{ site.title }}</title>\
                     {% block body %}{% endblock %}\
                     {% for category in site.categories %}<a href=\"/c#{{ category.anchor }}\">{{ category.name }} ({{ category.count }})</a>{% endfor %}\
                     <footer>{{ site.year }}</footer>";
+/// A template for posts that shows only their content.
+const POST_STUB: &str =
+    "{% extends \"base.html\" %}{% block body %}{{ content | safe }}{% endblock %}";
 const PAGE: &str = "{% extends \"base.html\" %}{% block body %}<main>{{ content | safe }}</main>\
                     <time datetime=\"{{ page.modified }}\">{{ page.modified | date(\"%b %-d, %Y\") }}</time>{% endblock %}";
 
@@ -259,7 +262,11 @@ fn whole_site() -> Config {
 fn without_a_slice_every_document_is_built_and_those_folia_cannot_build_are_skipped() {
     let fixture = Fixture::with(
         "whole",
-        &[("base.html", BASE), ("page.html", PAGE)],
+        &[
+            ("base.html", BASE),
+            ("page.html", PAGE),
+            ("post.html", POST_STUB),
+        ],
         &[
             (
                 "pages/raw.html",
@@ -269,10 +276,6 @@ fn without_a_slice_every_document_is_built_and_those_folia_cannot_build_are_skip
                 "pages/liquid.html",
                 "---\nlayout: page\ntitle: Liquid\npermalink: /liquid\n---\n{{ site.title }}\n",
             ),
-            (
-                "pages/fancy.md",
-                "---\nlayout: fancy\ntitle: Fancy\npermalink: /fancy\nredirect_from:\n  - /old-fancy\n---\nFancy\n",
-            ),
         ],
     );
     let built = fixture.build_with(&whole_site()).unwrap();
@@ -280,6 +283,8 @@ fn without_a_slice_every_document_is_built_and_those_folia_cannot_build_are_skip
         built.pages,
         [
             Route::html("/about").unwrap(),
+            Route::html("/blog/2013/05/16/a").unwrap(),
+            Route::html("/blog/2014/01/08/b").unwrap(),
             Route::html("/now").unwrap(),
             Route::html("/raw").unwrap()
         ]
@@ -295,15 +300,10 @@ fn without_a_slice_every_document_is_built_and_those_folia_cannot_build_are_skip
         skipped.contains(&"pages/liquid.html: Liquid in an HTML page is not built yet".to_owned()),
         "{skipped:#?}"
     );
-    assert!(
-        skipped.iter().any(|s| s
-            .starts_with("pages/fancy.md: these templates cannot be used:\n  fancy.html: missing")),
-        "{skipped:#?}"
-    );
-    assert!(!fixture.dest().join("fancy.html").exists());
-    assert!(
-        !fixture.dest().join("old-fancy.html").exists(),
-        "no stub points to a page not built"
+    assert_eq!(
+        skipped.len(),
+        1,
+        "only what Folia does not support is skipped: {skipped:#?}"
     );
 }
 
@@ -368,6 +368,7 @@ fn the_slice_writes_its_notes_and_the_graph_and_returns_the_warnings() {
         &[
             ("base.html", BASE),
             ("page.html", PAGE),
+            ("post.html", POST_STUB),
             ("garden_post.html", NOTE),
         ],
         &NOTES,
@@ -431,7 +432,7 @@ fn an_output_built_twice_is_refused_not_overwritten() {
 }
 
 #[test]
-fn an_author_page_shows_its_author_s_fields_and_covers_and_an_unknown_author_is_skipped() {
+fn an_author_page_shows_its_author_s_fields_and_covers() {
     const AUTHOR: &str = "{% extends \"base.html\" %}{% block body %}\
         {% set author = site.authors[page.author] %}<h1>{{ author.name }}</h1>\
         {% if author.nickname %}<p>{{ author.nickname }}</p>{% endif %}\
@@ -443,18 +444,13 @@ fn an_author_page_shows_its_author_s_fields_and_covers_and_an_unknown_author_is_
         &[
             ("base.html", BASE),
             ("page.html", PAGE),
+            ("post.html", POST_STUB),
             ("author.html", AUTHOR),
         ],
-        &[
-            (
-                "me/index.html",
-                "---\nlayout: author\ntitle: gg\nauthor: gg\npermalink: /\n---\n<p>Hi.</p>\n",
-            ),
-            (
-                "me/ghost.html",
-                "---\nlayout: author\ntitle: ghost\nauthor: nobody\npermalink: /ghost\n---\n<p>Boo.</p>\n",
-            ),
-        ],
+        &[(
+            "me/index.html",
+            "---\nlayout: author\ntitle: gg\nauthor: gg\npermalink: /\n---\n<p>Hi.</p>\n",
+        )],
     );
     let mut config = whole_site();
     config.authors.insert(
@@ -475,15 +471,32 @@ fn an_author_page_shows_its_author_s_fields_and_covers_and_an_unknown_author_is_
          <script data-covers='[{\"path\":\"/c.webp\",\"description\":\"A <a href=\\\"https://x.org\\\">lake</a> I took\\n\"}]'></script>\
          <a href=\"/c#journal\">journal (2)</a><a href=\"/c#cinema\">cinema (1)</a><footer>2026</footer>"
     );
-    let skipped: Vec<String> = built.skipped.iter().map(ToString::to_string).collect();
-    assert!(
-        skipped.contains(
-            &"me/ghost.html: the author nobody is not one of the configuration's authors"
-                .to_owned()
-        ),
-        "{skipped:#?}"
+    assert!(built.skipped.is_empty(), "{:?}", built.skipped);
+}
+
+#[test]
+fn a_page_with_an_unknown_author_fails_the_build_and_keeps_the_previous_output() {
+    let fixture = Fixture::with(
+        "ghost",
+        &[
+            ("base.html", BASE),
+            ("page.html", PAGE),
+            ("post.html", POST_STUB),
+        ],
+        &[(
+            "me/ghost.html",
+            "---\nlayout: page\ntitle: ghost\nauthor: nobody\npermalink: /ghost\n---\n<p>Boo.</p>\n",
+        )],
     );
-    assert!(!fixture.dest().join("ghost.html").exists());
+    std::fs::create_dir_all(fixture.dest()).unwrap();
+    std::fs::write(fixture.dest().join("about.html"), "previous").unwrap();
+    let problems = fixture.build_with(&whole_site()).unwrap_err();
+    let shown: Vec<String> = problems.iter().map(ToString::to_string).collect();
+    assert_eq!(
+        shown,
+        ["me/ghost.html: the author nobody is not one of the configuration's authors"]
+    );
+    assert_eq!(fixture.read("about.html"), "previous");
 }
 
 #[test]
@@ -492,7 +505,11 @@ fn a_micro_note_is_built_with_the_configured_author() {
         <p>{{ page.author }} {{ page.date }} {{ page.corner_backlink.url }}</p>{{ content | safe }}{% endblock %}";
     let fixture = Fixture::with(
         "micro",
-        &[("base.html", BASE), ("page.html", NOTE)],
+        &[
+            ("base.html", BASE),
+            ("page.html", NOTE),
+            ("post.html", POST_STUB),
+        ],
         &[(
             "_micro/notes/2025-06-11-foo_bar.md",
             "---\ntitle: Foo\n---\nBar.\n",
@@ -526,6 +543,7 @@ fn a_claimed_micro_listing_lists_its_entries_and_keeps_its_stubs() {
         &[
             ("base.html", BASE),
             ("page.html", PAGE),
+            ("post.html", POST_STUB),
             ("listing.html", LISTING),
         ],
         &[
@@ -564,6 +582,7 @@ fn the_claimed_blog_index_and_the_archives_are_built_by_the_blog() {
         &[
             ("base.html", BASE),
             ("page.html", PAGE),
+            ("post.html", POST_STUB),
             ("index.html", INDEX),
             ("archive.html", ARCHIVE),
         ],
@@ -608,6 +627,7 @@ fn the_claimed_tags_page_lists_the_posts_by_tag() {
         &[
             ("base.html", BASE),
             ("page.html", PAGE),
+            ("post.html", POST_STUB),
             ("tags.html", TAGS),
         ],
         &[
@@ -640,7 +660,11 @@ fn the_planned_feeds_are_written_with_the_entries_built_only() {
         "{% extends \"base.html\" %}{% block body %}{{ content | safe }}{% endblock %}";
     let fixture = Fixture::with(
         "feeds",
-        &[("base.html", BASE), ("page.html", NOTE)],
+        &[
+            ("base.html", BASE),
+            ("page.html", NOTE),
+            ("post.html", POST_STUB),
+        ],
         &[(
             "_micro/notes/2025-06-11-foo_bar.md",
             "---\ntitle: Foo\n---\nBar.\n",
@@ -700,10 +724,9 @@ fn the_planned_feeds_are_written_with_the_entries_built_only() {
             .count(),
         0
     );
-    // The posts' template is missing, so they are skipped, and in no feed; the empty feed is
-    // as recent as the site's latest entry.
+    // The blog's feed lists both posts; it is as recent as the site's latest entry.
     let blog = fixture.read("blog/feed.xml");
-    assert!(!blog.contains("<entry>"), "{blog}");
+    assert_eq!(blog.matches("<entry>").count(), 2, "{blog}");
     assert!(
         blog.contains("<updated>2026-01-04T13:36:24+01:00</updated>"),
         "{blog}"
@@ -716,7 +739,11 @@ fn the_sitemap_lists_the_pages_and_documents_and_static_files_but_404_and_stubs(
         "{% extends \"base.html\" %}{% block body %}{{ content | safe }}{% endblock %}";
     let fixture = Fixture::with(
         "sitemap",
-        &[("base.html", BASE), ("page.html", NOTE)],
+        &[
+            ("base.html", BASE),
+            ("page.html", NOTE),
+            ("post.html", POST_STUB),
+        ],
         &[
             (
                 "_micro/notes/2025-06-11-foo_bar.md",
@@ -770,7 +797,11 @@ fn the_sitemap_lists_the_pages_and_documents_and_static_files_but_404_and_stubs(
 fn the_search_script_lists_the_pages_stubs_and_redirects_then_its_fragment() {
     let fixture = Fixture::with(
         "search",
-        &[("base.html", BASE), ("page.html", PAGE)],
+        &[
+            ("base.html", BASE),
+            ("page.html", PAGE),
+            ("post.html", POST_STUB),
+        ],
         &[
             (
                 "assets/js/search.js",
@@ -812,4 +843,88 @@ fn the_search_script_lists_the_pages_stubs_and_redirects_then_its_fragment() {
         "{js}"
     );
     assert!(!fixture.dest().join("_folia").exists());
+}
+
+/// A template whose rendering fails: it reads a value no page has.
+const BROKEN: &str = "{{ page.nosuchkey.x }}";
+
+fn problems_text(problems: &[Diagnostic]) -> Vec<String> {
+    problems.iter().map(ToString::to_string).collect()
+}
+
+#[test]
+fn a_template_that_fails_to_render_fails_the_build_naming_the_page_and_the_template() {
+    let fixture = Fixture::new(
+        "one-broken",
+        &[
+            ("base.html", BASE),
+            ("page.html", BROKEN),
+            ("post.html", POST_STUB),
+        ],
+    );
+    for config in [whole_site(), config()] {
+        let problems = problems_text(&fixture.build_with(&config).unwrap_err());
+        assert_ne!(problems.len(), 0);
+        assert!(
+            problems.iter().any(|p| p.contains("/about")
+                && p.contains("page.html")
+                && p.contains("`page.nosuchkey` is undefined")),
+            "{problems:#?}"
+        );
+        assert!(
+            problems
+                .iter()
+                .all(|p| !p.contains("cannot build them yet")),
+            "{problems:#?}"
+        );
+        assert!(!fixture.dest().exists(), "nothing is written");
+    }
+}
+
+#[test]
+fn every_broken_template_is_reported_not_only_the_first() {
+    let fixture = Fixture::new("many-broken", &[("base.html", BASE), ("page.html", BROKEN)]);
+    // page.html fails to render, and post.html is missing: two causes, both shown.
+    let problems = problems_text(&fixture.build_with(&whole_site()).unwrap_err());
+    assert!(
+        problems.iter().any(|p| p.contains("post.html: missing")),
+        "{problems:#?}"
+    );
+    let fixture = Fixture::new(
+        "many-broken-2",
+        &[
+            ("base.html", BASE),
+            ("page.html", BROKEN),
+            ("post.html", BROKEN),
+        ],
+    );
+    let problems = problems_text(&fixture.build_with(&whole_site()).unwrap_err());
+    assert!(problems.len() >= 2, "{problems:#?}");
+    assert!(
+        problems.iter().any(|p| p.contains("/about")),
+        "{problems:#?}"
+    );
+    assert!(
+        problems.iter().any(|p| p.contains("/blog/")),
+        "{problems:#?}"
+    );
+}
+
+#[test]
+fn a_broken_template_keeps_the_previous_output_untouched() {
+    let fixture = Fixture::new(
+        "keep-previous",
+        &[
+            ("base.html", BASE),
+            ("page.html", PAGE),
+            ("post.html", POST_STUB),
+        ],
+    );
+    fixture.build_with(&whole_site()).unwrap();
+    let before = fixture.read("about.html");
+    fixture.write("_folia/templates/page.html", BROKEN);
+    fixture.git(&["commit", "--quiet", "-am", "break"]);
+    assert!(fixture.build_with(&whole_site()).is_err());
+    assert_eq!(fixture.read("about.html"), before);
+    assert!(fixture.dest().join("now.html").exists());
 }
