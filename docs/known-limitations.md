@@ -112,6 +112,17 @@ it; the coverage report lists it as Folia-only.
 - **Unknown front matter** is refused, except the one documented exception (see
   [Building a site](development.md#building-a-site)); Jekyll ignored it silently.
 
+### Recording a known source-content link defect
+
+The links check resolves every internal link and fails the run on each one that resolves to
+nothing. A site owner records a defect that is the source's own as a `check = "links"` entry of
+the deviation ledger (`class = "known-source-defect"`, `status = "recorded"`, with the `page`,
+`at` (`a@href`), `value`, `source` and `rationale`). An entry only relabels the one broken link
+it names exactly, and only when the Jekyll baseline's page has the same attribute value, so it
+is shown to be no change Folia made. Every other broken link still fails. An entry is stale, and
+fails the run, when its link is no longer broken or no longer there, when the baseline lacks it,
+or when two entries name one link. It approves nothing and changes no output.
+
 ## Not covered by parity checks
 
 - Stylesheets need Dart Sass exactly 1.100.0.
