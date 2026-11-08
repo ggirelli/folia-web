@@ -26,11 +26,19 @@ writes what Jekyll wrote.
 
 ### Installing them on a fresh Ubuntu 24.04
 
-These commands were run, in order, in a new `ubuntu:24.04` container as a non-root user, and the
-guide's [automated checks](#automated-checks) and [example site](#the-example-site) then passed in a
-fresh clone (`just check` took about a minute after the toolchain was installed). The system
-packages gave Ruby 3.2 and Node.js 18, older than the versions the author uses, and everything
-still passed.
+These commands were run, in order, in a new `ubuntu:24.04` container as a non-root user on
+2026-11-08. The guide's [automated checks](#automated-checks) and
+[example site](#the-example-site) then passed in a fresh clone: `just check` exited 0 (about a
+minute after the toolchain was installed), the example site built (18 pages) and `just serve`
+served its pages, feeds, sitemap and search script, and answered 404 for a missing page.
+
+**What was tested:** the clone was of the branch `feat/known-links-register` at `450c125`, which
+contained the coverage-classification and known-links changes (PRs #32 and #33) before they were
+merged; it was **not** a clone of `main`. The tools those PRs changed are not on the path of the
+steps above, but this is the commit that was tested.
+
+The system packages gave Ruby 3.2.3 and Node.js 18.19, older than the versions the author uses
+(Ruby 3.3, Node 22); StandardRB, markdownlint and everything else passed with them.
 
 ```sh
 sudo apt-get update
