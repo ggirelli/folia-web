@@ -23,8 +23,8 @@
 
 use folia_core::content::markdown::{excerpt_html, strip_html, truncate_words};
 use folia_core::content::{
-    Diagnostic, DocId, FrontMatter, Mode, SiteClock, SlugMode, SourceDoc, cover, hide_website_junk,
-    slugify,
+    Diagnostic, DocId, FrontMatter, Mode, SiteClock, SlugMode, SourceDoc, cover, encode_path,
+    hide_website_junk, slugify,
 };
 use folia_core::publish::PageSpec;
 use serde_json::{Value, json};
@@ -102,7 +102,8 @@ pub enum Grouping {
 /// The posts by category or tag, as the blog's categories and tags pages list them (Liquid's
 /// `site.categories | sort`): each group `{name, anchor, count, items}`, by name in byte order,
 /// its posts' cards newest first; `anchor` is the name with each space as ` -`, the site's
-/// fragment.
+/// fragment; `feed` is the group's feed as a link writes it (percent-encoded), or `null` for a
+/// group with none: a tag's feed ([`crate::tag_feed_url`]) and no category's.
 ///
 /// # Errors
 ///
@@ -129,9 +130,14 @@ pub fn groups(
                 .filter(|(post, _)| names(post).contains(&name))
                 .map(|(_, card)| card.clone())
                 .collect();
+            let feed = match by {
+                Grouping::Tags => crate::tag_feed_url(&name).map(|url| encode_path(&url)),
+                Grouping::Categories => None,
+            };
             json!({
                 "anchor": name.replace(' ', " -"),
                 "count": items.len(),
+                "feed": feed,
                 "items": items,
                 "name": name,
             })

@@ -69,9 +69,11 @@ fn the_example_site_builds_every_mode_with_one_expected_warning() {
         "assets/json/notes_graph.json",
         "blog/feed.xml",
         "blog/tag/folia.xml",
+        "blog/tag/two words.xml",
         "micro/feed.xml",
         "feed/micro/likes.xml",
         "dg/feed.xml",
+        "feed.xml",
         "sitemap.xml",
         "redirects.json",
         "assets/js/search.js",
@@ -86,5 +88,49 @@ fn the_example_site_builds_every_mode_with_one_expected_warning() {
     );
     let search = std::fs::read_to_string(dest.0.join("assets/js/search.js")).unwrap();
     assert!(search.starts_with("var documents = [\n"), "{search}");
+    // A listing is indexed by its content block (no navigation, no footer), a redirect stub by
+    // nothing.
+    let record = |url: &str| {
+        let key = format!("\"url\": \"https://example.org{url}\"");
+        let line = search.lines().find(|line| line.contains(&key));
+        line.unwrap_or_else(|| panic!("no record for {url}"))
+            .to_owned()
+    };
+    for url in ["/micro", "/blog/categories.html"] {
+        let line = record(url);
+        assert!(!line.contains("\"body\": \"\""), "{url} has a body: {line}");
+        assert!(
+            !line.contains("Categories:") && !line.contains("Home"),
+            "{line}"
+        );
+    }
+    assert!(record("/micro").contains("The template engine Folia renders pages with"));
+    assert!(
+        record("/micro").contains("Ada's short note") && !record("/micro").contains("&#x"),
+        "the templates' escaping does not reach the index: {}",
+        record("/micro")
+    );
+    assert!(
+        record("/me").ends_with("\"body\": \"\"},") || record("/me").ends_with("\"body\": \"\"}")
+    );
+    assert!(!search.contains("Redirecting"), "a stub has no text");
+    // A tag with a space has a feed, linked percent-encoded; a category has no feed link.
+    let tags = std::fs::read_to_string(dest.0.join("blog/tags.html")).unwrap();
+    assert!(tags.contains("two%20words.xml\">feed</a>"), "{tags}");
+    let categories = std::fs::read_to_string(dest.0.join("blog/categories.html")).unwrap();
+    assert!(!categories.contains(".xml"), "{categories}");
+    // The combined feed lists the posts, notes and micro entries; its title keeps the separator.
+    let combined = std::fs::read_to_string(dest.0.join("feed.xml")).unwrap();
+    assert!(
+        combined.contains("<title type=\"html\">Folia example | </title>"),
+        "{combined}"
+    );
+    assert!(combined.contains("/blog/2026/01/10/hello-folia"), "a post");
+    assert!(combined.contains("/dg/topic/leaf"), "a note");
+    assert!(
+        combined.contains("/micro/2026-01-12-a-note"),
+        "a micro entry"
+    );
+    assert!(!combined.contains("example.org/about\""), "no page");
     assert!(!dest.0.join("README.md").exists(), "the README is excluded");
 }

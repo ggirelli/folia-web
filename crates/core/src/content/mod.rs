@@ -22,6 +22,6 @@ pub use presentation::{
     Cover, Toc, TocPlacement, cover, hide_website_junk, interactions, syndications,
     table_of_contents,
 };
-pub use route::{OutputKind, Route, RouteError};
+pub use route::{OutputKind, Route, RouteError, encode_path};
 pub use slug::{SlugMode, slugify};
 pub use source::{DocId, Mode, SourceDoc, SourceError};

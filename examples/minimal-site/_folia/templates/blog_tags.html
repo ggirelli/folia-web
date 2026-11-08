@@ -1,7 +1,7 @@
 {# The posts by tags (blog/tags.html, claimed by the blog). #}{% extends "base.html" %}
 {% block body %}
 <h1>{{ page.title }}</h1>
-{% for group in page.groups %}<h2 id="{{ group.anchor }}">{{ group.name }}</h2>
+{% for group in page.groups %}<h2 id="{{ group.anchor }}">{{ group.name }}{% if group.feed %} <a href="{{ group.feed }}">feed</a>{% endif %}</h2>
 <ul>{% for post in group.items %}<li><a href="{{ post.url }}">{{ post.title }}</a></li>{% endfor %}</ul>
 {% endfor %}
 {% endblock %}

@@ -44,7 +44,11 @@ tags = { source = "blog/tags.html", template = "blog_tags.html" }
 [feeds]
 lang = "en"
 generator = { name = "Folia", uri = "https://github.com/ggirelli/folia-web", version = "0.0.0" }
+# `feed.xml` is replaced by the feed of the posts, notes and micro entries together.
+combined = { source = "feed.xml", collections = ["posts", "digital_garden", "micro"] }
 
 [search]
 source = "assets/js/search.js"
 fragment = "_folia/search/search.js"
+# A listing is indexed by this block of its template, without the navigation and footer.
+content-block = "body"

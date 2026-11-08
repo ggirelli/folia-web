@@ -166,14 +166,20 @@ reached them (`use_dark_layout` false). `[blog]`'s `categories` and `tags` claim
 the posts by category and by tag (their `source` and `template`): each gets `page.groups`, every
 group by name in byte order, with its posts' cards newest first.
 
-**Feeds** are the Atom feeds the modes plan (the blog's, one per plain tag, micro's, one per
+**Feeds** are the Atom feeds the modes plan (the blog's, one per tag, micro's, one per
 micro kind, and the garden's), written by `folia::feed` when the configuration has `[feeds]`:
 its `lang`, the `generator` the feeds name (`name`, `uri`, `version`) and how many items each
 lists (`limit`, 10). Each mode gives a `FeedItem` per entry it builds; a feed lists the newest of
 those whose pages were rendered, serialized as `jekyll-feed` 0.17 wrote them, without a template.
 Its `<updated>` is its latest item's, never the build time (plan v9, §7.3). Notes name the
 configuration's `[garden]` `author`, as micro entries name `[micro]`'s, and their summaries show
-wiki-links resolved (D-003). The combined `/feed.xml` is not built yet.
+wiki-links resolved (D-003). A tag's feed is `/blog/tag/:tag.xml` for every tag that can be a
+file name; one with a space is written with it (`stem cells.xml`) and linked percent-encoded
+(`stem%20cells.xml`; the group's `feed`, `null` for a category, which has none). The **combined
+feed** is a page of the site (`[feeds.combined]`: its `source`, such as `feed.xml`, and the
+`collections` it lists): the newest items of those collections, titled as Jekyll's
+layout titled it (the site's title, then ` | ` and nothing, trailing separator kept), with a
+summary and no content.
 
 **The sitemap**, `/sitemap.xml`, is written by `folia::sitemap` as `jekyll-sitemap` 1.4 wrote it:
 every page rendered but `/404.html` (redirect stubs are not pages), by URL, then the static
@@ -189,8 +195,10 @@ array, read as it is from the site (`_folia/`; plan v12, Q20). The records are t
 by URL (with the stubs and `redirects.json`; not `.xml`, `assets`, `category` or `tag` URLs),
 then the RSVPs, likes and bookmarks, the notes and the posts, oldest first, each with its body's
 text by the script's filter chain. Following the plan's recommendations, micro entries are listed
-(Q3c; an RSVP's body is its answer and event), listing pages show their rendered text (Q3f),
-and strings are JSON-escaped, with no `markdownify` (Q3q).
+(Q3c; an RSVP's body is its answer and event), and strings are JSON-escaped, with no
+`markdownify` (Q3q). A listing page's body is the text of its template's block named by
+`content-block` (`[search]`), so the navigation, the footer and the rest of the frame are not
+indexed; without it, the rendered page (Q3f). A redirect stub has no body.
 
 ## A site's private inputs
 
