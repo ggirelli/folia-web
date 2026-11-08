@@ -182,3 +182,19 @@ fn a_failed_first_build_leaves_no_destination() {
     assert!(!scratch.path(".out.folia-new").exists());
     assert!(!scratch.path(".out.folia-output").exists());
 }
+
+#[test]
+fn version_prints_the_package_version_and_exits_zero() {
+    for flag in ["--version", "-V"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_folia"))
+            .arg(flag)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            format!("folia {}\n", env!("CARGO_PKG_VERSION"))
+        );
+        assert!(output.stderr.is_empty());
+    }
+}
