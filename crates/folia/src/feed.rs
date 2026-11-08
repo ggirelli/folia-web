@@ -261,7 +261,7 @@ fn normalize_whitespace(text: &str) -> String {
 }
 
 /// Liquid's `xml_escape`: `&`, `<`, `>`, `"` and `'` as entities.
-fn xml_escape(text: &str) -> String {
+pub(crate) fn xml_escape(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")

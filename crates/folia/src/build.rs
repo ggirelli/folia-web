@@ -11,8 +11,8 @@
 //! 4. Check every page's template, then render each page. Without a slice, a page whose template
 //!    is missing or fails, or whose `author` is not one of the configuration's, is skipped too.
 //! 5. Add a redirect stub for each `redirect_from` URL of a page rendered, the files the modes
-//!    generated (the note graph), the feeds the modes planned when the configuration has
-//!    `[feeds]` (module `feed`), and copy every static file.
+//!    generated (the note graph), the sitemap (module `sitemap`), the feeds the modes planned
+//!    when the configuration has `[feeds]` (module `feed`), and copy every static file.
 //! 6. Write it all to the destination (`output`).
 //!
 //! Every other planned output is not built yet; [`Built::not_built`] counts them. Nothing is
@@ -24,7 +24,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::Path;
 
-use folia_core::content::{Diagnostic, LastCommits, Mode, Route, SiteClock, SourceDoc};
+use folia_core::content::{Diagnostic, DocId, LastCommits, Mode, Route, SiteClock, SourceDoc};
 use folia_core::publish::{EntrySummary, FeedItem, ModeOutput, PageSpec};
 use jiff::Timestamp;
 use serde_json::json;
@@ -38,6 +38,7 @@ use crate::redirects::redirects_json;
 use crate::render::Renderer;
 use crate::sass::Sass;
 use crate::site::{Site, plan, redirect_stub};
+use crate::sitemap;
 
 /// What a build wrote.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -112,11 +113,11 @@ pub fn build(
                 .unwrap_or_else(|clash| problems.push(clash));
         }
     }
-    for artifact in pages.artifacts {
-        let body = Content::Bytes(artifact.body.into_bytes());
+    for artifact in &pages.artifacts {
+        let body = Content::Bytes(artifact.body.clone().into_bytes());
         add(&mut outputs, artifact.route.output_path(), body)
             .unwrap_or_else(|clash| problems.push(clash));
-        built.artifacts.push(artifact.route);
+        built.artifacts.push(artifact.route.clone());
     }
     if !strict {
         for (route, path, text) in stylesheets(root, config, &site)? {
@@ -124,7 +125,8 @@ pub fn build(
             add(&mut outputs, path, Content::Bytes(text.into_bytes()))
                 .unwrap_or_else(|clash| problems.push(clash));
         }
-        for (route, text) in serialized(config, &site, &pages.feed, &built, &clock) {
+        let urls = sitemap_urls(root, &site, &pages, &built).map_err(|e| vec![e])?;
+        for (route, text) in serialized(config, &site, &pages.feed, &urls, &built, &clock) {
             add(
                 &mut outputs,
                 route.output_path(),
@@ -170,14 +172,66 @@ pub fn build(
 
 /// Adds the output `content` at `path`, unless another output is already there. The route table
 /// keeps outputs apart (`site::plan`); this keeps a clash it missed from overwriting one.
+/// What the sitemap lists (module `sitemap`): each page rendered (`built`) but the 404 page, by
+/// URL, dated by its entry or its source's last commit, then each static file of the sitemap's
+/// extensions, by path, dated by its last commit.
+fn sitemap_urls(
+    root: &Path,
+    site: &Site,
+    pages: &ModeOutput,
+    built: &Built,
+) -> Result<Vec<sitemap::Url>, Diagnostic> {
+    let source = |route: &Route| {
+        pages
+            .pages
+            .iter()
+            .find(|page| &page.route == route)
+            .and_then(|page| page.source.as_ref())
+    };
+    let entry = |id: &DocId| pages.entries.iter().find(|entry| &entry.doc == id);
+    let statics: Vec<&DocId> = site
+        .discovery
+        .statics
+        .iter()
+        .filter(|id| sitemap::STATIC_EXTENSIONS.contains(&id.extension()))
+        .filter(|id| id.file_name() != "404.html")
+        .collect();
+    let claimed = built
+        .pages
+        .iter()
+        .filter_map(source)
+        .filter(|id| entry(id).is_none());
+    let commits = LastCommits::read(root, claimed.chain(statics.iter().copied()))
+        .map_err(Diagnostic::site)?;
+    let mut urls: Vec<sitemap::Url> = built
+        .pages
+        .iter()
+        .filter(|route| route.output_path() != "404.html")
+        .map(|route| sitemap::Url {
+            url: route.url().to_owned(),
+            lastmod: source(route).and_then(|id| match entry(id) {
+                Some(entry) => entry.modified.as_ref().map(|m| m.at).or(entry.published),
+                None => commits.get(id),
+            }),
+        })
+        .collect();
+    urls.sort_by(|a, b| a.url.cmp(&b.url));
+    urls.extend(statics.into_iter().map(|id| sitemap::Url {
+        url: format!("/{id}"),
+        lastmod: commits.get(id),
+    }));
+    Ok(urls)
+}
+
 /// The planned outputs Folia serializes, with their text: the site-wide files
-/// (`site::SITE_FILES`), each planned unless a file of the site takes its URL, and, with
-/// `[feeds]`, each feed the modes planned. A feed lists only the items whose pages were rendered
-/// (`built`), so a page skipped is in no feed.
+/// (`site::SITE_FILES`), each planned unless a file of the site takes its URL: the sitemap of
+/// `urls` and `redirects.json`; and, with `[feeds]`, each feed the modes planned. A feed lists
+/// only the items whose pages were rendered (`built`), so a page skipped is in no feed.
 fn serialized(
     config: &Config,
     site: &Site,
     items: &[FeedItem],
+    urls: &[sitemap::Url],
     built: &Built,
     clock: &SiteClock,
 ) -> Vec<(Route, String)> {
@@ -199,6 +253,8 @@ fn serialized(
             let (url, generator) = (planned.route.url(), planned.generator?);
             let text = if generator == "redirects" {
                 redirects_json(&config.site.url, site)
+            } else if generator == "sitemap" {
+                sitemap::xml(&config.site.url, urls, clock)
             } else {
                 let feeds = config.feeds.as_ref()?;
                 feed::xml(
