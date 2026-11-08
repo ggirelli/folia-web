@@ -195,6 +195,6 @@ fn version_prints_the_package_version_and_exits_zero() {
             String::from_utf8_lossy(&output.stdout),
             format!("folia {}\n", env!("CARGO_PKG_VERSION"))
         );
-        assert!(output.stderr.is_empty());
+        assert_eq!(output.stderr.len(), 0);
     }
 }
