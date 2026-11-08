@@ -40,7 +40,7 @@ use folia_core::content::markdown::{
 use folia_core::content::{
     Diagnostic, LastCommits, SiteClock, SourceDoc, cover, hide_website_junk, modified,
 };
-use folia_core::publish::{Artifact, EntrySummary, ModeOutput, PageSpec};
+use folia_core::publish::{Artifact, EntrySummary, FeedItem, ModeOutput, PageSpec};
 use serde::Serialize;
 use serde_json::{Value, json};
 
@@ -69,7 +69,9 @@ struct Backlink {
 /// whose source is in `only` and that are due at the build: not dated after it, by their front
 /// matter or their file name, as [`super::routes`] has it. `root` is the garden root. A note's
 /// `modified` time comes from its last commit (`commits`), then its date; times are shown in the
-/// time zone of `clock`. A built note's broken wiki-link is a warning.
+/// time zone of `clock`. A built note's broken wiki-link is a warning. The feeds name `author`
+/// (the configuration's garden author) as every note's, and show a note's summary with its
+/// wiki-links resolved, as its body (D-003).
 ///
 /// # Errors
 ///
@@ -81,6 +83,7 @@ pub fn build(
     docs: &[SourceDoc],
     root: &str,
     only: &[&str],
+    author: Option<&str>,
     commits: &LastCommits,
     clock: &SiteClock,
 ) -> Result<ModeOutput, Vec<Diagnostic>> {
@@ -114,6 +117,21 @@ pub fn build(
         match build_note(doc, note, backlinks, &links, commits, clock) {
             Ok((entry, page)) => {
                 output.warnings.extend(broken_links(doc, &links));
+                let published = entry.published.unwrap_or_else(|| clock.now());
+                output.feed.push(FeedItem {
+                    collection: "digital_garden".to_owned(),
+                    url: entry.route.url().to_owned(),
+                    id: FeedItem::jekyll_id(entry.route.url(), doc),
+                    title: title(note).to_owned(),
+                    published,
+                    updated: entry.modified.as_ref().map_or(published, |m| m.at),
+                    content_html: entry.body_html.clone(),
+                    excerpt_html: excerpt_html(&doc.body, Some(&links)),
+                    author: author.map(str::to_owned),
+                    categories: Vec::new(),
+                    tags: Vec::new(),
+                    lang: None,
+                });
                 output.entries.push(entry);
                 output.pages.push(page);
             }

@@ -162,6 +162,15 @@ reached them (`use_dark_layout` false). `[blog]`'s `categories` and `tags` claim
 the posts by category and by tag (their `source` and `template`): each gets `page.groups`, every
 group by name in byte order, with its posts' cards newest first.
 
+**Feeds** are the Atom feeds the modes plan (the blog's, one per plain tag, micro's, one per
+micro kind, and the garden's), written by `folia::feed` when the configuration has `[feeds]`:
+its `lang`, the `generator` the feeds name (`name`, `uri`, `version`) and how many items each
+lists (`limit`, 10). Each mode gives a `FeedItem` per entry it builds; a feed lists the newest of
+those whose pages were rendered, serialized as `jekyll-feed` 0.17 wrote them, without a template.
+Its `<updated>` is its latest item's, never the build time (plan v9, §7.3). Notes name the
+configuration's `[garden]` `author`, as micro entries name `[micro]`'s, and their summaries show
+wiki-links resolved (D-003). The combined `/feed.xml` is not built yet.
+
 ## A site's private inputs
 
 Folia's repository holds the generator and the generic parity tools, never a site's data. What

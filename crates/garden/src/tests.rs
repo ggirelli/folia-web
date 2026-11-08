@@ -29,7 +29,7 @@ fn with_body(path: &str, front: &str, body: &str) -> SourceDoc {
 
 fn build_all(docs: &[SourceDoc]) -> Result<ModeOutput, Vec<Diagnostic>> {
     let only: Vec<&str> = docs.iter().map(|doc| doc.id.as_str()).collect();
-    build(docs, ROOT, &only, &LastCommits::default(), &clock())
+    build(docs, ROOT, &only, None, &LastCommits::default(), &clock())
 }
 
 fn graph(output: &ModeOutput) -> Value {
@@ -191,6 +191,7 @@ fn backlinks_and_the_graph_count_notes_whose_pages_are_not_built() {
         &docs,
         ROOT,
         &["_digital_garden/a.md"],
+        None,
         &LastCommits::default(),
         &clock(),
     )
@@ -312,7 +313,7 @@ fn a_note_dated_by_its_file_name_is_ordered_by_that_date_and_an_undated_one_last
     // The undated note cannot be built, but the order is the graph's, which needs no page.
     assert_eq!(output.len(), 1);
     let only = ["_digital_garden/b.md"];
-    let built = build(&docs, ROOT, &only, &LastCommits::default(), &clock()).unwrap();
+    let built = build(&docs, ROOT, &only, None, &LastCommits::default(), &clock()).unwrap();
     assert_eq!(
         node_ids(&built),
         ["/dg/quotes/2014-02-13-a", "/dg/b", "/dg/home"]
@@ -397,7 +398,15 @@ fn a_note_dated_after_the_build_has_a_page_once_the_build_reaches_its_date() {
     let docs = with_future_notes();
     let only: Vec<&str> = docs.iter().map(|doc| doc.id.as_str()).collect();
     let pages_at = |now: &str| -> Vec<String> {
-        let output = build(&docs, ROOT, &only, &LastCommits::default(), &clock_at(now)).unwrap();
+        let output = build(
+            &docs,
+            ROOT,
+            &only,
+            None,
+            &LastCommits::default(),
+            &clock_at(now),
+        )
+        .unwrap();
         // The graph does not change with the build time: every note is in it.
         assert_eq!(node_ids(&output).len(), 3);
         assert_eq!(edges(&output).len(), 3);
@@ -480,5 +489,37 @@ fn the_graph_keeps_the_plugins_key_order() {
         output.artifacts[0]
             .body
             .contains(r#"],"edges":[{"source":"/dg/b","target":"/dg/a"},"#)
+    );
+}
+
+#[test]
+fn a_note_s_feed_item_has_the_configured_author_and_its_wiki_links_resolved() {
+    let docs = mutual();
+    let only = ["_digital_garden/a.md"];
+    let output = build(
+        &docs,
+        ROOT,
+        &only,
+        Some("gg"),
+        &LastCommits::default(),
+        &clock(),
+    )
+    .unwrap();
+    let [item] = &output.feed[..] else {
+        panic!("{:?}", output.feed)
+    };
+    assert_eq!(item.collection, "digital_garden");
+    assert_eq!(item.url, "/dg/a");
+    assert_eq!(item.id, "/dg/a");
+    assert_eq!(item.title, "Note A");
+    assert_eq!(item.author.as_deref(), Some("gg"));
+    assert!(item.categories.is_empty() && item.tags.is_empty());
+    assert_eq!(item.content_html, output.entries[0].body_html);
+    assert!(
+        item.excerpt_html
+            .contains("<a href=\"/dg/b\" class=\"internal-link\">B</a>")
+            && !item.excerpt_html.contains("[["),
+        "{}",
+        item.excerpt_html
     );
 }

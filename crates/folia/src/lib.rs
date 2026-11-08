@@ -9,6 +9,7 @@
 pub mod build;
 pub mod config;
 pub mod discover;
+pub mod feed;
 pub mod output;
 pub mod redirects;
 pub mod render;

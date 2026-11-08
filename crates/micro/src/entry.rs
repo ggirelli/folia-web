@@ -34,7 +34,7 @@ use folia_core::content::markdown::{description, excerpt_html, to_html};
 use folia_core::content::{
     Diagnostic, LastCommits, SiteClock, SourceDoc, cover, interactions, modified, syndications,
 };
-use folia_core::publish::{EntrySummary, ModeOutput, PageSpec};
+use folia_core::publish::{EntrySummary, FeedItem, ModeOutput, PageSpec};
 use serde_json::{Map, Value, json};
 
 use super::{entry_output, kind_of};
@@ -77,9 +77,10 @@ pub fn build(
     let mut problems = Vec::new();
     for doc in docs.iter().filter(|doc| only.contains(&doc.id.as_str())) {
         match build_entry(doc, root, author, commits, clock) {
-            Ok(Some((entry, page))) => {
+            Ok(Some((entry, page, item))) => {
                 output.entries.push(entry);
                 output.pages.push(page);
+                output.feed.push(item);
             }
             Ok(None) => {}
             Err(problem) => problems.push(problem),
@@ -98,7 +99,7 @@ fn build_entry(
     author: Option<&str>,
     commits: &LastCommits,
     clock: &SiteClock,
-) -> Result<Option<(EntrySummary, PageSpec)>, Diagnostic> {
+) -> Result<Option<(EntrySummary, PageSpec, FeedItem)>, Diagnostic> {
     let problem = |message: &dyn std::fmt::Display| Diagnostic::in_doc(&doc.id, message);
     let Some(planned) = entry_output(doc, root, clock)? else {
         return Ok(None);
@@ -171,15 +172,31 @@ fn build_entry(
         source: Some(doc.id.clone()),
         context,
     };
+    let body_html = to_html(&doc.body, None);
+    // The feeds file an entry under its kind, the category Jekyll gave it.
+    let item = FeedItem {
+        collection: "micro".to_owned(),
+        url: planned.route.url().to_owned(),
+        id: FeedItem::jekyll_id(planned.route.url(), doc),
+        title,
+        published,
+        updated: modified.as_ref().map_or(published, |m| m.at),
+        content_html: body_html.clone(),
+        excerpt_html: excerpt_html(&doc.body, None),
+        author: author.map(str::to_owned),
+        categories: vec![kind.to_owned()],
+        tags: Vec::new(),
+        lang: None,
+    };
     let entry = EntrySummary {
         doc: doc.id.clone(),
         route: planned.route,
         published: Some(published),
         modified,
-        body_html: to_html(&doc.body, None),
+        body_html,
         redirect_from: planned.redirect_from,
     };
-    Ok(Some((entry, page)))
+    Ok(Some((entry, page, item)))
 }
 
 /// A like's or bookmark's link, its front matter `key`: `{url, label}`, `label` none without one.

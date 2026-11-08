@@ -38,7 +38,7 @@ use folia_core::content::{
     Diagnostic, LastCommits, SiteClock, SourceDoc, Toc, TocPlacement, cover, hide_website_junk,
     interactions, modified, syndications, table_of_contents,
 };
-use folia_core::publish::{EntrySummary, ModeOutput, PageSpec};
+use folia_core::publish::{EntrySummary, FeedItem, ModeOutput, PageSpec};
 use serde_json::{Value, json};
 
 use super::{Post, read_posts};
@@ -122,9 +122,10 @@ pub fn build(
             next: posts.get(i + 1),
         };
         match build_post(doc, post, &neighbours, commits, clock) {
-            Ok((entry, page)) => {
+            Ok((entry, page, item)) => {
                 output.entries.push(entry);
                 output.pages.push(page);
+                output.feed.push(item);
             }
             Err(problem) => problems.push(problem),
         }
@@ -148,7 +149,7 @@ fn build_post(
     neighbours: &Neighbours,
     commits: &LastCommits,
     clock: &SiteClock,
-) -> Result<(EntrySummary, PageSpec), Diagnostic> {
+) -> Result<(EntrySummary, PageSpec, FeedItem), Diagnostic> {
     let problem = |message: &dyn std::fmt::Display| Diagnostic::in_doc(&doc.id, message);
     let toc = table_of_contents(doc)?;
     let cover = cover(doc)?;
@@ -185,15 +186,36 @@ fn build_post(
         source: Some(doc.id.clone()),
         context,
     };
+    let body_html = to_html(&doc.body, None);
+    // The feed reads the singular `category` alone, when a post sets it.
+    let feed_categories = if doc.front.get("category").is_some() {
+        doc.front.strings("category").map_err(|e| problem(&e))?
+    } else {
+        post.categories.clone()
+    };
+    let item = FeedItem {
+        collection: "posts".to_owned(),
+        url: post.route.url().to_owned(),
+        id: FeedItem::jekyll_id(post.route.url(), doc),
+        title: post.title.clone(),
+        published: post.published,
+        updated: modified.as_ref().map_or(post.published, |m| m.at),
+        content_html: body_html.clone(),
+        excerpt_html: excerpt_html(&doc.body, None),
+        author,
+        categories: feed_categories,
+        tags: post.tags.clone(),
+        lang: lang(doc).map_err(|message| problem(&message))?,
+    };
     let entry = EntrySummary {
         doc: doc.id.clone(),
         route: post.route.clone(),
         published: Some(post.published),
         modified,
-        body_html: to_html(&doc.body, None),
+        body_html,
         redirect_from: post.redirect_from.clone(),
     };
-    Ok((entry, page))
+    Ok((entry, page, item))
 }
 
 /// Why the post template cannot show `doc`, with its table of contents `toc`, yet, if it
@@ -226,6 +248,25 @@ fn unsupported(doc: &SourceDoc, toc: Option<&Toc>) -> Result<(), String> {
         return Err("a table of contents not on the left is not built yet".to_owned());
     }
     Ok(())
+}
+
+/// The post's front matter `lang`, as Liquid writes it: text as it is, a list of texts joined
+/// with nothing between them (`lang: [italian]` is `italian`).
+fn lang(doc: &SourceDoc) -> Result<Option<String>, String> {
+    match doc.front.json("lang") {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(lang)) => Ok(Some(lang)),
+        Some(Value::Array(parts)) => parts
+            .iter()
+            .map(|part| {
+                part.as_str()
+                    .ok_or("lang should be text or a list of texts")
+            })
+            .collect::<Result<String, _>>()
+            .map(Some)
+            .map_err(str::to_owned),
+        Some(_) => Err("lang should be text or a list of texts".to_owned()),
+    }
 }
 
 /// Whether the post's article is narrower: its front matter `narrow_post`, `false` without one.
