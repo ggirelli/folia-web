@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ page.title }} | {{ site.title }}</title>
+<link rel="icon" href="/assets/images/avatar.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body>
@@ -16,7 +17,7 @@
 {% block body %}{% endblock %}
 </main>
 <footer>
-{% for category in site.categories %}<a href="/blog/categories.html#{{ category.anchor }}">{{ category.name }} ({{ category.count }})</a> {% endfor %}
+<p>Categories: {% for category in site.categories %}<a href="/blog/categories.html#{{ category.anchor }}">{{ category.name }} ({{ category.count }})</a> {% endfor %}</p>
 <p>&copy; {{ site.year }} {{ site.title }}</p>
 </footer>
 </body>

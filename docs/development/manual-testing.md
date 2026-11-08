@@ -168,15 +168,23 @@ just serve /tmp/folia-example          # http://127.0.0.1:8000/; just serve DIR 
   the local server).
 - [ ] **Layout:** at a phone's width (the browser's responsive mode) and a desktop's: no page
   scrolls sideways but code blocks.
-- [ ] **Assets:** `/assets/css/style.css` is applied, and `/assets/images/avatar.svg` loads; the
-  browser's console and network panel show no 404.
-- [ ] **Search:** on `/search`, typing `minijinja` lists the bookmark. Its results link to the
-  configured site URL, so they leave the local server.
+- [ ] **Assets:** `/assets/css/style.css` is applied (code is coloured), the author's avatar shows
+  in a post's byline and as the tab icon; the browser's console and network panel show no 404.
+- [ ] **Search:** on `/search`, typing `minijinja` lists the bookmark; `/search?q=leaf` searches on
+  load. Its results link to the configured site URL, so they leave the local server.
 - [ ] **Feeds:** `/blog/feed.xml`, `/micro/feed.xml`, `/feed/micro/likes.xml` and `/dg/feed.xml`
   open as XML.
 - [ ] **Sitemap:** `/sitemap.xml` lists the pages, and not `404.html`.
 - [ ] **Listings:** `/micro` lists the four micro entries, newest first; `/blog/` both posts.
 - [ ] **Error page:** `/no-such-page` shows the 404 page, with status 404.
+
+To look at pages without a browser window, take screenshots with headless Chrome, at a desktop and
+a phone width, while `just serve` runs:
+
+```sh
+google-chrome --headless=new --window-size=375,800 --screenshot=/tmp/post.png \
+  http://127.0.0.1:8000/blog/2026/01/10/hello-folia
+```
 
 ## Real-site parity (optional)
 

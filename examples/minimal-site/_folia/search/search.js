@@ -7,7 +7,7 @@
     document.getElementById("search-form").addEventListener("submit", function (e) {
         e.preventDefault();
     });
-    input.addEventListener("input", function () {
+    var search = function () {
         var term = input.value.trim().toLowerCase();
         results.innerHTML = "";
         if (!term) return;
@@ -20,5 +20,12 @@
             item.appendChild(link);
             results.appendChild(item);
         });
-    });
+    };
+    input.addEventListener("input", search);
+    // `/search?q=term` searches on load, so a search can be linked to.
+    var query = new URLSearchParams(window.location.search).get("q");
+    if (query) {
+        input.value = query;
+        search();
+    }
 })();

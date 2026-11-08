@@ -3,3 +3,12 @@ body { font-family: system-ui, sans-serif; max-width: 42rem; margin: 0 auto; pad
 nav a { margin-right: 0.5rem; }
 pre { overflow-x: auto; }
 @media (max-width: 30rem) { nav a { display: inline-block; margin-bottom: 0.25rem; } }
+.byline { display: flex; align-items: center; gap: 0.5rem; }
+.avatar { border-radius: 50%; }
+footer { border-top: 1px solid #ccc; margin-top: 2rem; font-size: 0.9rem; }
+nav.toc { background: #f4f4f4; padding: 0.25rem 1rem; }
+pre.highlight { background: #f6f8fa; padding: 0.75rem; }
+.highlight .k, .highlight .kd { color: #a626a4; }
+.highlight .nf { color: #4078f2; }
+.highlight .s, .highlight .s2 { color: #50a14f; }
+.highlight .c1 { color: #a0a1a7; font-style: italic; }
