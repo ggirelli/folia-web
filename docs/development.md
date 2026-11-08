@@ -200,6 +200,9 @@ text by the script's filter chain. Following the plan's recommendations, micro e
 `content-block` (`[search]`), so the navigation, the footer and the rest of the frame are not
 indexed; without it, the rendered page (Q3f). A redirect stub has no body.
 
+See [known limitations](known-limitations.md) for what differs from Jekyll, on purpose or not,
+and for how the coverage report tells a clean build from exact parity.
+
 ## A site's private inputs
 
 Folia's repository holds the generator and the generic parity tools, never a site's data. What
@@ -229,6 +232,14 @@ A waiver or removal (`check = "coverage"`) classifies an output only when it has
 `status = "accepted"`, a valid `accepted` date, a `decision` and a `rationale`, and an
 `accepted_by` that is exactly one of `owners`; a missing or empty `owners` approves nothing, and
 proposed and withdrawn entries classify nothing (plan v12, §5.2 and §5.4).
+
+Three more classes are decided the same way, none of them a waiver
+(see [known limitations](known-limitations.md#coverage-classes)): `intentional` (a difference
+Folia has on purpose; approved, and stale once the output matches Jekyll's), `folia-only` (an
+output with no Jekyll baseline, so no manifest row; approved) and `known` (a difference recorded
+with `status = "recorded"` and a `rationale`, **never** `accepted`: it has no approval, and the
+run still fails while it stands). An entry of the first two with an unapproved status, or a
+`known` one that claims acceptance, is invalid and classifies nothing.
 
 **What the tool checks is the recorded approval, not who wrote it.** It cannot tell whether the
 owner made or approved a ledger change: anyone who can edit the file can type an owner's name, or
