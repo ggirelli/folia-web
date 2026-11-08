@@ -20,16 +20,11 @@ or Zola, although the code is public.
 
 ## Status
 
-Folia has finished its validation spikes ([plan v9, §10](planning/plan.v9.md#10-validation-spikes))
-and the three steps of its first vertical slice ([§12.2](planning/plan.v9.md#122-vertical-slice)),
-each committed in Folia with its checks passing. The first builds one page, `/about`, through the
-whole pipeline: `folia build` renders it with MiniJinja templates kept in the site, writes its
-redirect stub, and copies the static files, and the result matches Jekyll's. The second, a blog post
-with its table of contents, dates and highlighted code, and the third, two garden notes with their
-backlinks and the note graph, match Jekyll's too. The templates they use are committed in the site
-on a branch, not yet merged. Most of the site is still to be built; [plan v13](planning/plan.v13.md)
-is the plan for the rest of the migration. Nothing is migrated: the Jekyll site is still the one
-published. Besides that, the parity harness records production builds of the Jekyll site with
-Jekyll's own intermediate results; Folia's discovery and routes reproduce every output path of the
-site, and its Markdown renderer the body HTML of every Markdown document. See [parity
-baselines](baseline.md).
+`folia build` builds the whole reference site: its pages, posts, micro entries and garden notes,
+the blog and micro listings, redirects, stylesheets (with Dart Sass), the Atom feeds, the sitemap
+and the search script; it skips, and names, the one document it cannot build yet (the combined
+`/feed.xml`). The pages are checked against Jekyll's output with the parity harness
+([parity baselines](baseline.md)); the feeds, sitemap and search script are tested on fixtures
+only, not yet compared with Jekyll's. [Plan v13](planning/plan.v13.md) is the plan for the rest of
+the migration. Nothing is migrated: the Jekyll site is still the one published.
+[Manual testing](development/manual-testing.md) shows how to try Folia on a public example site.

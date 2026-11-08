@@ -45,6 +45,7 @@ nav:
   - Parity baselines: baseline.md
   - Development:
       - Development: development.md
+      - Manual testing: development/manual-testing.md
       - How it is made: how-it-is-made.md
   - Planning:
       - Plans: planning/index.md

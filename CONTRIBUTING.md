@@ -18,6 +18,9 @@ just check    # run every check
 just docs     # preview the docs
 ```
 
+[Manual testing](docs/development/manual-testing.md) shows how to build the public example site and
+check it in a browser, with no private inputs.
+
 ## Making a change
 
 1. Keep changes focused: one feature or fix per change, split into small commits that each pass

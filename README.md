@@ -22,28 +22,19 @@ alternative to Jekyll, Hugo, or Zola, although the code is public.
 
 ## Status
 
-Validation spikes, done; the first vertical slice is under way. Its first
-step, built with its checks passing and committed in Folia (its templates
-are not yet committed in the site), builds one page (`/about`) with
-`folia build`: rendered from templates kept in the site, with its redirect
-stub and the static
-files, matching Jekyll's output. Its second step, a blog post, is built,
-checked and committed; its third, two garden notes with their backlinks
-and the note graph, is built, checked and reviewed, its fixes awaiting
-acceptance. Without a `[slice]` in its configuration, `folia build` now builds the whole
-site: every document Folia can build (the garden's notes, and the pages and posts whose
-front matter its templates show), skipping, and naming, those it cannot build yet. The Jekyll
+`folia build` builds the whole reference site: its pages, posts, micro entries and garden notes,
+the blog and micro listings, redirects, stylesheets (with Dart Sass), the Atom feeds, the sitemap
+and the search script; it skips, and names, the one document it cannot build yet (the combined
+`/feed.xml`). The pages are checked against Jekyll's output with the parity harness; the feeds,
+sitemap and search script are tested on fixtures only, not yet compared with Jekyll's. The Jekyll
 site is still the one published.
-The repository also holds the parity
-harness, which records production builds of the Jekyll site; Folia's
-discovery and routes, which reproduce every output path of the site
-(spike 2); and its Markdown renderer, which reproduces the body HTML of
-every Markdown document of the site (spike 1).
 
 The documentation is published at <https://ggirelli.github.io/folia-web/>.
 
 - [Parity baselines](docs/baseline.md): how to build and compare them.
 - [Development](docs/development.md): how the repository is organized.
+- [Manual testing](docs/development/manual-testing.md): how to build and check the example site,
+  and run real-site parity.
 - [Plans](docs/planning/): the architecture proposal; `plan.v13.md` is current.
 
 Contributions follow [CONTRIBUTING.md](CONTRIBUTING.md).
