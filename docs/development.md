@@ -267,6 +267,19 @@ each change to `owners` and
 each accepted entry, that the owner actually approved it; an implementer never writes an owner's
 name into `accepted_by` or `owners` on their own.
 
+## Platforms
+
+- **Linux** (Ubuntu 24.04) is the supported platform: CI runs there, and the
+  [install commands](development/manual-testing.md#installing-them-on-a-fresh-ubuntu-2404) were run
+  on it from nothing.
+- **macOS** is informational: the whole workspace, tests included, compiles for it
+  (`cargo check --workspace --all-targets --target aarch64-apple-darwin`), and CI runs the tests
+  there without making them required. Treat a pass as a good sign, not a guarantee.
+- **Windows** is not supported. The libraries and the `folia` binary compile for it
+  (`cargo check --workspace --target x86_64-pc-windows-gnu`), but nothing has been run there; the
+  tests use Unix-only APIs (`std::os::unix`, file modes), `cp` and `/dev/null`, and the `just`
+  recipes call `bash`. Use WSL.
+
 ## Checks
 
 `just check` runs every check; CI runs the same recipes, in three jobs of `.github/workflows/ci.yml`
@@ -276,6 +289,7 @@ and one of `.github/workflows/docs.yml`, which also publishes the docs to
 | Job | Recipes |
 |-|-|
 | `rust` | `fmt-check`, `clippy` (pedantic, warnings are errors), `test`, `doc` |
+| `rust-macos` | `cargo test --workspace` on macOS (informational: `continue-on-error`, not required) |
 | `deny` | `cargo deny check` (advisories, licences, duplicate crates, sources) |
 | `lint` | `file-length`, `lint-sh` (shellcheck), `lint-md` (markdownlint), `lint-rb` (StandardRB), `lint-py` (Ruff) |
 | `docs` | `docs-build` (MkDocs, strict) |
