@@ -122,6 +122,19 @@ support yet are skipped, each named with the reason. A document that is supporte
 template is missing or fails to render, its author is unknown) is never skipped: it fails the
 build, with every such problem listed, and the destination is left as it was.
 
+### Exit status
+
+`folia` exits with a status scripts can rely on:
+
+| Status | Meaning | Output |
+|-|-|-|
+| `0` | The site was built into `--dest`. Warnings (a broken wiki-link) and documents Folia does not support yet (`skipped:`, each named) do not change it. `--help` and `--version` also exit 0. | the warnings and skips on stderr, then `Built …` on stdout |
+| `1` | The build failed: planning, a template, a render error, an unknown author, a destination Folia refuses, or a write error. **Nothing was written**, and `--dest` is as it was. | every problem on stderr, then `The build failed with N problems; nothing was written, …` |
+| `2` | Usage or configuration error: no or unknown subcommand, a missing `--dest`, a configuration that cannot be read or has an unknown key. Nothing was built. | the error on stderr |
+
+Diagnostics go to stderr, the summary line to stdout. A run that exits 0 may have skipped
+documents: a script that must not publish a partial site should check stderr for `skipped:`.
+
 ### The destination
 
 `--dest` must be outside the site. Folia writes the site into `.<name>.folia-new` beside it and

@@ -198,3 +198,48 @@ fn version_prints_the_package_version_and_exits_zero() {
         assert_eq!(output.stderr.len(), 0);
     }
 }
+
+/// The exit status is a contract (docs/development.md, "Exit status"): 0 built, 1 the build
+/// failed, 2 usage or configuration error.
+#[test]
+fn the_exit_status_is_0_for_a_build_1_for_a_failed_build_and_2_for_usage_and_configuration() {
+    let scratch = Scratch::new("exit-codes");
+    let bin = || Command::new(env!("CARGO_BIN_EXE_folia"));
+    let code = |args: &[&str]| bin().args(args).output().unwrap().status.code();
+
+    // 0: a build, and `--help`.
+    assert_eq!(code(&["--help"]), Some(0));
+    let built = folia(&example_site(), &scratch.path("out"));
+    assert_eq!(built.status.code(), Some(0), "{}", stderr(&built));
+
+    // 2: no subcommand, an unknown one, a missing `--dest`, a missing or invalid configuration.
+    assert_eq!(code(&[]), Some(2));
+    assert_eq!(code(&["bogus"]), Some(2));
+    assert_eq!(code(&["build"]), Some(2));
+    let missing = bin()
+        .args(["build", "--site"])
+        .arg(scratch.path("no-such-site"))
+        .arg("--dest")
+        .arg(scratch.path("o2"))
+        .output()
+        .unwrap();
+    assert_eq!(missing.status.code(), Some(2), "{}", stderr(&missing));
+    let invalid = scratch.path("invalid.toml");
+    std::fs::write(&invalid, "bogus = 1\n").unwrap();
+    let output = bin()
+        .args(["build", "--site"])
+        .arg(example_site())
+        .arg("--config")
+        .arg(&invalid)
+        .arg("--dest")
+        .arg(scratch.path("o3"))
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2), "{}", stderr(&output));
+
+    // 1: a build that fails (here, a destination inside the site), nothing written.
+    let inside = example_site().join("never-written");
+    let failed = folia(&example_site(), &inside);
+    assert_eq!(failed.status.code(), Some(1), "{}", stderr(&failed));
+    assert!(!inside.exists());
+}
