@@ -150,7 +150,11 @@ jobs:
           else
             notes="docs/release-notes/${TAG}.md"
             if [ -f "$notes" ]; then
-              tail -n +3 "$notes" > "${RUNNER_TEMP}/notes.md"
+              # The notes link to the docs with relative paths (`../known-limitations.md`), which
+              # work in the docs site and break on a release page: point them at the tag's files.
+              tail -n +3 "$notes" | sed -E \
+                "s#\]\(\.\./([A-Za-z0-9_/.-]+\.md)\)#](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/docs/\1)#g" \
+                > "${RUNNER_TEMP}/notes.md"
             else
               printf 'See CHANGELOG.md.\n' > "${RUNNER_TEMP}/notes.md"
             fi
