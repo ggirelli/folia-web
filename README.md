@@ -41,7 +41,7 @@ The documentation is published at <https://ggirelli.github.io/folia-web/>.
 
 ## Support
 
-Folia is free and I write it for my own site. If it is useful to you, you can support its upkeep:
+Folia is free and maintained for the author's own site. If it is useful to you, you can support its upkeep:
 [GitHub Sponsors](https://github.com/sponsors/ggirelli) or [Ko-fi](https://ko-fi.com/ggirelli).
 Sponsoring buys no support, features or warranty (see the [disclaimer](DISCLAIMER.md)).
 
