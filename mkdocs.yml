@@ -47,6 +47,7 @@ nav:
       - Development: development.md
       - Manual testing: development/manual-testing.md
       - Known limitations: known-limitations.md
+      - Release notes 0.1.0: release-notes/v0.1.0.md
       - How it is made: how-it-is-made.md
   - Planning:
       - Plans: planning/index.md
