@@ -52,6 +52,9 @@ pub struct Config {
     /// The site's feeds; without it, none is written.
     #[serde(default)]
     pub feeds: Option<crate::feed::FeedsConfig>,
+    /// The site's search script; without it, it is not built.
+    #[serde(default)]
+    pub search: Option<crate::search::SearchConfig>,
 }
 
 /// The garden's settings: what the site's front matter defaults gave every note.

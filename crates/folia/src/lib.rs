@@ -14,5 +14,6 @@ pub mod output;
 pub mod redirects;
 pub mod render;
 pub mod sass;
+pub mod search;
 pub mod site;
 pub mod sitemap;

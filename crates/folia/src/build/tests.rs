@@ -149,6 +149,7 @@ fn config() -> Config {
         blog: crate::config::BlogConfig::default(),
         garden: crate::config::GardenConfig::default(),
         feeds: None,
+        search: None,
     }
 }
 
@@ -763,4 +764,51 @@ fn the_sitemap_lists_the_pages_and_documents_and_static_files_but_404_and_stubs(
         ),
         "{sitemap}"
     );
+}
+
+#[test]
+fn the_search_script_lists_the_pages_stubs_and_redirects_then_its_fragment() {
+    let fixture = Fixture::with(
+        "search",
+        &[("base.html", BASE), ("page.html", PAGE)],
+        &[
+            (
+                "assets/js/search.js",
+                "---\nlayout: null\nsitemap: false\n---\nvar documents = [{% for page in site.pages %}{% endfor %}];\n",
+            ),
+            ("_folia/search.js", "\nvar lunr_index = 1;\n"),
+        ],
+    );
+    let mut config = whole_site();
+    config.search = Some(crate::search::SearchConfig {
+        source: "assets/js/search.js".to_owned(),
+        fragment: "_folia/search.js".to_owned(),
+    });
+    let built = fixture.build_with(&config).unwrap();
+    assert!(
+        !built
+            .skipped
+            .iter()
+            .any(|s| s.to_string().contains("search.js")),
+        "{:?}",
+        built.skipped
+    );
+    let js = fixture.read("assets/js/search.js");
+    assert!(js.starts_with("var documents = [\n"), "{js}");
+    assert!(js.ends_with("\n];\n\nvar lunr_index = 1;\n"), "{js}");
+    assert!(
+        js.contains("{\"id\": 0, \"url\": \"https://ggirelli.info/about\", \"title\": \"About me\", \"body\": \"Other things: \"}"),
+        "{js}"
+    );
+    assert!(
+        js.contains("\"url\": \"https://ggirelli.info/blog/about\", \"title\": \"\""),
+        "{js}"
+    );
+    assert!(
+        js.contains(
+            "\"url\": \"https://ggirelli.info/redirects.json\", \"title\": \"\", \"body\": \"{"
+        ),
+        "{js}"
+    );
+    assert!(!fixture.dest().join("_folia").exists());
 }

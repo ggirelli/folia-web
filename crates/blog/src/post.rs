@@ -206,6 +206,7 @@ fn build_post(
         categories: feed_categories,
         tags: post.tags.clone(),
         lang: lang(doc).map_err(|message| problem(&message))?,
+        search_text: None,
     };
     let entry = EntrySummary {
         doc: doc.id.clone(),
