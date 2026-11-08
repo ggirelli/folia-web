@@ -17,7 +17,8 @@
 //!    text, or an RSVP's own text.
 //!
 //! A body's text is the script's filter chain: a space after each `.`, `: ` for the end of an
-//! `h2` to `h4`, a space for the end of a paragraph, the markup stripped, line breaks removed,
+//! `h2` to `h4`, a space for the end of a paragraph, the markup stripped, each run of line breaks
+//! a space (Jekyll deleted them, gluing the words on either side: an intentional improvement),
 //! two spaces made one and `"` a space. Its `markdownify` over HTML is left out (Q3q). Strings are
 //! written as JSON strings, so a title with a quote no longer breaks the script (Q3q).
 
@@ -131,11 +132,37 @@ fn text(html: &str) -> String {
         .replace("</h3>", ": ")
         .replace("</h4>", ": ")
         .replace("</p>", " ");
-    strip_html(&marked)
-        .replace("\r\n", "")
-        .replace('\n', "")
+    line_breaks_to_spaces(&strip_html(&marked))
         .replace("  ", " ")
         .replace('"', " ")
+}
+
+/// Each run of line breaks (`\n`, `\r\n`), with the spaces around it, as one space. The site's
+/// Liquid (`strip_newlines`) deleted the breaks, so the last word of a hard-wrapped line and the
+/// first of the next were indexed as one (`two` and `garden` as `twogarden`), as were the items
+/// of a list; this is an intentional improvement over Jekyll (`docs/known-limitations.md`). A
+/// break that follows a space, as between two paragraphs with nothing after it, gives the text
+/// Jekyll's chain gave.
+fn line_breaks_to_spaces(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    // Inside a break: no space is added, and the indentation after it is dropped.
+    let mut in_break = false;
+    for c in text.chars() {
+        match c {
+            '\r' | '\n' => {
+                if !in_break && !out.is_empty() && !out.ends_with(' ') {
+                    out.push(' ');
+                }
+                in_break = true;
+            }
+            ' ' if in_break => {}
+            c => {
+                in_break = false;
+                out.push(c);
+            }
+        }
+    }
+    out
 }
 
 fn json(text: &str) -> String {
