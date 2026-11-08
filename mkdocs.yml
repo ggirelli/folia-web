@@ -46,6 +46,7 @@ nav:
   - Development:
       - Development: development.md
       - Manual testing: development/manual-testing.md
+      - Configuration reference: configuration.md
       - Known limitations: known-limitations.md
       - How it is made: how-it-is-made.md
   - Planning:
