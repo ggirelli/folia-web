@@ -1,0 +1,7 @@
+{# The posts by categories (blog/categories.html, claimed by the blog). #}{% extends "base.html" %}
+{% block body %}
+<h1>{{ page.title }}</h1>
+{% for group in page.groups %}<h2 id="{{ group.anchor }}">{{ group.name }}</h2>
+<ul>{% for post in group.items %}<li><a href="{{ post.url }}">{{ post.title }}</a></li>{% endfor %}</ul>
+{% endfor %}
+{% endblock %}

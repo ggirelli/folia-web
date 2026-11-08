@@ -2,7 +2,8 @@
 
 The conventions are in
 [CONTRIBUTING.md](https://github.com/ggirelli/folia-web/blob/main/CONTRIBUTING.md). Run `just` to list
-the recipes and `just check` before every commit.
+the recipes and `just check` before every commit. [Manual testing](development/manual-testing.md)
+explains how to build the example site, check it in a browser, and run real-site parity.
 
 ## How the repository is organized
 
@@ -101,10 +102,13 @@ Each mode crate depends on `folia-core` only, never on another mode.
     `evidence-provenance-negative.sh` runs it on throwaway repositories, one per way of breaking
     the convention.
   - `check-file-length.sh`: enforces the 1,000-line limit.
+  - `serve.py`: serves a built site locally with the host's clean URLs (`just serve`).
   - `slice-boundary.sh`: checks a step of the vertical slice keeps out of the other step's mode.
 - **`.github/`**: the CI and docs workflows, the pull request template, and the Dependabot
   configuration.
 - **`docs/`**: this documentation, and the versioned plans in `docs/planning/`.
+- **`examples/minimal-site/`**: a small public site with every kind of content Folia builds, for
+  manual testing (`just build-example`) and its integration test (`crates/folia/tests`).
 - **`assets/brand/`**: logos and the banner.
 
 ## Building a site

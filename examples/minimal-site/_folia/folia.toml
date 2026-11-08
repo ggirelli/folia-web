@@ -1,0 +1,50 @@
+# Folia's configuration for the example site: every mode, listing and generated file Folia builds,
+# on a handful of documents. `folia build --site examples/minimal-site --dest <dir>` reads it from
+# here, its default place (docs/development/manual-testing.md).
+
+time-zone = "Europe/Stockholm"
+
+# The README is about the example, not part of the site.
+exclude = ["README.md"]
+
+[roots]
+blog = "_posts"
+micro = "_micro"
+garden = "_garden"
+
+[site]
+url = "https://example.org"
+title = "Folia example"
+description = "A small site that exercises every part of Folia."
+
+[authors.ada]
+name = "Ada Example"
+display-name = "Ada"
+avatar = "assets/images/avatar.svg"
+web = "/about"
+description = "Writes the example site."
+
+[micro]
+author = "ada"
+
+[[micro.listings]]
+source = "blog/micro.html"
+template = "micro_index.html"
+kinds = ["notes", "likes", "bookmarks", "rsvps"]
+
+[garden]
+author = "ada"
+
+[blog]
+index = { source = "blog/index.html", template = "blog_index.html" }
+archive-template = "archive.html"
+categories = { source = "blog/categories.html", template = "blog_categories.html" }
+tags = { source = "blog/tags.html", template = "blog_tags.html" }
+
+[feeds]
+lang = "en"
+generator = { name = "Folia", uri = "https://github.com/ggirelli/folia-web", version = "0.0.0" }
+
+[search]
+source = "assets/js/search.js"
+fragment = "_folia/search/search.js"

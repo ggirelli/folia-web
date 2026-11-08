@@ -1,0 +1,5 @@
+/* The example site's stylesheet: plain CSS, so that building it needs no Dart Sass. */
+body { font-family: system-ui, sans-serif; max-width: 42rem; margin: 0 auto; padding: 1rem; }
+nav a { margin-right: 0.5rem; }
+pre { overflow-x: auto; }
+@media (max-width: 30rem) { nav a { display: inline-block; margin-bottom: 0.25rem; } }

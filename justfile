@@ -243,6 +243,16 @@ slice-boundary step base="main":
 build dest: (require "FOLIA_CONFIG" config)
     cargo run --quiet --locked -p folia -- build --site {{site}} --config {{quote(config)}} --dest {{dest}}
 
+# Build the public example site (examples/minimal-site) into `dest`, a directory outside it
+[group('site')]
+build-example dest:
+    cargo run --quiet --locked -p folia -- build --site examples/minimal-site --dest {{quote(dest)}}
+
+# Serve a built site at http://127.0.0.1:`port`/, resolving clean URLs as its host does
+[group('site')]
+serve dir port="8000":
+    python3 -I scripts/serve.py {{quote(dir)}} {{port}}
+
 # Serve the docs with live reload
 [group('docs')]
 docs:
