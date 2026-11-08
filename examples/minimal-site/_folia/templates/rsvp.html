@@ -1,0 +1,9 @@
+{# A micro RSVP: the answer and the event. #}{% extends "base.html" %}
+{% block body %}
+<article>
+<p><a href="/micro">&larr; Micro</a></p>
+<h1>{{ page.title }}</h1>
+<p>RSVP <strong>{{ page.rsvp }}</strong> to <a href="{{ page.event.url }}">{{ page.event.name }}</a></p>
+{{ content | safe }}
+</article>
+{% endblock %}

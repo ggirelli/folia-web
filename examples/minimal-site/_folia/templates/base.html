@@ -1,0 +1,23 @@
+{# The frame every page shares: navigation, the category menu and the footer. #}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ page.title }} | {{ site.title }}</title>
+<link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body>
+<nav>
+<a href="/">Home</a> <a href="/about">About</a> <a href="/blog/">Blog</a> <a href="/micro">Micro</a>
+<a href="/dg/topic/index">Garden</a> <a href="/blog/categories.html">Categories</a>
+<a href="/blog/tags.html">Tags</a> <a href="/search">Search</a>
+</nav>
+<main>
+{% block body %}{% endblock %}
+</main>
+<footer>
+{% for category in site.categories %}<a href="/blog/categories.html#{{ category.anchor }}">{{ category.name }} ({{ category.count }})</a> {% endfor %}
+<p>&copy; {{ site.year }} {{ site.title }}</p>
+</footer>
+</body>
+</html>

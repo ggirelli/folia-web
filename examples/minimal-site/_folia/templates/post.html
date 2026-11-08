@@ -1,0 +1,14 @@
+{# A blog post, with its dates, categories, tags and neighbours. #}{% extends "base.html" %}
+{% block body %}
+<article>
+<h1>{{ page.title }}</h1>
+<p><time datetime="{{ page.date }}">{{ page.date | date("%d %b %Y") }}</time>
+{% if page.author %} by {{ site.authors[page.author].display_name }}{% endif %}</p>
+{% if page.toc %}<nav class="toc"><p>{{ page.toc.title or "Contents" }}</p><ul>{% for entry in page.toc.entries %}<li><a href="#{{ entry.id }}">{{ entry.html | safe }}</a></li>{% endfor %}</ul></nav>{% endif %}
+{{ content | safe }}
+<p>{% for category in page.categories %}<a href="/blog/categories.html#{{ category.anchor }}">{{ category.name }}</a> {% endfor %}
+{% for tag in page.tags %}<a href="/blog/tags.html#{{ tag.anchor }}">#{{ tag.name }}</a> {% endfor %}</p>
+<p>{% if page.previous %}<a href="{{ page.previous.url }}">&larr; {{ page.previous.title }}</a>{% endif %}
+{% if page.next %}<a href="{{ page.next.url }}">{{ page.next.title }} &rarr;</a>{% endif %}</p>
+</article>
+{% endblock %}

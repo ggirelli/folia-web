@@ -1,0 +1,9 @@
+{# A micro like: the page it points to, then its text. #}{% extends "base.html" %}
+{% block body %}
+<article>
+<p><a href="/micro">&larr; Micro</a></p>
+<h1>{{ page.title }}</h1>
+<p>{{ "Likes" if page.layout == "like" else "Bookmarks" }}: <a href="{{ page.like.url }}">{{ page.like.label or page.like.url }}</a></p>
+{{ content | safe }}
+</article>
+{% endblock %}
