@@ -275,7 +275,8 @@ never overwritten: a new commit of the site is a new label.
 
 ```sh
 just build /tmp/site-out        # the whole site, with FOLIA_CONFIG
-just routes <label>           # every output path, against the baseline (spike 2)
+just routes <label>           # every output path, against the baseline (spike 2); with
+                              # FOLIA_LEDGER, an approved `folia-only` entry allows an output Jekyll never wrote
 just markdown <label>         # every Markdown body, with the ledger's D-001 to D-003 (spike 1)
 just liquid                   # no Liquid left in the site's Markdown
 just pages <label> [out]      # every file Folia writes, against Jekyll's
