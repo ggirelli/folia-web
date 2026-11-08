@@ -102,6 +102,17 @@ Folia writes a tag feed for a tag whose name has a space, where `jekyll-feed` wr
 names tag feeds for letters, digits and `_` only). It has no Jekyll baseline, so nothing compares
 it; the coverage report lists it as Folia-only.
 
+### Documents without a title
+
+As Jekyll titles them (checked against a Jekyll 4.4.1 build of the same file names, and pinned by
+`crates/folia/tests/untitled.rs`): a page without a `title`, or with an empty one, has an empty
+title; a post, a garden note and a micro entry are titled from their file name, the date and the
+extension dropped, split at each `-` and each word capitalized (`2026-01-12-a-note_x.md` is
+`A Note_x`, `Mixed-CASE-name.md` is `Mixed Case Name`, `index.md` is `Index`). A title in the front
+matter always wins. Wiki-links find a note by the title Jekyll gave it, so they follow. An empty
+title makes a page's `title` an empty string, not undefined: a template that tests it sees it
+false.
+
 ## Source-content issues Folia reproduces
 
 - **Bare-domain references.** Reference-style link definitions written without a scheme

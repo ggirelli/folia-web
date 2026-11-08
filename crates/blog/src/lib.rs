@@ -19,7 +19,7 @@ mod post;
 
 use folia_core::content::{
     Diagnostic, DocId, FrontMatterError, Route, SiteClock, SlugMode, SourceDoc, dated_file_name,
-    slugify,
+    slugify, titleize_slug,
 };
 use folia_core::publish::PlannedOutput;
 use jiff::Timestamp;
@@ -133,7 +133,7 @@ fn read_post(doc: &SourceDoc, clock: &SiteClock) -> Result<Option<Post>, Diagnos
     let front = |error: FrontMatterError| problem(&error);
     let title = match doc.front.string("title").map_err(front)? {
         Some(title) => title,
-        None => titleize(&file_slug),
+        None => titleize_slug(&file_slug),
     };
     let route = if let Some(permalink) = doc.front.string("permalink").map_err(front)? {
         Route::html(&permalink).map_err(|e| problem(&e))?
@@ -164,23 +164,6 @@ fn read_post(doc: &SourceDoc, clock: &SiteClock) -> Result<Option<Post>, Diagnos
         hidden: doc.front.truthy("hidden"),
         featured: doc.front.json("featured") == Some(serde_json::Value::Bool(true)),
     }))
-}
-
-/// The title Jekyll gives a post without one: its file name's slug, each `-`-separated word
-/// capitalized as Ruby's `capitalize` does (`my-first-post` → `My First Post`).
-fn titleize(slug: &str) -> String {
-    slug.split('-')
-        .map(|word| {
-            let mut chars = word.chars();
-            chars.next().map_or_else(String::new, |first| {
-                first
-                    .to_uppercase()
-                    .chain(chars.flat_map(char::to_lowercase))
-                    .collect()
-            })
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 /// Jekyll's categories: the `categories` list (a string is split on whitespace), then the

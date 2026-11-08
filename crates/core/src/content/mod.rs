@@ -12,6 +12,7 @@ mod presentation;
 mod route;
 mod slug;
 mod source;
+mod title;
 
 pub use date::{DateError, SiteClock, dated_file_name};
 pub use diagnostic::Diagnostic;
@@ -25,3 +26,4 @@ pub use presentation::{
 pub use route::{OutputKind, Route, RouteError, encode_path};
 pub use slug::{SlugMode, slugify};
 pub use source::{DocId, Mode, SourceDoc, SourceError};
+pub use title::{file_title, titleize_slug};

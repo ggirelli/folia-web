@@ -20,7 +20,9 @@ mod wiki_links;
 pub use note::{NOTE_TEMPLATE, build};
 pub use wiki_links::WikiLinks;
 
-use folia_core::content::{Diagnostic, DocId, Route, SiteClock, SourceDoc, dated_file_name};
+use folia_core::content::{
+    Diagnostic, DocId, Route, SiteClock, SourceDoc, dated_file_name, file_title,
+};
 use folia_core::publish::PlannedOutput;
 use jiff::Timestamp;
 
@@ -30,8 +32,8 @@ const GRAPH_URL: &str = "/assets/json/notes_graph.json";
 /// A note of the garden, with what the garden's outputs need to know about it.
 struct Note {
     id: DocId,
-    /// Its front matter title.
-    title: Option<String>,
+    /// Its front matter title, or else the one Jekyll derives from its file name.
+    title: String,
     route: Route,
     redirect_from: Vec<Route>,
     /// Its date: its front matter `date`, or else the date its file name starts with, at
@@ -147,7 +149,11 @@ fn read_note(doc: &SourceDoc, root: &str, clock: &SiteClock) -> Result<Option<No
     };
     Ok(Some(Note {
         id: doc.id.clone(),
-        title: doc.front.string("title").map_err(|e| problem(&e))?,
+        title: doc
+            .front
+            .string("title")
+            .map_err(|e| problem(&e))?
+            .unwrap_or_else(|| file_title(doc.id.file_name())),
         route: Route::html(&url).map_err(|e| problem(&e))?,
         redirect_from: doc.redirect_from()?,
         date,

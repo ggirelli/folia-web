@@ -24,6 +24,43 @@ writes what Jekyll wrote.
 | [Dart Sass](https://github.com/sass/dart-sass/releases/tag/1.100.0), exactly 1.100.0 | only sites with Sass stylesheets; the example site has none | `sass --version` prints `1.100.0` |
 | Docker | only `just toolchain-compare` and `just toolchain-negative` | `docker --version` |
 
+### Installing them on a fresh Ubuntu 24.04
+
+These commands were run, in order, in a new `ubuntu:24.04` container as a non-root user on
+2026-11-08. The guide's [automated checks](#automated-checks) and
+[example site](#the-example-site) then passed in a fresh clone: `just check` exited 0 (about a
+minute after the toolchain was installed), the example site built (18 pages) and `just serve`
+served its pages, feeds, sitemap and search script, and answered 404 for a missing page.
+
+**What was tested:** the clone was of the branch `feat/known-links-register` at `450c125`, which
+contained the coverage-classification and known-links changes (PRs #32 and #33) before they were
+merged; it was **not** a clone of `main`. The tools those PRs changed are not on the path of the
+steps above, but this is the commit that was tested.
+
+The system packages gave Ruby 3.2.3 and Node.js 18.19, older than the versions the author uses
+(Ruby 3.3, Node 22); StandardRB, markdownlint and everything else passed with them.
+
+```sh
+sudo apt-get update
+sudo apt-get install -y git curl ca-certificates build-essential pkg-config xz-utils \
+  python3 ruby-full nodejs npm
+curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal && . "$HOME/.cargo/env"
+rustup component add rustfmt clippy
+curl -sSf https://just.systems/install.sh | bash -s -- --to "$HOME/.local/bin"
+curl -LsSf https://astral.sh/uv/install.sh | sh
+cargo install cargo-deny --locked                 # compiles it: about a minute
+sudo gem install bundler --no-document
+curl -sSL -o sass.tgz \
+  https://github.com/sass/dart-sass/releases/download/1.100.0/dart-sass-1.100.0-linux-x64.tar.gz
+tar xzf sass.tgz && mkdir -p "$HOME/.local/sass" && mv dart-sass/* "$HOME/.local/sass/" \
+  && ln -sf "$HOME/.local/sass/sass" "$HOME/.local/bin/sass"
+export PATH="$HOME/.local/bin:$PATH"              # also add it to your shell profile
+```
+
+Dart Sass is needed only for sites with stylesheets (`just check` does not need it; the ignored
+tests do). Docker is not needed for anything in this guide. On another system, install the same
+tools by your package manager and check the versions in the table.
+
 Environment variables:
 
 - `FOLIA_SASS`: the Dart Sass program, when it is not `sass` on `PATH`.

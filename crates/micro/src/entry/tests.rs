@@ -161,10 +161,6 @@ fn front_matter_an_entry_cannot_show_is_refused() {
             "the front matter key like is not built yet on notes",
         ),
         (
-            "narrow_post: true",
-            "an entry without a title is not built yet",
-        ),
-        (
             "title: T\nnarrow_post: maybe",
             "narrow_post should be true or false",
         ),
@@ -285,4 +281,16 @@ fn an_rsvp_s_search_text_is_its_answer_and_event_as_written_and_others_have_none
     );
     let output = built(&note(), None).unwrap();
     assert_eq!(output.feed[0].search_text, None);
+}
+
+#[test]
+fn an_entry_without_a_title_is_titled_from_its_file_name_after_the_date_as_jekyll_does() {
+    let untitled = entry(
+        "_micro/notes/2025-06-11-foo_bar-baz.md",
+        "narrow_post: true",
+        "",
+    );
+    assert_eq!(page(&untitled).context["title"], "Foo_bar Baz");
+    let titled = entry("_micro/notes/2025-06-11-foo.md", "title: Mine", "");
+    assert_eq!(page(&titled).context["title"], "Mine");
 }

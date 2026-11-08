@@ -121,7 +121,7 @@ fn build_entry(
         .front
         .string("title")
         .map_err(|e| problem(&e))?
-        .ok_or_else(|| problem(&"an entry without a title is not built yet"))?;
+        .unwrap_or_else(|| folia_core::content::file_title(doc.id.file_name()));
     let narrow_post = match doc.front.json("narrow_post") {
         None => false,
         Some(Value::Bool(narrow)) => narrow,
