@@ -5,11 +5,13 @@
 //!    the note graph, with the garden mode, and micro entries with the microblog mode, dated with their last commits. A configured slice
 //!    ([`Slice`], plan v9, §12.2) names the documents to build, and each must build. Without one,
 //!    every document is built, except those Folia cannot build yet: each is skipped, with the
-//!    reason, in [`Built::skipped`].
+//!    reason, in [`Built::skipped`]. Only documents Folia does not support are skipped; a
+//!    document that is supported but fails (a template, an author) fails the build.
 //! 3. Assemble the site index templates show: the site's identity and authors, the build's year,
 //!    and the blog's categories.
-//! 4. Check every page's template, then render each page. Without a slice, a page whose template
-//!    is missing or fails, or whose `author` is not one of the configuration's, is skipped too.
+//! 4. Check every page's template, then render each page. A page whose template is missing or
+//!    fails, or whose `author` is not one of the configuration's, fails the build, whatever the
+//!    configuration: it is never skipped, and every such problem is reported.
 //! 5. Add a redirect stub for each `redirect_from` URL of a page rendered, the files the modes
 //!    generated (the note graph), the sitemap (module `sitemap`), the feeds the modes planned
 //!    when the configuration has `[feeds]` (module `feed`), and copy every static file.
@@ -82,10 +84,10 @@ pub fn build(
     let index = site_index(config, &site, &clock)?;
 
     let renderer = Renderer::new(&root.join(&config.templates_dir));
-    let renderable = check_templates(&renderer, &pages.pages, strict, &mut built.skipped)?;
-    let renderable = check_authors(renderable, config, strict, &mut built.skipped)?;
-    let mut outputs = BTreeMap::new();
     let mut problems = Vec::new();
+    let renderable = check_templates(&renderer, &pages.pages, &mut problems);
+    let renderable = check_authors(renderable, config, &mut problems);
+    let mut outputs = BTreeMap::new();
     let mut shown = BTreeSet::new();
     let mut listings = BTreeMap::new();
     for page in renderable {
@@ -114,8 +116,7 @@ pub fn build(
                 add(&mut outputs, page.route.output_path(), html)
                     .unwrap_or_else(|clash| problems.push(clash));
             }
-            Err(problem) if strict => problems.push(problem),
-            Err(problem) => built.skipped.push(skipped_page(page, problem)),
+            Err(problem) => problems.push(skipped_page(page, problem)),
         }
     }
     for entry in pages.entries.iter().filter(|e| shown.contains(&e.doc)) {
@@ -700,58 +701,45 @@ fn skippable(problems: &[Diagnostic], selected: &BTreeSet<String>) -> bool {
         })
 }
 
-/// The pages whose template exists and compiles. Unless `strict`, the others are skipped, each
-/// with its template's problem; when `strict`, any fails the build.
+/// The pages whose template exists and compiles. Each template that does not is one problem in
+/// `problems`, naming it and the pages that use it: a page is never skipped for its template.
 fn check_templates<'a>(
     renderer: &Renderer,
     pages: &'a [PageSpec],
-    strict: bool,
-    skipped: &mut Vec<Diagnostic>,
-) -> Result<Vec<&'a PageSpec>, Vec<Diagnostic>> {
-    if strict {
-        renderer.check(pages).map_err(|e| vec![e])?;
-        return Ok(pages.iter().collect());
-    }
+    problems: &mut Vec<Diagnostic>,
+) -> Vec<&'a PageSpec> {
     let mut by_template: BTreeMap<&str, Vec<&PageSpec>> = BTreeMap::new();
     for page in pages {
         by_template.entry(&page.template).or_default().push(page);
     }
     let mut renderable = Vec::new();
-    for (_, users) in by_template {
+    for users in by_template.into_values() {
         let owned: Vec<PageSpec> = users.iter().map(|page| (*page).clone()).collect();
         match renderer.check(&owned) {
             Ok(()) => renderable.extend(users),
-            Err(problem) => {
-                skipped.extend(users.iter().map(|page| skipped_page(page, problem.clone())));
-            }
+            // The problem names the template and the pages that use it.
+            Err(problem) => problems.push(problem),
         }
     }
     renderable.sort_by_key(|page| page.route.output_path());
-    Ok(renderable)
+    renderable
 }
 
-/// The pages whose `author`, if they have one, is one of the configuration's. Unless `strict`,
-/// the others are skipped, each saying so; when `strict`, any fails the build.
+/// The pages whose `author`, if they have one, is one of the configuration's; the others are
+/// problems in `problems`.
 fn check_authors<'a>(
     pages: Vec<&'a PageSpec>,
     config: &Config,
-    strict: bool,
-    skipped: &mut Vec<Diagnostic>,
-) -> Result<Vec<&'a PageSpec>, Vec<Diagnostic>> {
-    let (known, unknown): (Vec<_>, Vec<_>) = pages
-        .into_iter()
-        .map(|page| (page, unknown_author(page, config)))
-        .partition(|(_, problem)| problem.is_none());
-    let problems = unknown.into_iter().filter_map(|(_, problem)| problem);
-    if strict {
-        let problems: Vec<_> = problems.collect();
-        if !problems.is_empty() {
-            return Err(problems);
+    problems: &mut Vec<Diagnostic>,
+) -> Vec<&'a PageSpec> {
+    let mut known = Vec::new();
+    for page in pages {
+        match unknown_author(page, config) {
+            Some(problem) => problems.push(problem),
+            None => known.push(page),
         }
-    } else {
-        skipped.extend(problems);
     }
-    Ok(known.into_iter().map(|(page, _)| page).collect())
+    known
 }
 
 /// Why `page` cannot be rendered, when its `author` is not one of the site's: its template
