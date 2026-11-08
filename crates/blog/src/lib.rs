@@ -8,7 +8,7 @@
 //! | listing pages 2..N, 9 posts each | `/blog/pageN/`, from the template page `blog/index.html` |
 //! | a category archive | `/blog/category/:name/` (`:name` slugified) |
 //! | the blog feed | `/blog/feed.xml` |
-//! | a tag feed | `/blog/tag/:tag.xml`, for tags of letters, digits and `_` only |
+//! | a tag feed | `/blog/tag/:tag.xml`, for every tag that can be a file name ([`tag_feed_url`]) |
 //!
 //! [`category_counts`] gives the categories with their number of posts, which every page's
 //! category menu shows. [`build`] builds posts' pages (module `post`), and [`listings`] the
@@ -230,13 +230,22 @@ fn category_archives(posts: &[Post]) -> Vec<PlannedOutput> {
         .collect()
 }
 
-/// A feed per tag; tags with other characters than letters, digits and `_` get none.
+/// The URL of the feed of `tag`: `/blog/tag/:tag.xml`, or `None` for a tag that cannot be a file
+/// name (one with a `/` or `\\`, a control character or only dots). A tag with a space, such as
+/// `stem cells`, is written as `stem cells.xml`; links to it are percent-encoded.
+#[must_use]
+pub fn tag_feed_url(tag: &str) -> Option<String> {
+    let name_ok = !tag.is_empty()
+        && !tag.chars().all(|c| c == '.')
+        && !tag.chars().any(|c| c == '/' || c == '\\' || c.is_control());
+    name_ok.then(|| format!("/blog/tag/{tag}.xml"))
+}
+
+/// A feed per tag that has a feed URL ([`tag_feed_url`]).
 fn tag_feeds(posts: &[Post]) -> Vec<PlannedOutput> {
     unique(posts.iter().flat_map(|post| &post.tags))
-        .filter(|tag| tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
-        .map(|tag| {
-            PlannedOutput::generated(file_route(&format!("/blog/tag/{tag}.xml")), "tag feed")
-        })
+        .filter_map(|tag| tag_feed_url(tag))
+        .map(|url| PlannedOutput::generated(file_route(&url), "tag feed"))
         .collect()
 }
 

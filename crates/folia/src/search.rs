@@ -8,7 +8,9 @@
 //! 1. The site's pages, by URL: every page rendered but the collections' entries, each redirect
 //!    stub and `/redirects.json`; those whose URL contains `.xml`, `assets`, `category` or `tag`
 //!    are left out, as the script left them (Q3e). A page's body is its content's text: an
-//!    entry's body, else the rendered page, stub or file (Q3f).
+//!    entry's body; for a listing, the text of its template's content block (`content-block`),
+//!    without the navigation and footer around it, else the rendered page; for `/redirects.json`
+//!    the file. A redirect stub's body is empty, as Jekyll's was.
 //! 2. The RSVPs, likes and bookmarks, then the garden's notes, then the posts, each oldest first
 //!    (same dates by URL). The script meant to list the micro kinds and never did (Q3c); micro
 //!    notes have no loop. Their body is their date (`2021/08/20`), ` - ` and their content's
@@ -31,13 +33,18 @@ mod tests;
 
 /// The site's search script, which the builder writes.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct SearchConfig {
     /// The script's source, which search claims, relative to the site root
     /// (`assets/js/lunrsearchengine.js`).
     pub source: String,
     /// The script's code after the `documents` array, relative to the site root: written as it is.
     pub fragment: String,
+    /// The template block that holds a page's content, such as `content`: a page with no entry
+    /// of its own (a listing) is indexed by that block's text, without the frame (navigation,
+    /// footer) its parent templates add. Without it, the whole rendered page is indexed.
+    #[serde(default)]
+    pub content_block: Option<String>,
 }
 
 /// A page of the site, as search lists it.

@@ -14,6 +14,11 @@
 //! | `micro kind feed` | `/feed/micro/:kind.xml` | the entries of the kind | the micro feed's, then ` \| ` and the kind, capitalized |
 //! | `garden feed` | `/dg/feed.xml` | the notes | the site's, then ` \| Digital_garden` |
 //!
+//! The combined feed ([`CombinedFeed`], `[feeds.combined]`) is a page of the site, such as
+//! `feed.xml`, which names the collections it lists; its title is the site's, then ` | ` and an
+//! empty collection name, as Jekyll's layout appended it (`Filopoetica | `: kept, not corrected).
+//! Its entries have a summary and no content, as that layout writes them.
+//!
 //! Each lists its newest `limit` items (10), newest first, those of the same date by URL,
 //! descending. An item's title is smartened, its markup stripped and its whitespace collapsed;
 //! its summary is its excerpt's text, whitespace collapsed (always there, as Jekyll's excerpt is
@@ -24,8 +29,8 @@
 
 use std::fmt::Write;
 
-use folia_core::content::SiteClock;
 use folia_core::content::markdown::{strip_html, to_html};
+use folia_core::content::{SiteClock, encode_path};
 use folia_core::publish::FeedItem;
 use jiff::Timestamp;
 use serde::Deserialize;
@@ -45,6 +50,19 @@ pub struct FeedsConfig {
     /// How many items a feed lists.
     #[serde(default = "default_limit")]
     pub limit: usize,
+    /// The combined feed, if the site has one.
+    #[serde(default)]
+    pub combined: Option<CombinedFeed>,
+}
+
+/// The feed of several collections, written at a page of the site.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CombinedFeed {
+    /// The page it takes the place of, relative to the site root (`feed.xml`).
+    pub source: String,
+    /// The collections it lists: `posts`, `digital_garden` and `micro`.
+    pub collections: Vec<String>,
 }
 
 fn default_limit() -> usize {
@@ -76,8 +94,14 @@ pub struct Site<'a> {
 /// What a feed lists.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Feed {
-    /// The collection of its items: `posts`, `micro` or `digital_garden`.
-    pub collection: &'static str,
+    /// The collections of its items: `posts`, `micro` or `digital_garden`.
+    pub collections: Vec<String>,
+    /// The collection name its title appends (`Micro`), none for the posts' feeds; empty for the
+    /// combined feed, whose title ends with the bare separator.
+    named: Option<String>,
+    /// Whether its entries carry their content (`<content>`): the combined feed's layout writes
+    /// the summary only.
+    content: bool,
     /// The tag its items have, for a tag's feed.
     pub tag: Option<String>,
     /// The category its items are in, for a micro kind's feed.
@@ -103,18 +127,32 @@ impl Feed {
             _ => return None,
         };
         Some(Self {
-            collection,
+            collections: vec![collection.to_owned()],
+            named: (collection != "posts").then(|| collection.to_owned()),
+            content: true,
             tag,
             category,
         })
+    }
+
+    /// The combined feed over `collections`.
+    #[must_use]
+    pub fn combined(collections: &[String]) -> Self {
+        Self {
+            collections: collections.to_vec(),
+            named: Some(String::new()),
+            content: false,
+            tag: None,
+            category: None,
+        }
     }
 
     /// The feed's title: the site's, then the collection's name and the category, each
     /// capitalized, as jekyll-feed names a collection's feed and a category's.
     fn title(&self, site: &Site) -> String {
         let mut title = site.title.to_owned();
-        if self.collection != "posts" {
-            let _ = write!(title, " | {}", capitalize(self.collection));
+        if let Some(name) = &self.named {
+            let _ = write!(title, " | {}", capitalize(name));
         }
         if let Some(category) = &self.category {
             let _ = write!(title, " | {}", capitalize(category));
@@ -123,7 +161,7 @@ impl Feed {
     }
 
     fn lists(&self, item: &FeedItem) -> bool {
-        item.collection == self.collection
+        self.collections.contains(&item.collection)
             && self.tag.as_ref().is_none_or(|tag| item.tags.contains(tag))
             && self
                 .category
@@ -150,6 +188,9 @@ pub fn xml(
         .unwrap_or_else(|| clock.now());
 
     let url = |path: &str| format!("{}{path}", site.url);
+    // The feed's own address is a link: percent-encoded, for a tag with a space. The items' URLs
+    // are written as their pages have them.
+    let own = url(&encode_path(path));
     let mut out = String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?>");
     out.push_str("<feed xmlns=\"http://www.w3.org/2005/Atom\" ");
     if let Some(lang) = &config.lang {
@@ -164,8 +205,7 @@ pub fn xml(
     );
     let _ = write!(
         out,
-        "<link href=\"{}\" rel=\"self\" type=\"application/atom+xml\" />",
-        url(path)
+        "<link href=\"{own}\" rel=\"self\" type=\"application/atom+xml\" />"
     );
     let _ = write!(
         out,
@@ -177,7 +217,7 @@ pub fn xml(
     }
     out.push_str("/>");
     let _ = write!(out, "<updated>{}</updated>", clock.xmlschema(updated));
-    let _ = write!(out, "<id>{}</id>", xml_escape(&url(path)));
+    let _ = write!(out, "<id>{}</id>", xml_escape(&own));
     let _ = write!(
         out,
         "<title type=\"html\">{}</title>",
@@ -185,7 +225,7 @@ pub fn xml(
     );
     let _ = write!(out, "<subtitle>{}</subtitle>", xml_escape(site.description));
     for item in listed {
-        entry(&mut out, item, &url, clock);
+        entry(&mut out, item, feed.content, &url, clock);
     }
     out.push_str("</feed>");
     out
@@ -195,7 +235,13 @@ fn latest<'a>(items: impl Iterator<Item = &'a FeedItem>) -> Option<Timestamp> {
     items.map(|item| item.updated).max()
 }
 
-fn entry(out: &mut String, item: &FeedItem, url: &dyn Fn(&str) -> String, clock: &SiteClock) {
+fn entry(
+    out: &mut String,
+    item: &FeedItem,
+    content: bool,
+    url: &dyn Fn(&str) -> String,
+    clock: &SiteClock,
+) {
     out.push_str("<entry");
     if let Some(lang) = &item.lang {
         let _ = write!(out, " xml:lang=\"{lang}\"");
@@ -215,12 +261,14 @@ fn entry(out: &mut String, item: &FeedItem, url: &dyn Fn(&str) -> String, clock:
         clock.xmlschema(item.updated)
     );
     let _ = write!(out, "<id>{}</id>", xml_escape(&url(&item.id)));
-    let _ = write!(
-        out,
-        "<content type=\"html\" xml:base=\"{}\"><![CDATA[{}]]></content>",
-        xml_escape(&url(&item.url)),
-        item.content_html.trim()
-    );
+    if content {
+        let _ = write!(
+            out,
+            "<content type=\"html\" xml:base=\"{}\"><![CDATA[{}]]></content>",
+            xml_escape(&url(&item.url)),
+            item.content_html.trim()
+        );
+    }
     let _ = write!(
         out,
         "<author><name>{}</name></author>",
@@ -240,14 +288,17 @@ fn entry(out: &mut String, item: &FeedItem, url: &dyn Fn(&str) -> String, clock:
 }
 
 /// Jekyll's `smartify`: the text with kramdown's typography (curly quotes, dashes, ellipses), as
-/// HTML.
+/// HTML. The whitespace around the text is kept, as the filter keeps it (`Filopoetica | `).
 fn smartify(text: &str) -> String {
-    let html = to_html(text, None);
+    let trimmed = text.trim();
+    let start = text.len() - text.trim_start().len();
+    let html = to_html(trimmed, None);
     let html = html.trim_end();
-    html.strip_prefix("<p>")
+    let html = html
+        .strip_prefix("<p>")
         .and_then(|inner| inner.strip_suffix("</p>"))
-        .unwrap_or(html)
-        .to_owned()
+        .unwrap_or(html);
+    format!("{}{html}{}", &text[..start], &text[start + trimmed.len()..])
 }
 
 /// Liquid's `normalize_whitespace` (`gsub(/\s+/, " ").strip`): each run of ASCII whitespace one

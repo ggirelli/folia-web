@@ -79,7 +79,7 @@ is a small public site with every kind of content Folia builds. Its configuratio
 | `_micro/{notes,likes,bookmarks,rsvps}/*.md` | one micro entry of each kind | `micro/`, `likes/`, `bookmarks/`, `rsvps/` |
 | `blog/micro.html` | the micro listing (`[[micro.listings]]`) | `micro.html` |
 | `_garden/topic/*.md` | garden notes, wiki-links, backlinks, a broken wiki-link | `dg/topic/*.html`, `assets/json/notes_graph.json` |
-| `[feeds]` | the Atom feeds | `blog/feed.xml`, `blog/tag/*.xml`, `micro/feed.xml`, `feed/micro/*.xml`, `dg/feed.xml` |
+| `[feeds]` | the Atom feeds | `blog/feed.xml`, `blog/tag/*.xml` (a tag with a space too), `micro/feed.xml`, `feed/micro/*.xml`, `dg/feed.xml`, `feed.xml` (combined; `feed.xml` page) |
 | every page | the sitemap | `sitemap.xml` |
 | `assets/js/search.js`, `_folia/search/search.js`, `search.html` (`[search]`) | the search script and a page that uses it | `assets/js/search.js`, `search.html` |
 | `assets/` | static files | copied as they are |
@@ -127,12 +127,15 @@ What to look at, by feature:
   shows `[[Missing note]]` as a broken link; `notes_graph.json` has both notes and their edges.
 - **Listings:** `blog/index.html` lists both posts; `blog/category/journal/index.html` lists both,
   `blog/category/notes/index.html` one; `blog/categories.html` and `blog/tags.html` group them.
-- **Feeds:** each feed's `<updated>` is its newest entry's date, not the build time; each tag of
-  letters, digits and `_` only has a feed.
+- **Feeds:** each feed's `<updated>` is its newest entry's date, not the build time; every tag
+  has a feed (`two words.xml`, linked as `two%20words.xml`), no category does; `feed.xml` lists the
+  newest posts, notes and micro entries together, with summaries and no content.
 - **Sitemap:** every page but `404.html`, by URL; a post's `<lastmod>` is its last modification
   (its date until its source is committed).
 - **Search:** `assets/js/search.js` starts with `var documents = [`, one record per page and entry,
-  followed by `_folia/search/search.js`, unchanged.
+  followed by `_folia/search/search.js`, unchanged. A listing's body (`/micro`,
+  `/blog/categories.html`) is its `body` block's text, without the navigation and footer; a
+  redirect stub's is empty.
 
 ### Change it
 

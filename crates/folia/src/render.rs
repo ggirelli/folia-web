@@ -138,6 +138,48 @@ impl Renderer {
     }
 }
 
+impl Renderer {
+    /// Renders only the block `block` of `page`'s template (the page's content, without the frame
+    /// its parent templates put around it), or `None` when the template has no such block.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the template, or one it extends or includes, cannot be loaded, or the block
+    /// cannot be rendered.
+    pub fn render_block(
+        &self,
+        page: &PageSpec,
+        content: &str,
+        site: &serde_json::Value,
+        block: &str,
+    ) -> Result<Option<String>, Diagnostic> {
+        let fail = |error: &Error| {
+            Diagnostic::site(format!(
+                "{} cannot be rendered with {}: {}",
+                page.route,
+                page.template,
+                describe(error)
+            ))
+        };
+        let template = self
+            .env
+            .get_template(&page.template)
+            .map_err(|e| fail(&e))?;
+        let mut captured = template
+            .render_captured(context! {
+                page => Serde(&page.context),
+                content => content,
+                site => Serde(site),
+            })
+            .map_err(|e| fail(&e))?;
+        match captured.with_state_mut(|state| state.render_block(block)) {
+            Ok(text) => Ok(Some(text)),
+            Err(error) if error.kind() == ErrorKind::UnknownBlock => Ok(None),
+            Err(error) => Err(fail(&error)),
+        }
+    }
+}
+
 /// Why a template name is not a path inside the template directory, if it is not.
 fn invalid_name(name: &str) -> Option<&'static str> {
     if name.starts_with('/') || name.contains('\\') || Path::new(name).is_absolute() {

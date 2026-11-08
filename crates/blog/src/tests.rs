@@ -101,13 +101,61 @@ fn categories_come_from_both_keys_and_are_slugified() {
 }
 
 #[test]
-fn only_plain_tags_get_a_feed() {
+fn every_tag_that_can_be_a_file_name_gets_a_feed_plain_tags_keeping_their_names() {
     let docs = [post(
         "_posts/2021/2021-01-01-a.md",
-        "tags: R self-hosting LLM_2",
+        "tags: [R, self-hosting, LLM_2, stem cells, città, \"a/b\"]",
     )];
     let feeds = urls(&routes(&docs, &clock()).unwrap(), Some("tag feed"));
-    assert_eq!(feeds, ["/blog/tag/R.xml", "/blog/tag/LLM_2.xml"]);
+    assert_eq!(
+        feeds,
+        [
+            "/blog/tag/R.xml",
+            "/blog/tag/self-hosting.xml",
+            "/blog/tag/LLM_2.xml",
+            "/blog/tag/stem cells.xml",
+            "/blog/tag/città.xml"
+        ],
+        "a tag with a `/` has none"
+    );
+}
+
+#[test]
+fn a_tag_feed_is_linked_percent_encoded_and_a_category_has_no_feed() {
+    assert_eq!(
+        tag_feed_url("stem cells").unwrap(),
+        "/blog/tag/stem cells.xml"
+    );
+    assert_eq!(tag_feed_url(".."), None);
+    let docs = [post(
+        "_posts/2021/2021-01-01-a.md",
+        "tags: [stem cells, R]\ncategories: [journal]",
+    )];
+    let feeds = |by| -> Vec<(String, Option<String>)> {
+        groups(&docs, by, &clock())
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|g| {
+                (
+                    g["name"].as_str().unwrap().to_owned(),
+                    g["feed"].as_str().map(str::to_owned),
+                )
+            })
+            .collect()
+    };
+    assert_eq!(
+        feeds(Grouping::Tags),
+        [
+            ("R".to_owned(), Some("/blog/tag/R.xml".to_owned())),
+            (
+                "stem cells".to_owned(),
+                Some("/blog/tag/stem%20cells.xml".to_owned())
+            )
+        ]
+    );
+    assert_eq!(feeds(Grouping::Categories), [("journal".to_owned(), None)]);
 }
 
 #[test]

@@ -223,3 +223,36 @@ fn a_page_without_a_layout_is_its_content_alone() {
         .unwrap();
     assert_eq!(html, "<h2 id=\"log\">Log</h2>\n");
 }
+
+#[test]
+fn a_block_renders_without_the_frame_its_parents_put_around_it() {
+    let templates = Templates::new(
+        "block",
+        &[
+            (
+                "base.html",
+                "<nav>Menu</nav>{% block body %}{% endblock %}<footer>Foot</footer>",
+            ),
+            (
+                "list.html",
+                "{% extends \"base.html\" %}{% block body %}<h1>{{ page.title }}</h1>{% endblock %}",
+            ),
+        ],
+    );
+    let renderer = Renderer::new(&templates.0);
+    let page = spec("/list/", "list.html");
+    let site = json!({});
+    assert_eq!(
+        renderer.render_block(&page, "", &site, "body").unwrap(),
+        Some("<h1>About me</h1>".to_owned())
+    );
+    assert_eq!(
+        renderer.render_block(&page, "", &site, "missing").unwrap(),
+        None,
+        "a template without the block has none"
+    );
+    assert_eq!(
+        renderer.render(&page, "", &site).unwrap(),
+        "<nav>Menu</nav><h1>About me</h1><footer>Foot</footer>"
+    );
+}

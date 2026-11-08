@@ -359,3 +359,29 @@ fn code_ranges_of_unclosed_code() {
     assert_eq!(code("```\n{{ x }}"), ["```\n{{ x }}"]);
     assert_eq!(code("a ` {{ x }}\n"), Vec::<&str>::new());
 }
+
+#[test]
+fn a_repeated_attribute_of_raw_html_is_written_once_as_kramdown_writes_it() {
+    // A block, as in `2023-05-15-May-train-trip-pt3` (the second `defer` is dropped).
+    assert_eq!(
+        to_html(
+            "<script defer id=\"x\" src=\"/a.js\" data-max-width=\"1000px\" defer></script>\n",
+            None
+        ),
+        "<script defer id=\"x\" src=\"/a.js\" data-max-width=\"1000px\"></script>\n"
+    );
+    // Inline, names compared without case, the first value kept.
+    assert_eq!(
+        to_html(
+            "Text <a href=\"/a\" HREF=\"/b\" class='c'>link</a>.\n",
+            None
+        ),
+        "<p>Text <a href=\"/a\" class='c'>link</a>.</p>\n"
+    );
+}
+
+#[test]
+fn raw_html_without_repeated_attributes_is_left_as_written() {
+    let html = "<div class=\"a\" data-x=\"defer defer\">defer defer</div>\n";
+    assert_eq!(to_html(html, None), html);
+}

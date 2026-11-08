@@ -87,14 +87,27 @@ pub fn build(
     let mut outputs = BTreeMap::new();
     let mut problems = Vec::new();
     let mut shown = BTreeSet::new();
+    let mut listings = BTreeMap::new();
     for page in renderable {
-        let content = pages
+        let entry = pages
             .entries
             .iter()
-            .find(|entry| Some(&entry.doc) == page.source.as_ref())
-            .map_or("", |entry| entry.body_html.as_str());
+            .find(|entry| Some(&entry.doc) == page.source.as_ref());
+        let content = entry.map_or("", |entry| entry.body_html.as_str());
         match renderer.render(page, content, &index) {
             Ok(html) => {
+                if let (true, Some(block)) = (content.is_empty(), search_block(config)) {
+                    match renderer.render_block(page, content, &index, block) {
+                        Ok(Some(text)) => {
+                            // The templates' autoescaping writes `'` and `/` as entities, which
+                            // Jekyll's Liquid wrote as they are, and search keeps entities.
+                            let text = text.replace("&#x27;", "'").replace("&#x2f;", "/");
+                            listings.insert(page.route.url().to_owned(), text);
+                        }
+                        Ok(None) => {}
+                        Err(problem) => problems.push(problem),
+                    }
+                }
                 built.pages.push(page.route.clone());
                 shown.extend(page.source.clone());
                 let html = Content::Bytes(html.into_bytes());
@@ -126,6 +139,7 @@ pub fn build(
             config,
             site: &site,
             pages: &pages,
+            listings: &listings,
             clock: &clock,
         };
         generated.write(&mut built, &mut outputs, &mut problems)?;
@@ -172,6 +186,8 @@ struct Generated<'a> {
     config: &'a Config,
     site: &'a Site,
     pages: &'a ModeOutput,
+    /// The content block of each page with no entry, by URL (`[search] content-block`).
+    listings: &'a BTreeMap<String, String>,
     clock: &'a SiteClock,
 }
 
@@ -199,7 +215,7 @@ impl Generated<'_> {
             built.artifacts.push(route);
         }
         if config.search.is_some() {
-            let script = search_script(self.root, config, site, self.pages, built, outputs, clock);
+            let script = self.search_script(built, outputs);
             let (route, js) = script.map_err(|e| vec![e])?;
             add(
                 outputs,
@@ -213,75 +229,102 @@ impl Generated<'_> {
     }
 }
 
-/// The search script (module `search`), at its claimed source's route: the records of the pages
-/// rendered (`built`), with their content as written to `outputs` unless they are entries, of
-/// the stubs and `redirects.json`, and of the collections' entries rendered.
-fn search_script(
-    root: &Path,
-    config: &Config,
-    site: &Site,
-    pages: &ModeOutput,
-    built: &Built,
-    outputs: &BTreeMap<String, Content>,
-    clock: &SiteClock,
-) -> Result<(Route, String), Diagnostic> {
-    let Some(search) = &config.search else {
-        return Err(Diagnostic::site("no [search] is configured"));
-    };
-    let source = DocId::new(&search.source);
-    let route = site
-        .routes
-        .outputs()
-        .iter()
-        .find(|o| o.generator.is_none() && o.source.as_ref() == Some(&source))
-        .map(|o| o.route.clone())
-        .ok_or_else(|| Diagnostic::site(format!("search: {source} is not a page of the site")))?;
-    let fragment = std::fs::read_to_string(root.join(&search.fragment))
-        .map_err(|e| Diagnostic::site(format!("search: cannot read {}: {e}", search.fragment)))?;
-    let written = |route: &Route| match outputs.get(&route.output_path()) {
-        Some(Content::Bytes(bytes)) => String::from_utf8_lossy(bytes).into_owned(),
-        _ => String::new(),
-    };
-    let rendered: BTreeSet<&str> = built.pages.iter().map(Route::url).collect();
-    let items: Vec<FeedItem> = pages
-        .feed
-        .iter()
-        .filter(|item| rendered.contains(item.url.as_str()))
-        .cloned()
-        .collect();
-    let in_collection: BTreeSet<&str> = items.iter().map(|item| item.url.as_str()).collect();
-    let mut listed: Vec<search::Page> = built
-        .pages
-        .iter()
-        .filter(|route| !in_collection.contains(route.url()))
-        .filter_map(|route| pages.pages.iter().find(|page| &page.route == route))
-        .map(|page| search::Page {
-            url: page.route.url().to_owned(),
-            title: page.context["title"]
-                .as_str()
-                .unwrap_or_default()
-                .to_owned(),
-            content: pages
-                .entries
-                .iter()
-                .find(|entry| Some(&entry.doc) == page.source.as_ref())
-                .map_or_else(|| written(&page.route), |entry| entry.body_html.clone()),
-        })
-        .collect();
-    let redirects = Route::file("/redirects.json").map_err(Diagnostic::site)?;
-    let files = built.stubs.iter().chain(
-        built
-            .artifacts
+impl Generated<'_> {
+    /// The search script (module `search`), at its claimed source's route: the records of the pages
+    /// rendered (`built`), with their content as written to `outputs` unless they are entries, of
+    /// the stubs and `redirects.json`, and of the collections' entries rendered.
+    fn search_script(
+        &self,
+        built: &Built,
+        outputs: &BTreeMap<String, Content>,
+    ) -> Result<(Route, String), Diagnostic> {
+        let Self {
+            root,
+            config,
+            site,
+            pages,
+            listings,
+            clock,
+        } = *self;
+        let Some(search) = &config.search else {
+            return Err(Diagnostic::site("no [search] is configured"));
+        };
+        let source = DocId::new(&search.source);
+        let route = site
+            .routes
+            .outputs()
             .iter()
-            .filter(|artifact| **artifact == redirects),
-    );
-    listed.extend(files.map(|route| search::Page {
-        url: route.url().to_owned(),
-        title: String::new(),
-        content: written(route),
-    }));
-    let js = search::script(&config.site.url, &listed, &items, &fragment, clock);
-    Ok((route, js))
+            .find(|o| o.generator.is_none() && o.source.as_ref() == Some(&source))
+            .map(|o| o.route.clone())
+            .ok_or_else(|| {
+                Diagnostic::site(format!("search: {source} is not a page of the site"))
+            })?;
+        let fragment = std::fs::read_to_string(root.join(&search.fragment)).map_err(|e| {
+            Diagnostic::site(format!("search: cannot read {}: {e}", search.fragment))
+        })?;
+        let written = |route: &Route| match outputs.get(&route.output_path()) {
+            Some(Content::Bytes(bytes)) => String::from_utf8_lossy(bytes).into_owned(),
+            _ => String::new(),
+        };
+        let rendered: BTreeSet<&str> = built.pages.iter().map(Route::url).collect();
+        let items: Vec<FeedItem> = pages
+            .feed
+            .iter()
+            .filter(|item| rendered.contains(item.url.as_str()))
+            .cloned()
+            .collect();
+        let in_collection: BTreeSet<&str> = items.iter().map(|item| item.url.as_str()).collect();
+        let mut listed: Vec<search::Page> = built
+            .pages
+            .iter()
+            .filter(|route| !in_collection.contains(route.url()))
+            .filter_map(|route| pages.pages.iter().find(|page| &page.route == route))
+            .map(|page| search::Page {
+                url: page.route.url().to_owned(),
+                title: page.context["title"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned(),
+                content: {
+                    let entry = pages
+                        .entries
+                        .iter()
+                        .find(|entry| Some(&entry.doc) == page.source.as_ref());
+                    match entry {
+                        Some(entry) if !entry.body_html.is_empty() => entry.body_html.clone(),
+                        // A listing has no body of its own: its template's content block, else
+                        // (a claimed page, with no block named) nothing, or the page as rendered.
+                        entry => listings.get(page.route.url()).cloned().unwrap_or_else(|| {
+                            if entry.is_some() {
+                                String::new()
+                            } else {
+                                written(&page.route)
+                            }
+                        }),
+                    }
+                },
+            })
+            .collect();
+        let redirects = Route::file("/redirects.json").map_err(Diagnostic::site)?;
+        let files = built.stubs.iter().chain(
+            built
+                .artifacts
+                .iter()
+                .filter(|artifact| **artifact == redirects),
+        );
+        listed.extend(files.map(|route| search::Page {
+            url: route.url().to_owned(),
+            title: String::new(),
+            // A redirect stub has no text of its own; `redirects.json` is its content.
+            content: if built.stubs.contains(route) {
+                String::new()
+            } else {
+                written(route)
+            },
+        }));
+        let js = search::script(&config.site.url, &listed, &items, &fragment, clock);
+        Ok((route, js))
+    }
 }
 
 /// What the sitemap lists (module `sitemap`): each page rendered (`built`) but the 404 page, by
@@ -358,29 +401,53 @@ fn serialized(
         .filter(|item| rendered.contains(item.url.as_str()))
         .cloned()
         .collect();
-    site.routes
-        .outputs()
-        .iter()
-        .filter_map(|planned| {
-            let (url, generator) = (planned.route.url(), planned.generator?);
-            let text = if generator == "redirects" {
-                redirects_json(&config.site.url, site)
-            } else if generator == "sitemap" {
-                sitemap::xml(&config.site.url, urls, clock)
-            } else {
-                let feeds = config.feeds.as_ref()?;
-                feed::xml(
-                    feeds,
-                    &identity,
-                    &Feed::of(generator, url)?,
-                    url,
-                    &items,
-                    clock,
-                )
-            };
+    let combined = config
+        .feeds
+        .as_ref()
+        .and_then(|feeds| feeds.combined.as_ref())
+        .and_then(|combined| {
+            let source = DocId::new(&combined.source);
+            let planned = site
+                .routes
+                .outputs()
+                .iter()
+                .find(|o| o.generator.is_none() && o.source.as_ref() == Some(&source))?;
+            let feeds = config.feeds.as_ref()?;
+            let feed = Feed::combined(&combined.collections);
+            let url = planned.route.url();
+            let text = feed::xml(feeds, &identity, &feed, url, &items, clock);
             Some((planned.route.clone(), text))
-        })
-        .collect()
+        });
+    let generated = site.routes.outputs().iter().filter_map(|planned| {
+        let (url, generator) = (planned.route.url(), planned.generator?);
+        let text = if generator == "redirects" {
+            redirects_json(&config.site.url, site)
+        } else if generator == "sitemap" {
+            sitemap::xml(&config.site.url, urls, clock)
+        } else {
+            let feeds = config.feeds.as_ref()?;
+            feed::xml(
+                feeds,
+                &identity,
+                &Feed::of(generator, url)?,
+                url,
+                &items,
+                clock,
+            )
+        };
+        Some((planned.route.clone(), text))
+    });
+    generated.chain(combined).collect()
+}
+
+/// The template block search indexes a listing by, if the site names one.
+fn search_block(config: &Config) -> Option<&str> {
+    config.search.as_ref()?.content_block.as_deref()
+}
+
+/// The page the combined feed takes the place of, if the site has one.
+fn combined_source(config: &Config) -> Option<&String> {
+    config.feeds.as_ref()?.combined.as_ref().map(|c| &c.source)
 }
 
 fn add(
@@ -397,16 +464,18 @@ fn add(
     }
 }
 
-/// The pages, posts, notes and micro entries to build, built by their modes, with the git dates of their
-/// sources: the slice's, or, without one, every document, less those a mode reports it cannot
-/// build yet, which go to `skipped`.
-fn build_documents(
-    root: &Path,
+/// The documents each mode builds: the slice's, or, without one, all of its documents but the
+/// pages another mode claims (the blog's index, the search script, the combined feed) and the
+/// stylesheets.
+fn selected(
     config: &Config,
     site: &Site,
-    clock: &SiteClock,
-    skipped: &mut Vec<Diagnostic>,
-) -> Result<ModeOutput, Vec<Diagnostic>> {
+) -> (
+    BTreeSet<String>,
+    BTreeSet<String>,
+    BTreeSet<String>,
+    BTreeSet<String>,
+) {
     let ids = |mode| -> BTreeSet<String> {
         documents(site, mode)
             .iter()
@@ -414,7 +483,7 @@ fn build_documents(
             .collect()
     };
     let named = |names: &[String]| names.iter().cloned().collect::<BTreeSet<_>>();
-    let (mut pages, mut posts, mut notes, mut micro) = if let Some(slice) = &config.slice {
+    if let Some(slice) = &config.slice {
         (
             named(&slice.pages),
             named(&slice.posts),
@@ -427,10 +496,24 @@ fn build_documents(
         let claimed = [
             config.blog.index.as_ref().map(|index| &index.source),
             config.search.as_ref().map(|search| &search.source),
+            combined_source(config),
         ];
         pages.retain(|id| !is_sass(id) && !claimed.contains(&Some(id)));
         (pages, ids(Mode::Blog), ids(Mode::Garden), ids(Mode::Micro))
-    };
+    }
+}
+
+/// The pages, posts, notes and micro entries to build, built by their modes, with the git dates of their
+/// sources: the slice's, or, without one, every document, less those a mode reports it cannot
+/// build yet, which go to `skipped`.
+fn build_documents(
+    root: &Path,
+    config: &Config,
+    site: &Site,
+    clock: &SiteClock,
+    skipped: &mut Vec<Diagnostic>,
+) -> Result<ModeOutput, Vec<Diagnostic>> {
+    let (mut pages, mut posts, mut notes, mut micro) = selected(config, site);
     let dated: Vec<_> = [Mode::Pages, Mode::Blog, Mode::Garden, Mode::Micro]
         .into_iter()
         .flat_map(|mode| documents(site, mode))

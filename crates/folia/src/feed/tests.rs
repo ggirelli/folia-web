@@ -280,3 +280,115 @@ fn liquid_s_filters_are_ruby_s() {
     assert_eq!(capitalize("digital_GARDEN"), "Digital_garden");
     assert_eq!(capitalize(""), "");
 }
+
+fn combined(items: &[FeedItem]) -> String {
+    let collections = ["posts", "digital_garden", "micro"].map(str::to_owned);
+    xml(
+        &config(),
+        &SITE,
+        &Feed::combined(&collections),
+        "/feed.xml",
+        items,
+        &clock(),
+    )
+}
+
+#[test]
+fn the_combined_feed_lists_the_posts_the_notes_and_the_micro_entries_newest_first() {
+    let items = [
+        item("posts", "/blog/a", "2021-01-01T10:00:00Z"),
+        item("digital_garden", "/dg/b", "2021-03-01T10:00:00Z"),
+        item("micro", "/micro/c", "2021-02-01T10:00:00Z"),
+        item("pages", "/about", "2022-01-01T10:00:00Z"),
+    ];
+    assert_eq!(
+        listed(&combined(&items)),
+        ["/dg/b", "/micro/c", "/blog/a"],
+        "other collections are left out"
+    );
+}
+
+#[test]
+fn the_combined_feed_lists_ten_items_the_same_date_by_url_descending() {
+    let mut items: Vec<FeedItem> = (0..12)
+        .map(|i| item("micro", &format!("/micro/{i:02}"), "2021-01-01T10:00:00Z"))
+        .collect();
+    items.push(item("posts", "/blog/old", "2020-01-01T10:00:00Z"));
+    let xml = combined(&items);
+    let urls = listed(&xml);
+    assert_eq!(urls.len(), 10);
+    assert_eq!(urls[0], "/micro/11");
+    assert_eq!(urls[9], "/micro/02");
+}
+
+#[test]
+fn the_combined_feed_keeps_the_title_with_its_trailing_separator() {
+    let xml = combined(&[item("posts", "/blog/a", "2021-01-01T10:00:00Z")]);
+    assert!(
+        xml.contains("<title type=\"html\">Folia’s site | </title>"),
+        "{xml}"
+    );
+    assert!(xml.contains("<subtitle>Notes &amp; posts</subtitle>"));
+    assert!(xml.contains("<link href=\"https://example.org/feed.xml\" rel=\"self\""));
+    assert!(xml.contains("<id>https://example.org/feed.xml</id>"));
+}
+
+#[test]
+fn the_combined_feed_is_updated_when_its_newest_item_was() {
+    let mut old = item("posts", "/blog/a", "2021-01-01T10:00:00Z");
+    old.updated = "2021-06-01T10:00:00Z".parse().unwrap();
+    let new = item("micro", "/micro/b", "2021-02-01T10:00:00Z");
+    let xml = combined(&[old, new]);
+    assert!(
+        xml.contains("<updated>2021-06-01T12:00:00+02:00</updated><id>"),
+        "{xml}"
+    );
+}
+
+#[test]
+fn the_combined_feed_is_read_from_the_configuration() {
+    let config: FeedsConfig = toml::from_str(
+        "generator = { name = \"Jekyll\", uri = \"u\", version = \"1\" }\n\
+         [combined]\nsource = \"feed.xml\"\ncollections = [\"posts\", \"micro\"]\n",
+    )
+    .unwrap();
+    let combined = config.combined.unwrap();
+    assert_eq!(combined.source, "feed.xml");
+    assert_eq!(combined.collections, ["posts", "micro"]);
+}
+
+#[test]
+fn a_tag_feed_with_a_space_has_a_percent_encoded_address() {
+    let mut post = item("posts", "/blog/a", "2021-01-01T10:00:00Z");
+    post.tags = vec!["stem cells".to_owned()];
+    let path = "/blog/tag/stem cells.xml";
+    let feed = feed("tag feed", path);
+    assert_eq!(feed.tag.as_deref(), Some("stem cells"));
+    let xml = xml(&config(), &SITE, &feed, path, &[post], &clock());
+    let own = "https://example.org/blog/tag/stem%20cells.xml";
+    assert!(
+        xml.contains(&format!("<link href=\"{own}\" rel=\"self\"")),
+        "{xml}"
+    );
+    assert!(xml.contains(&format!("<id>{own}</id>")), "{xml}");
+    assert!(xml.contains("<id>https://example.org/blog/a</id>"));
+}
+
+#[test]
+fn the_combined_feed_s_entries_have_a_summary_and_no_content() {
+    let combined = combined(&[item("posts", "/blog/a", "2021-01-01T10:00:00Z")]);
+    assert!(!combined.contains("<content"), "{combined}");
+    assert!(combined.contains("<summary type=\"html\"><![CDATA[Body.]]></summary>"));
+    let blog = xml(
+        &config(),
+        &SITE,
+        &feed("blog feed", "/blog/feed.xml"),
+        "/blog/feed.xml",
+        &[item("posts", "/blog/a", "2021-01-01T10:00:00Z")],
+        &clock(),
+    );
+    assert!(
+        blog.contains("<content type=\"html\""),
+        "other feeds keep it"
+    );
+}

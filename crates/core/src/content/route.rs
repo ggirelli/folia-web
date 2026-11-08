@@ -3,7 +3,7 @@
 //! One policy maps every URL to its output file (plan v3, §6.2), so modes never build file
 //! paths. It is Jekyll's, which the host relies on: it serves `/x` from `x.html`.
 
-use std::fmt;
+use std::fmt::{self, Write};
 
 /// How a route's URL maps to a file in the output directory.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -82,6 +82,14 @@ impl Route {
         &self.url
     }
 
+    /// The URL path as a link writes it: each byte but the unreserved ones (`A-Z a-z 0-9 - . _ ~`)
+    /// and `/` percent-encoded (`/blog/tag/stem%20cells.xml`), so a name with a space is a valid
+    /// URL. The file the route is written to keeps the name as it is ([`Route::output_path`]).
+    #[must_use]
+    pub fn encoded_url(&self) -> String {
+        encode_path(&self.url)
+    }
+
     /// What kind of output the route names.
     #[must_use]
     pub fn kind(&self) -> OutputKind {
@@ -122,6 +130,20 @@ fn squeeze_slashes(url: &str) -> String {
         }
     }
     squeezed
+}
+
+/// `path` with each byte but the unreserved ones and `/` percent-encoded.
+#[must_use]
+pub fn encode_path(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    for byte in path.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~' | b'/') {
+            out.push(char::from(byte));
+        } else {
+            let _ = write!(out, "%{byte:02X}");
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -186,5 +208,13 @@ mod tests {
             Route::file("/feeds/"),
             Err(RouteError::FileIsDirectory(_))
         ));
+    }
+
+    #[test]
+    fn a_url_is_percent_encoded_as_a_link_writes_it() {
+        let route = Route::file("/blog/tag/stem cells.xml").unwrap();
+        assert_eq!(route.encoded_url(), "/blog/tag/stem%20cells.xml");
+        assert_eq!(route.output_path(), "blog/tag/stem cells.xml");
+        assert_eq!(encode_path("/a-b_c.d~e/città"), "/a-b_c.d~e/citt%C3%A0");
     }
 }

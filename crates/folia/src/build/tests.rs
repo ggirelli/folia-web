@@ -783,6 +783,7 @@ fn the_search_script_lists_the_pages_stubs_and_redirects_then_its_fragment() {
     config.search = Some(crate::search::SearchConfig {
         source: "assets/js/search.js".to_owned(),
         fragment: "_folia/search.js".to_owned(),
+        content_block: None,
     });
     let built = fixture.build_with(&config).unwrap();
     assert!(

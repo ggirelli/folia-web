@@ -109,7 +109,7 @@ fn block(out: &mut String, node: &Node, indent: usize, src: &str) {
             pad(out, indent);
             highlight::block(out, lang.as_deref(), code, &node.attrs, indent);
         }
-        Kind::HtmlBlock(html) => out.push_str(html),
+        Kind::HtmlBlock(html) => out.push_str(&html::without_repeated_attributes(html)),
         Kind::List(start) => list(out, *start, node, indent, src),
         Kind::Table(alignments) => table(out, alignments, node, indent, src),
         Kind::Rule => {
@@ -285,7 +285,10 @@ fn inline(out: &mut String, node: &Node, src: &str) {
             escape(out, code);
             out.push_str("</code>");
         }
-        Kind::InlineHtml(html) => out.push_str(&html::with_attributes(html, &node.attrs)),
+        Kind::InlineHtml(html) => {
+            let html = html::without_repeated_attributes(html);
+            out.push_str(&html::with_attributes(&html, &node.attrs));
+        }
         Kind::SoftBreak => out.push('\n'),
         Kind::HardBreak => out.push_str("<br />\n"),
         // Blocks inside inline content: pulldown-cmark never nests them so.
