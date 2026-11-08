@@ -294,6 +294,31 @@ directory, which it prints):
 | `links.json` | internal links that resolve to nothing |
 | `build.json`, `sha256.txt` | the build's record (site and Folia commits, configuration and templates hashes) and manifest |
 
+### The determinism reference
+
+`just determinism` builds the site twice, compares the two builds byte for byte, and compares the
+first with a *reference*: a recorded output manifest (`<sha256>  ./<path>`, the `sha256.txt` of a
+kept build). The reference defaults to A0's (`FOLIA_A0_REFERENCE`, a slice-era build made when the
+check was introduced), which is only the right one for A0's baseline; another is chosen with
+`FOLIA_REFERENCE`, declared the baseline's by `FOLIA_REFERENCE_LABEL`.
+
+A reference goes **stale** when Folia learns to write more outputs: the check then reports
+"written, not in the reference" for each. That is not a failure of determinism (the two builds
+are still identical), and the old entries may all still match, which is evidence nothing in them
+changed. Do not let it stay an unexplained failure:
+
+1. Check what the comparison says: if any file is "in the reference, not written" or "bytes
+   differ", a Folia change is to approve or fix first.
+2. If the differences are only additions, record a new reference from a reviewed build: copy its
+   `sha256.txt` into a new directory of the evidence (`references/<label>-<release>/`), beside
+   a README that says which Folia commit, site commit, templates, configuration and baseline
+   time made it, and why.
+3. Point `FOLIA_REFERENCE` at it and `FOLIA_REFERENCE_LABEL` at the baseline's label, in `pins.env`.
+4. Never overwrite or delete the old reference: it is history.
+
+From then on, any change to Folia's output bytes fails the check until its reviewed result is
+recorded the same way.
+
 ### Read the ledgers
 
 - **Deviations** (`FOLIA_LEDGER`): each accepted entry explains one kind of difference from Jekyll,
