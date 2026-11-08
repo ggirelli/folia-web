@@ -209,3 +209,64 @@ fn the_default_build_directory_is_new() {
     assert!(dir.starts_with(std::env::temp_dir()));
     assert!(dir.symlink_metadata().is_err());
 }
+
+fn report(passed: bool, exact_parity: bool) -> coverage::Report {
+    coverage::Report {
+        format: 2,
+        owners: Vec::new(),
+        counts: coverage::Counts::default(),
+        problems: Vec::new(),
+        rows: Vec::new(),
+        folia_only: Vec::new(),
+        clean_build: true,
+        exact_parity,
+        passed,
+    }
+}
+
+fn verdicts(coverage: &coverage::Report) -> Verdicts<'_> {
+    Verdicts {
+        identified: true,
+        ledger_ok: true,
+        links_ok: true,
+        warnings_ok: true,
+        outputs_compared: true,
+        documents_ok: true,
+        coverage,
+    }
+}
+
+#[test]
+fn a_run_is_exact_only_when_nothing_differs_and_documented_when_everything_is_classified() {
+    let exact = report(true, true);
+    assert_eq!(Outcome::of(&verdicts(&exact)), Outcome::Exact);
+    // Every difference classified as accepted or approved: it passes, but is not parity.
+    let classified = report(true, false);
+    assert_eq!(Outcome::of(&verdicts(&classified)), Outcome::Documented);
+    // Raw checks that fail for a row the coverage report classified as intentional do not fail
+    // the run, and are not exact either.
+    let mut v = verdicts(&exact);
+    v.outputs_compared = false;
+    assert_eq!(Outcome::of(&v), Outcome::Documented);
+    v.documents_ok = false;
+    assert_eq!(Outcome::of(&v), Outcome::Documented);
+    assert!(Outcome::Documented.message().contains("NOT exact parity"));
+}
+
+#[test]
+fn what_coverage_does_not_classify_and_what_is_not_about_one_output_still_fails_the_run() {
+    // A known, defective, evidence-less or unclassified row: coverage does not pass.
+    let failing = report(false, false);
+    assert_eq!(Outcome::of(&verdicts(&failing)), Outcome::Fails);
+    let ok = report(true, false);
+    for break_one in [
+        |v: &mut Verdicts| v.identified = false,
+        |v: &mut Verdicts| v.ledger_ok = false,
+        |v: &mut Verdicts| v.links_ok = false,
+        |v: &mut Verdicts| v.warnings_ok = false,
+    ] {
+        let mut v = verdicts(&ok);
+        break_one(&mut v);
+        assert_eq!(Outcome::of(&v), Outcome::Fails);
+    }
+}

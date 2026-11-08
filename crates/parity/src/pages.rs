@@ -135,8 +135,8 @@ pub fn run(
     let waived = coverage_ledger.waived();
     let planned = planned_routes(site_dir, &config, &baseline)?;
     let mut checks = Checks::default();
-    let mut passed = identified;
-    passed &= compare(
+    // Each check prints its differences; `Outcome::of` decides what fails the run.
+    let outputs_compared = compare(
         &built,
         &kept.output,
         baseline_dir,
@@ -147,7 +147,7 @@ pub fn run(
         &claimed(&config),
         &mut checks,
     )?;
-    passed &= judge_documents(
+    let (documents_ok, ledger_ok) = judge_documents(
         &built,
         &kept.output,
         &kept.dir,
@@ -157,9 +157,9 @@ pub fn run(
         &waived,
         &mut checks,
     )?;
-    passed &= check_links(&kept.output, &kept.dir, &planned, &config.site.url)?;
-    passed &= check_expected_warnings(&expected_warnings, &built, &kept.dir)?;
-    passed &= report_coverage(
+    let links_ok = check_links(&kept.output, &kept.dir, &planned, &config.site.url)?;
+    let warnings_ok = check_expected_warnings(&expected_warnings, &built, &kept.dir)?;
+    let coverage = report_coverage(
         &baseline,
         &built,
         &kept.output,
@@ -168,15 +168,72 @@ pub fn run(
         &checks,
         &coverage_ledger,
     )?;
-    println!(
-        "{}",
-        if passed {
-            "Page parity holds for every output Folia builds."
-        } else {
-            "Page parity FAILS."
-        }
-    );
+    let outcome = Outcome::of(&Verdicts {
+        identified,
+        ledger_ok,
+        links_ok,
+        warnings_ok,
+        outputs_compared,
+        documents_ok,
+        coverage: &coverage,
+    });
+    println!("{}\n{}", coverage.verdict(), outcome.message());
+    let passed = outcome != Outcome::Fails;
     Ok(passed)
+}
+
+/// What the checks of a run found, as `Outcome::of` combines them.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each is one check's verdict; the verdicts are what Outcome combines"
+)]
+struct Verdicts<'a> {
+    identified: bool,
+    /// The ledger and Folia's manifest hold (`ledger_is_sound`).
+    ledger_ok: bool,
+    links_ok: bool,
+    warnings_ok: bool,
+    /// The raw verdicts of the output checks, before any classification.
+    outputs_compared: bool,
+    documents_ok: bool,
+    coverage: &'a coverage::Report,
+}
+
+/// How a run ends. Only `Exact` says the output is Jekyll's; `Documented` is a run that fails
+/// nothing, because every difference is accepted or approved, and is not parity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Outcome {
+    Fails,
+    Documented,
+    Exact,
+}
+
+impl Outcome {
+    /// The checks that are not about one output fail the run as they are; the others fail it
+    /// through the coverage report (`coverage::Report::passed`), which lets an output with an
+    /// approved, intentional difference through, and nothing else.
+    fn of(v: &Verdicts) -> Self {
+        let passed =
+            v.identified && v.ledger_ok && v.links_ok && v.warnings_ok && v.coverage.passed;
+        if !passed {
+            Outcome::Fails
+        } else if v.outputs_compared && v.documents_ok && v.coverage.exact_parity {
+            Outcome::Exact
+        } else {
+            Outcome::Documented
+        }
+    }
+
+    fn message(self) -> &'static str {
+        match self {
+            Outcome::Exact => "Page parity holds, exactly, for every output Folia builds.",
+            Outcome::Documented => {
+                "Page parity holds with documented differences: this is NOT exact parity (see \
+                 coverage.md)."
+            }
+            Outcome::Fails => "Page parity FAILS.",
+        }
+    }
 }
 
 /// Every output Folia plans for the site, by output path, with its URL.
@@ -561,7 +618,7 @@ fn judge_documents(
     site_url: &str,
     waived: &BTreeSet<String>,
     checks: &mut Checks,
-) -> Result<bool, String> {
+) -> Result<(bool, bool), String> {
     let pages: Vec<String> = built
         .pages
         .iter()
@@ -624,13 +681,13 @@ fn judge_documents(
         checks.record(&outcome.file, "assertions", outcome.passed);
     }
     let (json, _) = report.write(dir)?;
-    Ok(print_judgement(&report, &json))
+    let ledger_ok = ledger_is_sound(&report);
+    Ok((print_judgement(&report, &json), ledger_ok))
 }
 
 /// Classifies every manifest row (A2.1, plan v12, §5.4) by what Folia plans and writes, the
 /// checks' verdicts and the ledger's coverage entries; writes `coverage.json` and `coverage.md`
-/// into the build's directory, and prints the counts and every problem. Returns whether it
-/// passes.
+/// into the build's directory, and prints the counts and every problem. Returns the report.
 fn report_coverage(
     baseline: &baseline::Baseline,
     built: &Built,
@@ -639,7 +696,7 @@ fn report_coverage(
     planned: &BTreeMap<String, String>,
     checks: &Checks,
     ledger: &coverage::Ledger,
-) -> Result<bool, String> {
+) -> Result<coverage::Report, String> {
     let planned: BTreeSet<String> = planned.keys().cloned().collect();
     let mut files = Vec::new();
     list_files(output, output, &mut files)?;
@@ -680,15 +737,38 @@ fn report_coverage(
             )
         )
     }) {
-        println!(
-            "  {}: {}: {}",
-            row.output,
-            row.class.map_or("unclassified", coverage::Class::name),
+        let detail = if row.problems.is_empty() {
+            let failing: Vec<&str> = row
+                .checks
+                .iter()
+                .filter(|v| !v.passed)
+                .map(|v| v.check)
+                .collect();
+            format!(
+                "recorded in {}; failing checks: {}",
+                row.entry.as_deref().unwrap_or("no entry"),
+                failing.join(", ")
+            )
+        } else {
             row.problems.join("; ")
+        };
+        println!(
+            "  {}: {}: {detail}",
+            row.output,
+            row.class.map_or("unclassified", coverage::Class::name)
         );
     }
-    println!("{}", report.verdict());
-    Ok(report.passed)
+    Ok(report)
+}
+
+/// Whether the ledger and Folia's manifest hold, whatever they say of the pages: no entry is
+/// stale or has a problem, and every page's bytes are what Folia's output manifest records.
+/// These fail a run whatever the coverage report classifies.
+fn ledger_is_sound(report: &Report) -> bool {
+    let applied = report.ledger.as_ref().expect("judged");
+    applied.problems.is_empty()
+        && applied.entries.iter().all(|entry| !entry.stale)
+        && report.manifest_mismatches.is_empty()
 }
 
 /// Prints the outcome of a judged report, whose JSON is at `json`: a summary line and, when it
