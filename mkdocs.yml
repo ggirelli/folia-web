@@ -42,31 +42,24 @@ exclude_docs: |
 
 nav:
   - Home: index.md
-  - Parity baselines: baseline.md
+  - Getting started: getting-started.md
+  - Guide:
+      - Writing content: guide/content.md
+      - Templates: guide/templates.md
+      - Building and deploying: guide/building.md
+      - Feeds, sitemap and search: guide/feeds-sitemap-search.md
+      - Configuration reference: configuration.md
+  - Migrating from Jekyll:
+      - Migrating from Jekyll: migrating/index.md
+      - Parity tools reference: migrating/parity-reference.md
+  - Known limitations: known-limitations.md
   - Development:
       - Development: development.md
       - Manual testing: development/manual-testing.md
       - Releasing: development/releasing.md
-      - Configuration reference: configuration.md
-      - Known limitations: known-limitations.md
-      - Release notes 0.1.0: release-notes/v0.1.0.md
       - How it is made: how-it-is-made.md
-  - Planning:
-      - Plans: planning/index.md
-      - Plan v13 (current): planning/plan.v13.md
-      - Plan v12: planning/plan.v12.md
-      - Plan v11: planning/plan.v11.md
-      - Plan v10: planning/plan.v10.md
-      - Plan v9: planning/plan.v9.md
-      - Plan v8: planning/plan.v8.md
-      - Plan v7: planning/plan.v7.md
-      - Plan v6: planning/plan.v6.md
-      - Plan v5: planning/plan.v5.md
-      - Plan v4: planning/plan.v4.md
-      - Plan v3: planning/plan.v3.md
-      - Plan v2: planning/plan.v2.md
-      - Plan v1: planning/plan.v1.md
-      - Plan v0: planning/plan.v0.md
+  - Release notes:
+      - Folia 0.1.0: release-notes/v0.1.0.md
 
 markdown_extensions:
   - admonition

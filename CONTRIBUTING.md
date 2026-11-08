@@ -28,9 +28,9 @@ check it in a browser, with no private inputs.
 2. Run `just check`. CI runs the same recipes on every pull request, and `main` only takes
    changes that pass them.
 3. Add or update tests and checks for what you changed.
-4. Update the docs that describe it: the guide in [docs/](docs/), [README.md](README.md) for the
-   overview, and the current plan in [docs/planning/](docs/planning/) when a design decision
-   changes. Plans are versioned: a revision is a new `plan.vN.md`, not an edit of an old one.
+4. Update the docs that describe it: the guide in [docs/](docs/) (what a user does) or
+   [docs/development.md](docs/development.md) (how it is built), and [README.md](README.md) for
+   the overview.
 
 ## Style
 

@@ -17,7 +17,7 @@ The full text is in
 
 ## The process
 
-Design comes first. Each architecture proposal is a versioned plan in [planning](planning/index.md),
-revised until the maintainer approves it. Risky decisions are then settled by small validation
-spikes, each with explicit success criteria that are checked before moving on. Every commit is
-co-authored by the assistant, so the history shows the whole process.
+Design comes first: each architecture proposal was a versioned plan, revised until the maintainer
+approved it. Risky decisions were then settled by small validation spikes, each with explicit
+success criteria checked before moving on. Every commit is co-authored by the assistant, so the
+history shows the whole process, and the plans are kept in it.

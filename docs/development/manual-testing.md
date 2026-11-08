@@ -124,7 +124,7 @@ is a small public site with every kind of content Folia builds. Its configuratio
 ### Build it
 
 Build into a directory outside the site that is absent, empty, or one a previous Folia build
-wrote (see [the destination](../development.md#the-destination)). A failed build exits non-zero
+wrote (see [the destination](../guide/building.md#the-destination)). A failed build exits non-zero
 and leaves the destination as it was:
 
 ```sh
@@ -268,16 +268,16 @@ just baseline-verify <label>                   # build twice, and without the du
 just compare <a> <b>                           # compare two baselines
 ```
 
-[Parity baselines](../baseline.md) explains each step and what a baseline holds. A baseline is
-never overwritten: a new commit of the site is a new label.
+The [parity tools reference](../migrating/parity-reference.md) explains each step and what a
+baseline holds. A baseline is never overwritten: a new commit of the site is a new label.
 
 ### Build and compare
 
 ```sh
 just build /tmp/site-out        # the whole site, with FOLIA_CONFIG
-just routes <label>           # every output path, against the baseline (spike 2); with
+just routes <label>           # every output path, against the baseline ; with
                               # FOLIA_LEDGER, an approved `folia-only` entry allows an output Jekyll never wrote
-just markdown <label>         # every Markdown body, with the ledger's D-001 to D-003 (spike 1)
+just markdown <label>         # every Markdown body, with the ledger's D-001 to D-003 
 just liquid                   # no Liquid left in the site's Markdown
 just pages <label> [out]      # every file Folia writes, against Jekyll's
 just determinism [out]        # two builds, byte for byte, and the recorded reference
@@ -290,7 +290,7 @@ directory, which it prints):
 | File | What it says |
 |-|-|
 | `dom-report.md`, `dom-report.json` | every whole-document difference, and the ledger's verdict on it |
-| `coverage.md`, `coverage.json` | every output of the baseline and its class, the verdicts *clean build* and *exact parity*, and the Folia-only outputs ([coverage classes](../known-limitations.md#coverage-classes)) |
+| `coverage.md`, `coverage.json` | every output of the baseline and its class, the verdicts *clean build* and *exact parity*, and the Folia-only outputs ([coverage classes](../migrating/parity-reference.md#coverage-classes)) |
 | `warnings.json` | each warning Folia gave, and the expected-warnings entry that matches it |
 | `links.json` | internal links that resolve to nothing |
 | `build.json`, `sha256.txt` | the build's record (site and Folia commits, configuration and templates hashes) and manifest |

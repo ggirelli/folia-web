@@ -7,7 +7,7 @@ explains how to build the example site, check it in a browser, and run real-site
 
 ## How the repository is organized
 
-The Cargo workspace follows [plan v6, §4](planning/plan.v6.md#4-workspace-shape-decided-approved-2026-10-25).
+The Cargo workspace has one crate per mode and a few shared ones.
 Each mode crate depends on `folia-core` only, never on another mode.
 
 - **`crates/core`** (`folia-core`): the content model.
@@ -37,32 +37,30 @@ Each mode crate depends on `folia-core` only, never on another mode.
 - **`crates/folia`** (`folia`): the site builder and the `folia build` command (`main.rs`).
   `config` reads `folia.toml`, `discover` classifies the site's files, and `site` plans every
   output in one route table, checks it for duplicate URLs and colliding output files, and writes
-  redirect stubs. `build` is the pipeline: of the configuration's slice (plan v9, §12.2), each
+  redirect stubs. `build` is the pipeline: of the configuration's slice, each
   document of which must build, or, without a slice, of every document, skipping those Folia
   cannot build yet. `render` renders pages with MiniJinja from the site's templates
   (`_folia/templates` in the site), `redirects` serializes `/redirects.json` as
   `jekyll-redirect-from` writes it, and `output` writes the destination whole or not at all.
-- **`crates/parity`**: the dev-only parity tool (`just routes`, `just markdown`, `just pages`,
-  `just determinism`), and the content lint (`just liquid`).
-  It reads baselines as black boxes and calls only Folia's public API. `markdown` holds spike 1's
-  check: `dom` (html5ever parsing and normalization), `liquid` (the template filters excerpts go
-  through), `ledger` and `report`. `builds` builds the site at an explicit time into a new
-  directory it keeps, with the output's manifest and a record of the inputs; `document` compares
-  whole HTML documents, and trees of them, by plan v12's §5.1 rules. `pages` builds the
-  site through it and compares what Folia writes with Jekyll's files, `pages::entries` the
-  documents' dates, tables of contents and code blocks, and `pages::garden` the note graph and the
-  broken-link warnings. `coverage` classifies every row of the baseline's manifest from what
-  Folia plans and writes, the checks' verdict on each output, and the ledger's coverage entries
-  (plan v12, §5.4, A2.1). `links` checks that every internal `href` and `src` of the HTML Folia
-  writes resolves to a planned output (A2.8), and `warnings` that every warning Folia gives is
-  one the site's expected-warnings file expects (A2.9). `determinism` builds the site twice through
-  `builds`, as of one time, and compares the two builds byte for byte, and each with a recorded
-  reference (A2.5).
+- **`crates/parity`**: the dev-only parity tool (`just routes`, `just markdown`, `just pages`, `just
+  determinism`), and the content lint (`just liquid`). It reads baselines as black boxes and calls
+  only Folia's public API. `markdown` holds the Markdown check: `dom` (html5ever parsing and
+  normalization), `liquid` (the template filters excerpts go through), `ledger` and `report`.
+  `builds` builds the site at an explicit time into a new directory it keeps, with the output's
+  manifest and a record of the inputs; `document` compares whole HTML documents, and trees of them,
+  by their own rules. `pages` builds the site through it and compares what Folia writes with
+  Jekyll's files, `pages::entries` the documents' dates, tables of contents and code blocks, and
+  `pages::garden` the note graph and the broken-link warnings. `coverage` classifies every row of
+  the baseline's manifest from what Folia plans and writes, the checks' verdict on each output, and
+  the ledger's coverage entries. `links` checks that every internal `href` and `src` of the HTML
+  Folia writes resolves to a planned output, and `warnings` that every warning Folia gives is one
+  the site's expected-warnings file expects. `determinism` builds the site twice through `builds`,
+  as of one time, and compares the two builds byte for byte, and each with a recorded reference.
 - **`parity/`**: tools that check Folia's output against the Jekyll site.
-  - `jekyll/folia_dump.rb`: the passive Jekyll plugin that dumps Jekyll's intermediate results
-    (see [parity baselines](baseline.md)). Nothing else may live in `jekyll/`, because Jekyll
-    loads every Ruby file there.
-  - `codemods/check_d001.py`: checks that the only output change of spike 3's rewrite of the
+  - `jekyll/folia_dump.rb`: the passive Jekyll plugin that dumps Jekyll's intermediate results (see
+    the [parity tools reference](migrating/parity-reference.md)). Nothing else may live in
+    `jekyll/`, because Jekyll loads every Ruby file there.
+  - `codemods/check_d001.py`: checks that the only output change of the Liquid rewrite of the
     Liquid in the site's Markdown is D-001.
   - `check_dump.rb`: checks that a dump accounts for every built file and that no date fell
     back to a file mtime.
@@ -72,24 +70,24 @@ Each mode crate depends on `folia-core` only, never on another mode.
   - `site-exclusions.txt`: the paths in the site that are Folia's (`_folia/`, the content lint's
     workflow), which `scripts/baseline.sh` and the parity tools' checkout check both leave out,
     from this one list.
-  - `accept.py`: the acceptance runner's verdict (A2.10): it finds and verifies the baseline's
-    lockfile, and judges each criterion of plan v12, §8, from what the checks left, into
+  - `accept.py`: the acceptance runner's verdict: it finds and verifies the baseline's
+    lockfile, and judges each acceptance criterion from what the checks left, into
     `accept.json` and `accept.md`.
   - `check_date_shift.py`: checks that two baselines differ only by changed last-modified dates.
 - **`scripts/`**: the scripts behind the `just` recipes.
   - `baseline.sh`: builds a baseline, recording its identities, tools and lockfile; with
     `--lockfile` and `--at`, from exactly that lockfile and as of a pinned time.
   - `baseline-container.sh`: builds one with `baseline.sh` in a Docker image pinned by digest.
-  - `toolchain-compare.sh`: builds one commit with each toolchain and compares them (A2.7);
+  - `toolchain-compare.sh`: builds one commit with each toolchain and compares them;
     `toolchain-negative.sh` shows the container baselines refuse what they must, in the images.
   - `compare-builds.sh`: compares two baselines.
-  - `verify-baseline.sh`: runs the spike 0 acceptance checks on fresh builds, which it keeps;
+  - `verify-baseline.sh`: runs the baseline's acceptance checks on fresh builds, which it keeps;
     an existing baseline is left as it is. `baseline-negative.sh` shows both scripts refuse
     changes outside the approved paths, on throwaway repositories with a stand-in for Jekyll
     (part of `just check`).
   - `determinism-negative.sh`: shows the determinism check fails on a changed reference and
     refuses an existing or misplaced directory, a malformed reference and other templates.
-  - `accept.sh`: the acceptance runner behind `just accept` (A2.10): runs every check built so far
+  - `accept.sh`: the acceptance runner behind `just accept`: runs every check built so far
     against a baseline, in order, into one evidence folder. `accept-negative.sh` shows it fails,
     refuses and records a tree with changes as it should, from a throwaway copy with a stand-in
     for the checks (part of `just check`).
@@ -106,7 +104,7 @@ Each mode crate depends on `folia-core` only, never on another mode.
   - `slice-boundary.sh`: checks a step of the vertical slice keeps out of the other step's mode.
 - **`.github/`**: the CI and docs workflows, the pull request template, and the Dependabot
   configuration.
-- **`docs/`**: this documentation, and the versioned plans in `docs/planning/`.
+- **`docs/`**: this documentation.
 - **`examples/minimal-site/`**: a small public site with every kind of content Folia builds, for
   manual testing (`just build-example`) and its integration test (`crates/folia/tests`).
 - **`assets/brand/`**: logos and the banner.
@@ -124,51 +122,20 @@ support yet are skipped, each named with the reason. A document that is supporte
 template is missing or fails to render, its author is unknown) is never skipped: it fails the
 build, with every such problem listed, and the destination is left as it was.
 
-### Exit status
-
-`folia` exits with a status scripts can rely on:
-
-| Status | Meaning | Output |
-|-|-|-|
-| `0` | The site was built into `--dest`. Warnings (a broken wiki-link) and documents Folia does not support yet (`skipped:`, each named) do not change it. `--help` and `--version` also exit 0. | the warnings and skips on stderr, then `Built …` on stdout |
-| `1` | The build failed: planning, a template, a render error, an unknown author, a destination Folia refuses, or a write error. **Nothing was written**, and `--dest` is as it was. | every problem on stderr, then `The build failed with N problems; nothing was written, …` |
-| `2` | Usage or configuration error: no or unknown subcommand, a missing `--dest`, a configuration that cannot be read or has an unknown key. Nothing was built. | the error on stderr |
-
-Diagnostics go to stderr, the summary line to stdout. A run that exits 0 may have skipped
-documents: a script that must not publish a partial site should check stderr for `skipped:`.
-
-### The destination
-
-`--dest` must be outside the site. Folia writes the site into `.<name>.folia-new` beside it and
-swaps it in only when everything was written, so a failed build never touches the destination.
-It deletes nothing it did not write:
-
-- an absent or empty destination is written;
-- a non-empty one is replaced only if its record, `.<name>.folia-output` beside it (not in it,
-  so that it is never deployed), names that directory and lists every top-level entry it holds;
-  user files, a moved copy or any other directory are refused, with nothing changed;
-- a leftover `.<name>.folia-new` or `.<name>.folia-old` is refused, never deleted.
-
-To rebuild into a directory that holds something else, empty it yourself.
-
-**Stylesheets need Dart Sass 1.100.0** (plan v12, Q7): the version Jekyll's `sass-embedded`
-runs, so that the CSS and its source maps are Jekyll's, byte for byte. Install the standalone
-release from <https://github.com/sass/dart-sass/releases/tag/1.100.0> and put its `sass` on
-`PATH`, or set `FOLIA_SASS` to the program. A site with Sass stylesheets fails to build, saying
-so, when Dart Sass is missing or another version; no other compiler is used. The site's Sass
-settings are its configuration's `[sass]` table: `dir`, the directory imports are found in
-(default `_sass`), and `style`, `expanded` (default) or `compressed`. Stylesheets are compiled in
-whole-site builds only, so a slice's output is unchanged.
+The command's options, [exit status](guide/building.md#exit-status), the
+[destination rules](guide/building.md#the-destination) and
+[stylesheets](guide/building.md#stylesheets) are in the user guide. What follows is how each part
+is built.
 
 **Front matter Folia does not know is refused**, because a misspelt key would otherwise leave a
 page silently different from what its author meant. Jekyll ignores such keys, so a published site
 can have some. The exceptions are listed, one exact key each, with why, in
-`folia_pages::IGNORED_TYPOS`. So far there is one, owner decision Q3h: `narrow-post` (for
+`folia_pages::IGNORED_TYPOS`. So far there is one, owner decision: `narrow-post` (for
 `narrow_post`), set to `true` or `false`, on pages only, is accepted and changes nothing. No
 template reads it, so Jekyll published the page at its usual width, and Folia builds it the same
 way. Posts and other modes still refuse it, and every other unknown key is still refused.
 
-**Authors** are the configuration's `[authors.<key>]` tables (plan v11, Q16b), typed in
+**Authors** are the configuration's `[authors.<key>]` tables, typed in
 `folia::config::Author`, with the fields listed in its module: names, picture, pages, the
 author page's backgrounds (`[[authors.<key>.covers]]`) and an account on each service the site
 links to. An unset field is left out; an empty one is refused. Templates see every field as
@@ -182,11 +149,11 @@ the frame's navigation and titles hidden, a corner link back to `/micro`, no pre
 row, categories and tags hidden (see `folia_micro`'s `entry` module). Their author is the
 configuration's `[micro]` `author`, a key of `[authors]`; without one, they have none.
 
-**Micro listings** are the site's pages that list micro entries, which micro *claims* (plan v12,
-§3.3–3.4): each `[[micro.listings]]` names its `source`, the `template` that renders it and the
-`kinds` it lists. The page keeps its route, redirects and front matter, its body is not
-rendered, and the template gets `page.items`, the entries newest first (same dates by path,
-descending, as Jekyll sorted them), each with its excerpt, its text and its first 25 words.
+**Micro listings** are the site's pages that list micro entries, which micro *claims*: each
+`[[micro.listings]]` names its `source`, the `template` that renders it and the `kinds` it lists.
+The page keeps its route, redirects and front matter, its body is not rendered, and the template
+gets `page.items`, the entries newest first (same dates by path, descending, as Jekyll sorted them),
+each with its excerpt, its text and its first 25 words.
 
 **Blog listings** are built by the blog (`folia_blog::listings`) when the configuration's `[blog]`
 names them: `index`, the claimed source of `/blog/` (its `source` and `template`), whose pages
@@ -202,7 +169,7 @@ micro kind, and the garden's), written by `folia::feed` when the configuration h
 its `lang`, the `generator` the feeds name (`name`, `uri`, `version`) and how many items each
 lists (`limit`, 10). Each mode gives a `FeedItem` per entry it builds; a feed lists the newest of
 those whose pages were rendered, serialized as `jekyll-feed` 0.17 wrote them, without a template.
-Its `<updated>` is its latest item's, never the build time (plan v9, §7.3). Notes name the
+Its `<updated>` is its latest item's, never the build time. Notes name the
 configuration's `[garden]` `author`, as micro entries name `[micro]`'s, and their summaries show
 wiki-links resolved (D-003). A tag's feed is `/blog/tag/:tag.xml` for every tag that can be a
 file name; one with a space is written with it (`stem cells.xml`) and linked percent-encoded
@@ -217,21 +184,21 @@ every page rendered but `/404.html` (redirect stubs are not pages), by URL, then
 `.htm`, `.html`, `.xhtml` and `.pdf` files. A page's `<lastmod>` is its entry's `modified` or
 date, or its claimed source's last commit; a page without a source, such as a category archive,
 has none. A static file's is its last commit, where Jekyll used the file's modification time
-(plan v12, Q3g).
+.
 
 **The search script** is written by `folia::search` when the configuration has `[search]`: it
 claims the script's `source` (`assets/js/lunrsearchengine.js`) and writes, at its route, the
 `documents` array the site's Liquid made, followed by `fragment`, the script's code after the
-array, read as it is from the site (`_folia/`; plan v12, Q20). The records are the site's pages
+array, read as it is from the site (`_folia/`). The records are the site's pages
 by URL (with the stubs and `redirects.json`; not `.xml`, `assets`, `category` or `tag` URLs),
 then the RSVPs, likes and bookmarks, the notes and the posts, oldest first, each with its body's
 text by the script's filter chain, except that a line break in a body is a space, not nothing as
 in Jekyll ([known limitations](known-limitations.md)). Following the plan's recommendations, micro
 entries are listed
-(Q3c; an RSVP's body is its answer and event), and strings are JSON-escaped, with no
-`markdownify` (Q3q). A listing page's body is the text of its template's block named by
+(an RSVP's body is its answer and event), and strings are JSON-escaped, with no
+`markdownify`. A listing page's body is the text of its template's block named by
 `content-block` (`[search]`), so the navigation, the footer and the rest of the frame are not
-indexed; without it, the rendered page (Q3f). A redirect stub has no body.
+indexed; without it, the rendered page. A redirect stub has no body.
 
 See [known limitations](known-limitations.md) for what differs from Jekyll, on purpose or not,
 and for how the coverage report tells a clean build from exact parity.
@@ -253,8 +220,8 @@ none:
 | `FOLIA_A0_LABEL`, `FOLIA_A0_REFERENCE` | the reference baseline, and its recorded manifest |
 | `FOLIA_TOOLCHAINS`, `FOLIA_TOOLCHAIN_AT`, `FOLIA_TOOLCHAIN_DIR` | the toolchain comparison's environments, pinned time and lockfiles |
 
-The site's evidence (each spike's and step's reviewed outputs, the builds' and baselines'
-records), its spike 3 list, its own negative checks (which change copies of the real site and
+The site's evidence (its reviewed outputs, the builds' and baselines'
+records), its own negative checks (which change copies of the real site and
 baseline) and the tests of its ledgers' contents are kept with them. The `.gitignore` keeps the
 reference site's from being added here again.
 
@@ -264,10 +231,10 @@ The deviation ledger declares, at its top, the `owners`: the only names an appro
 A waiver or removal (`check = "coverage"`) classifies an output only when it has
 `status = "accepted"`, a valid `accepted` date, a `decision` and a `rationale`, and an
 `accepted_by` that is exactly one of `owners`; a missing or empty `owners` approves nothing, and
-proposed and withdrawn entries classify nothing (plan v12, §5.2 and §5.4).
+proposed and withdrawn entries classify nothing.
 
 Three more classes are decided the same way, none of them a waiver
-(see [known limitations](known-limitations.md#coverage-classes)): `intentional` (a difference
+(see the [coverage classes](migrating/parity-reference.md#coverage-classes)): `intentional` (a difference
 Folia has on purpose; approved, and stale once the output matches Jekyll's), `folia-only` (an
 output with no Jekyll baseline, so no manifest row; approved) and `known` (a difference recorded
 with `status = "recorded"` and a `rationale`, **never** `accepted`: it has no approval, and the
