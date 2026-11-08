@@ -175,14 +175,13 @@ fn build_page(
     if claim.is_none() && !markdown && (doc.body.contains("{%") || doc.body.contains("{{")) {
         return Err(problem(&"Liquid in an HTML page is not built yet"));
     }
-    let required = |key: &str| {
-        doc.front
-            .string(key)
-            .map_err(|e| problem(&e))?
-            .ok_or_else(|| problem(&format!("a page without a {key} is not built yet")))
-    };
     let layout = doc.front.string("layout").map_err(|e| problem(&e))?;
-    let title = required("title")?;
+    // Jekyll gives a page without a title none: `page.title` is empty.
+    let title = doc
+        .front
+        .string("title")
+        .map_err(|e| problem(&e))?
+        .unwrap_or_default();
     if doc.front.get("last_modified_at").is_some() {
         return Err(problem(
             &"last_modified_at is not read on pages yet; the last commit dates them",
@@ -647,10 +646,9 @@ mod tests {
     }
 
     #[test]
-    fn a_page_without_a_title_or_markdown_is_not_built_yet() {
+    fn a_page_with_liquid_or_last_modified_at_is_not_built_yet() {
         let problems = build(
             &[
-                page("pages/b.md", "layout: page"),
                 SourceDoc {
                     body: "{% for post in site.posts %}{% endfor %}".to_owned(),
                     ..page("blog/c.html", "layout: page\ntitle: C")
@@ -669,11 +667,31 @@ mod tests {
         assert_eq!(
             messages,
             [
-                "pages/b.md: a page without a title is not built yet",
                 "blog/c.html: Liquid in an HTML page is not built yet",
                 "pages/d.md: last_modified_at is not read on pages yet; the last commit dates them",
             ]
         );
+    }
+
+    #[test]
+    fn a_page_without_a_title_has_an_empty_one_as_in_jekyll_and_a_titled_page_keeps_its_own() {
+        let output = build(
+            &[
+                page("pages/b.md", "layout: page"),
+                page("pages/c.md", "layout: page\ntitle:"),
+                page("pages/d.md", "layout: page\ntitle: Named"),
+            ],
+            &LastCommits::default(),
+            &clock(),
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        let titles: Vec<_> = output
+            .pages
+            .iter()
+            .map(|p| p.context["title"].clone())
+            .collect();
+        assert_eq!(titles, ["", "", "Named"]);
     }
 
     /// A page shaped like `pages/disclosure.md`, with a table of contents on the left.

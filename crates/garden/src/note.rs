@@ -88,14 +88,6 @@ pub fn build(
     clock: &SiteClock,
 ) -> Result<ModeOutput, Vec<Diagnostic>> {
     let notes = read_notes(docs, root, clock)?;
-    let untitled: Vec<Diagnostic> = notes
-        .iter()
-        .filter(|note| note.title.is_none())
-        .map(|note| Diagnostic::in_doc(&note.id, "a note without a title is not built yet"))
-        .collect();
-    if !untitled.is_empty() {
-        return Err(untitled);
-    }
     let sources: Vec<&SourceDoc> = notes
         .iter()
         .filter_map(|note| docs.iter().find(|doc| doc.id == note.id))
@@ -103,7 +95,7 @@ pub fn build(
     let links = WikiLinks::new(
         notes
             .iter()
-            .map(|note| (title(note), &note.id, note.route.url())),
+            .map(|note| (note.title.as_str(), &note.id, note.route.url())),
     );
     let backlinks = backlinks(&notes, &sources, &links);
 
@@ -122,7 +114,7 @@ pub fn build(
                     collection: "digital_garden".to_owned(),
                     url: entry.route.url().to_owned(),
                     id: FeedItem::jekyll_id(entry.route.url(), doc),
-                    title: title(note).to_owned(),
+                    title: note.title.clone(),
                     published,
                     updated: entry.modified.as_ref().map_or(published, |m| m.at),
                     content_html: entry.body_html.clone(),
@@ -146,11 +138,6 @@ pub fn build(
     }
 }
 
-/// Every note's title; [`build`] has checked each has one.
-fn title(note: &Note) -> &str {
-    note.title.as_deref().unwrap_or_default()
-}
-
 /// The backlinks of each note, in the order of `notes`: one for each wiki-link to it, by the
 /// order of the notes that make them. `sources` are the notes' documents, in the same order.
 fn backlinks(notes: &[Note], sources: &[&SourceDoc], links: &WikiLinks) -> Vec<Vec<Backlink>> {
@@ -169,7 +156,7 @@ fn backlinks(notes: &[Note], sources: &[&SourceDoc], links: &WikiLinks) -> Vec<V
                 continue;
             };
             backlinks[i].push(Backlink {
-                title: title(note).to_owned(),
+                title: note.title.clone(),
                 url: note.route.url().to_owned(),
                 excerpt: doc.body.split("\n\n").next().unwrap_or_default().to_owned(),
             });
@@ -187,7 +174,7 @@ fn graph(notes: &[Note], backlinks: &[Vec<Backlink>]) -> Artifact {
             .map(|note| GraphNode {
                 id: note.route.url(),
                 path: note.route.url(),
-                label: label(title(note)),
+                label: label(&note.title),
             })
             .collect(),
         edges: notes
@@ -284,7 +271,7 @@ fn build_note(
 
     let context = json!({
         "url": note.route.url(),
-        "title": title(note),
+        "title": note.title,
         "layout": "garden_post",
         "date": clock.xmlschema(date),
         "modified": modified.map(|m| clock.xmlschema(m.at)),

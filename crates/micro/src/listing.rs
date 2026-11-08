@@ -85,7 +85,7 @@ fn item(
         .front
         .string("title")
         .map_err(|e| problem(&e))?
-        .ok_or_else(|| problem(&"an entry without a title is not built yet"))?;
+        .unwrap_or_else(|| folia_core::content::file_title(doc.id.file_name()));
     let (date, _) = folia_core::content::dated_file_name(doc.id.file_name())
         .map_err(|e| problem(&e))?
         .ok_or_else(|| problem(&"an entry without a date in its file name is not built yet"))?;
