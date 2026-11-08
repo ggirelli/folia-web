@@ -99,16 +99,7 @@ pub fn run(
         at: baseline.built_at,
         expected_templates,
     })?;
-    match kept.record.files {
-        Some(files) => println!(
-            "Folia's build ({files} files, with its manifest and record) is kept in {}.",
-            kept.dir.display()
-        ),
-        None => println!(
-            "Folia's failed build (its record and log) is kept in {}.",
-            kept.dir.display()
-        ),
-    }
+    announce(&kept);
     // An unknown source identity fails the run (plan v12, §5.4), and every other check still
     // runs, so the kept build and its reports keep their diagnostics.
     let unknown = builds::unknown_identities(&kept.record);
@@ -157,7 +148,13 @@ pub fn run(
         &waived,
         &mut checks,
     )?;
-    let links_ok = check_links(&kept.output, &kept.dir, &planned, &config.site.url)?;
+    let links_ok = check_links(
+        &kept.output,
+        &kept.dir,
+        &planned,
+        &config.site.url,
+        (ledger_path, &baseline_dir.join("site")),
+    )?;
     let warnings_ok = check_expected_warnings(&expected_warnings, &built, &kept.dir)?;
     let coverage = report_coverage(
         &baseline,
@@ -168,7 +165,7 @@ pub fn run(
         &checks,
         &coverage_ledger,
     )?;
-    let outcome = Outcome::of(&Verdicts {
+    Ok(conclude(&Verdicts {
         identified,
         ledger_ok,
         links_ok,
@@ -176,10 +173,28 @@ pub fn run(
         outputs_compared,
         documents_ok,
         coverage: &coverage,
-    });
-    println!("{}\n{}", coverage.verdict(), outcome.message());
-    let passed = outcome != Outcome::Fails;
-    Ok(passed)
+    }))
+}
+
+/// Prints the verdicts and how the run ends; returns whether it passes (`Outcome::of`).
+fn conclude(verdicts: &Verdicts) -> bool {
+    let outcome = Outcome::of(verdicts);
+    println!("{}\n{}", verdicts.coverage.verdict(), outcome.message());
+    outcome != Outcome::Fails
+}
+
+/// Says where the kept build is.
+fn announce(kept: &builds::Kept) {
+    match kept.record.files {
+        Some(files) => println!(
+            "Folia's build ({files} files, with its manifest and record) is kept in {}.",
+            kept.dir.display()
+        ),
+        None => println!(
+            "Folia's failed build (its record and log) is kept in {}.",
+            kept.dir.display()
+        ),
+    }
 }
 
 /// What the checks of a run found, as `Outcome::of` combines them.
@@ -870,9 +885,11 @@ fn check_links(
     dir: &Path,
     planned: &BTreeMap<String, String>,
     site_url: &str,
+    (ledger_path, jekyll): (&Path, &Path),
 ) -> Result<bool, String> {
     let written: BTreeSet<String> = builds::manifest_paths(output)?.into_iter().collect();
-    let report = links::check(output, &written, planned, site_url)?;
+    let mut report = links::check(output, &written, planned, site_url)?;
+    report.apply(&links::register::load(ledger_path)?, jekyll);
     links::write(&report, dir)?;
     for line in report.lines() {
         println!("{line}");

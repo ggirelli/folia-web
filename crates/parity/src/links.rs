@@ -32,6 +32,8 @@ use html5ever::{ParseOpts, parse_document};
 use markup5ever_rcdom::{Handle, NodeData, RcDom};
 use serde::Serialize;
 
+pub mod register;
+
 /// One `href` or `src` of a page, and what it is.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Link {
@@ -57,6 +59,13 @@ pub enum Verdict {
     },
     /// Internal, and it names nothing Folia plans.
     Broken { path: String },
+    /// Broken as Jekyll's is, because the site's own source writes it so, and the register of
+    /// known source-content defects (`register`) says so: not Folia's fault, and not a failure.
+    KnownSource {
+        path: String,
+        entry: String,
+        source: String,
+    },
     /// On another host, or not a web link (`scheme`); not checked.
     External { scheme: String },
     /// Only a fragment, a query or nothing: a place in the page itself; not checked (D1).
@@ -91,7 +100,17 @@ impl Report {
     pub fn lines(&self) -> Vec<String> {
         let count =
             |test: fn(&Verdict) -> bool| self.links.iter().filter(|l| test(&l.verdict)).count();
-        let internal = count(|v| matches!(v, Verdict::Resolves { .. } | Verdict::Broken { .. }));
+        let internal = count(|v| {
+            matches!(
+                v,
+                Verdict::Resolves { .. } | Verdict::Broken { .. } | Verdict::KnownSource { .. }
+            )
+        });
+        let known: Vec<&Link> = self
+            .links
+            .iter()
+            .filter(|l| matches!(l.verdict, Verdict::KnownSource { .. }))
+            .collect();
         let built = count(|v| matches!(v, Verdict::Resolves { built: true, .. }));
         let planned = count(|v| matches!(v, Verdict::Resolves { built: false, .. }));
         let external = count(|v| matches!(v, Verdict::External { .. }));
@@ -99,8 +118,16 @@ impl Report {
         let broken: Vec<&Link> = self.broken().collect();
         let summary = format!(
             "{internal} internal href and src in {} HTML files: {built} resolve to outputs Folia builds, \
-             {planned} to outputs it plans; {external} external and {same_page} within their page, not checked",
-            self.pages
+             {planned} to outputs it plans; {external} external and {same_page} within their page, not checked{}",
+            self.pages,
+            if known.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "; {} known source-content defects, which Jekyll's output has too",
+                    known.len()
+                )
+            }
         );
         let mut out = Vec::new();
         if self.passed() {
@@ -120,6 +147,20 @@ impl Report {
                 }
             }
             out.extend(self.problems.iter().map(|p| format!("  {p}")));
+        }
+        for link in known {
+            if let Verdict::KnownSource {
+                path,
+                entry,
+                source,
+            } = &link.verdict
+            {
+                out.push(format!(
+                    "  known source-content defect ({entry}): {}: {}=\"{}\" resolves to {path}, \
+                     which is not planned; written so in {source}",
+                    link.page, link.at, link.value
+                ));
+            }
         }
         out
     }
