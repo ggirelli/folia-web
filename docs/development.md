@@ -210,7 +210,9 @@ claims the script's `source` (`assets/js/lunrsearchengine.js`) and writes, at it
 array, read as it is from the site (`_folia/`; plan v12, Q20). The records are the site's pages
 by URL (with the stubs and `redirects.json`; not `.xml`, `assets`, `category` or `tag` URLs),
 then the RSVPs, likes and bookmarks, the notes and the posts, oldest first, each with its body's
-text by the script's filter chain. Following the plan's recommendations, micro entries are listed
+text by the script's filter chain, except that a line break in a body is a space, not nothing as
+in Jekyll ([known limitations](known-limitations.md)). Following the plan's recommendations, micro
+entries are listed
 (Q3c; an RSVP's body is its answer and event), and strings are JSON-escaped, with no
 `markdownify` (Q3q). A listing page's body is the text of its template's block named by
 `content-block` (`[search]`), so the navigation, the footer and the rest of the frame are not

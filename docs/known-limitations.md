@@ -89,9 +89,11 @@ file's modification time, which changes with every checkout.
   `[search]`), not the whole page; without that setting it is the rendered page.
 - Strings are JSON-escaped and never run through `markdownify`, so curly quotes from Jekyll's
   smart punctuation and raw backslashes in code differ.
-- A body's line breaks are removed without a space, as Jekyll's `strip_newlines` did, so the last
-  word of a hard-wrapped line and the first of the next one are indexed as one word. Jekyll's
-  index has the same flaw; Folia keeps it for parity.
+- **An intentional improvement over Jekyll:** each run of line breaks in a body becomes one space,
+  with the spaces around it (`\n`, `\r\n`). Jekyll's `strip_newlines` deleted them, so the last
+  word of a hard-wrapped line and the first of the next, and the items of a list, were indexed as
+  one word (`two`, `garden` as `twogarden`) and found by neither. A break that follows a space,
+  as between two paragraphs, gives Jekyll's text; a body with no break is unchanged.
 - The order of records is not Jekyll's, which varied between two of its own builds.
 
 ### Folia-only outputs

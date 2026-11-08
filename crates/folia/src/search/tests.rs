@@ -138,3 +138,42 @@ fn a_body_is_the_script_s_filter_chain() {
         "A. :  q  B: "
     );
 }
+
+#[test]
+fn a_hard_line_break_is_a_space_so_the_words_on_either_side_stay_two() {
+    // The case that gave `twogarden`: a paragraph wrapped in the source.
+    assert_eq!(
+        text("<p>a microblog, two\ngarden notes</p>"),
+        "a microblog, two garden notes "
+    );
+    assert_eq!(text("<p>two\r\ngarden</p>"), "two garden ");
+    // A run of breaks is one space, and none is added next to a space.
+    assert_eq!(text("<p>a\n\n\nb</p>"), "a b ");
+    assert_eq!(text("<p>a \nb</p>"), "a b ");
+    assert_eq!(text("<p>a\n b</p>"), "a b ");
+}
+
+#[test]
+fn a_soft_break_a_list_and_inline_markup_do_not_glue_either() {
+    // A Markdown hard break (`<br />` then a newline), a list, inline markup across lines.
+    assert_eq!(text("<p>one<br />\ntwo</p>"), "one two ");
+    assert_eq!(text("<ul>\n<li>a</li>\n<li>b</li>\n</ul>"), "a b ");
+    assert_eq!(text("<p><em>x</em>\n<strong>y</strong> z</p>"), "x y z ");
+}
+
+#[test]
+fn code_blocks_keep_their_lines_apart_and_ordinary_paragraphs_are_as_before() {
+    let code = "<pre><code>fn main() {\n    run();\n}\n</code></pre>";
+    let text = text(code);
+    assert!(
+        text.contains("{ run();") || text.contains("{ run(); }"),
+        "{text:?}"
+    );
+    assert!(!text.contains("}fn") && !text.contains("{run"), "{text:?}");
+    // Paragraphs separated by a blank line: the break follows the space `</p>` made, so the
+    // text is exactly what Jekyll's chain gave.
+    assert_eq!(super::text("<p>one</p>\n<p>two</p>"), "one two ");
+    assert_eq!(super::text("<h2>A</h2>\n<p>b</p>"), "A: b ");
+    // No break, no change.
+    assert_eq!(super::text("<p>plain text</p>"), "plain text ");
+}
