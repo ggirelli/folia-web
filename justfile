@@ -167,10 +167,11 @@ check-d001 before after expected:
 check-date-shift before after:
     python3 -I parity/check_date_shift.py {{baselines}}/{{before}} {{baselines}}/{{after}}
 
-# Check Folia's routes against a baseline of the reference site (spike 2)
+# Check Folia's routes against a baseline of the reference site (spike 2); with FOLIA_LEDGER, an
+# output only Folia writes is allowed when an approved `folia-only` entry names it
 [group('parity')]
 routes label: (require "FOLIA_CONFIG" config)
-    cargo run --quiet --locked -p parity -- routes --site {{site}} --baseline {{baselines}}/{{label}} --config {{quote(config)}}
+    cargo run --quiet --locked -p parity -- routes --site {{site}} --baseline {{baselines}}/{{label}} --config {{quote(config)}} {{ if ledger == "" { "" } else { "--ledger " + quote(ledger) } }}
 
 # Check Folia's Markdown against a baseline of the reference site (spike 1)
 [group('parity')]

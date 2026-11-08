@@ -8,6 +8,12 @@
 //! 4. **Redirect stubs:** the set of stubs is identical.
 //!
 //! Folia's own checks, that no URL or output file is planned twice, run when it plans the site.
+//!
+//! With the site's ledger (`--ledger`), a generated output only Folia plans is not a difference
+//! when an owner-approved `folia-only` coverage entry names its output file (the coverage
+//! report's class for an output with no Jekyll baseline). The entry is checked too: it fails when
+//! Folia no longer plans the output, or when Jekyll writes one at that path, so it cannot go stale
+//! or hide a real difference. Without the ledger, every such output is a difference.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -32,7 +38,16 @@ type Generated = (String, String);
 ///
 /// Fails when the baseline or configuration cannot be read, or the site checkout is not the
 /// commit the baseline was built from (`check_checkout`).
-pub fn run(site_dir: &Path, baseline_dir: &Path, config_path: &Path) -> Result<bool, String> {
+pub fn run(
+    site_dir: &Path,
+    baseline_dir: &Path,
+    config_path: &Path,
+    ledger: Option<&Path>,
+) -> Result<bool, String> {
+    let folia_only = match ledger {
+        Some(path) => folia_only(path)?,
+        None => BTreeMap::new(),
+    };
     let baseline = baseline::load(baseline_dir)?;
     check_checkout(site_dir, &baseline.commit, baseline.diff.as_deref())?;
     let config = Config::load(config_path).map_err(|e| e.to_string())?;
@@ -70,7 +85,7 @@ pub fn run(site_dir: &Path, baseline_dir: &Path, config_path: &Path) -> Result<b
     let results = [
         check_authored(&written, outputs),
         check_classification(&written, &site),
-        check_generated(&written, outputs),
+        check_generated(&written, outputs, &folia_only),
         check_redirects(&written, outputs),
     ];
     print_generators(outputs);
@@ -184,7 +199,44 @@ fn check_classification(rows: &[&Row], site: &Site) -> bool {
     )
 }
 
-fn check_generated(rows: &[&Row], outputs: &[PlannedOutput]) -> bool {
+/// The output files the ledger's approved `folia-only` coverage entries name, with the entry.
+fn folia_only(ledger: &Path) -> Result<BTreeMap<String, String>, String> {
+    let ledger = crate::coverage::load(ledger)?;
+    Ok(ledger
+        .entries
+        .iter()
+        .filter(|e| e.class == Some(crate::coverage::Decided::FoliaOnly) && e.approval.is_some())
+        .flat_map(|e| e.outputs.iter().map(|o| (o.clone(), e.id.clone())))
+        .collect())
+}
+
+fn check_generated(
+    rows: &[&Row],
+    outputs: &[PlannedOutput],
+    folia_only: &BTreeMap<String, String>,
+) -> bool {
+    let mut ok = true;
+    let mut classified = BTreeSet::new();
+    for (output, entry) in folia_only {
+        let jekyll_writes = rows.iter().any(|row| row.output == *output);
+        let folia_plans = outputs
+            .iter()
+            .any(|o| o.source.is_none() && o.route.output_path() == *output);
+        if jekyll_writes {
+            println!(
+                "FAILS: Folia-only {output} ({entry}): Jekyll writes it, so it is not Folia-only."
+            );
+            ok = false;
+        } else if !folia_plans {
+            println!(
+                "FAILS: Folia-only {output} ({entry}): Folia no longer plans it; the entry is stale."
+            );
+            ok = false;
+        } else {
+            println!("ok: Folia-only output {output}: no Jekyll baseline, approved by {entry}.");
+            classified.insert(output.as_str());
+        }
+    }
     let jekyll: Vec<Generated> = rows
         .iter()
         .filter(|row| row.source.is_none())
@@ -192,7 +244,7 @@ fn check_generated(rows: &[&Row], outputs: &[PlannedOutput]) -> bool {
         .collect();
     let folia: Vec<Generated> = outputs
         .iter()
-        .filter(|o| o.source.is_none())
+        .filter(|o| o.source.is_none() && !classified.contains(o.route.output_path().as_str()))
         .map(|o| (o.route.url().to_owned(), o.route.output_path()))
         .collect();
     report_multisets(
@@ -200,7 +252,7 @@ fn check_generated(rows: &[&Row], outputs: &[PlannedOutput]) -> bool {
         &jekyll,
         &folia,
         |(u, o)| format!("{u} -> {o}"),
-    )
+    ) && ok
 }
 
 fn check_redirects(rows: &[&Row], outputs: &[PlannedOutput]) -> bool {
@@ -382,6 +434,8 @@ pub fn short(commit: &str) -> &str {
 mod tests {
     use std::path::PathBuf;
 
+    use folia_core::content::Route;
+
     use super::*;
 
     /// A throwaway site repository with one commit, removed when dropped.
@@ -557,5 +611,71 @@ mod tests {
                 .unwrap_err()
                 .ends_with("has uncommitted changes")
         );
+    }
+
+    fn generated(output: &str) -> PlannedOutput {
+        PlannedOutput {
+            route: Route::file(&format!("/{output}")).unwrap(),
+            source: None,
+            generator: Some("tag feed"),
+            redirect_from: Vec::new(),
+        }
+    }
+
+    fn row(output: &str) -> Row {
+        Row {
+            kind: "page".to_owned(),
+            collection: None,
+            class: "Jekyll::PageWithoutAFile".to_owned(),
+            source: None,
+            url: format!("/{output}"),
+            output: output.to_owned(),
+            written: true,
+            content: None,
+            excerpt: None,
+            meta: None,
+        }
+    }
+
+    fn only(entries: &[(&str, &str)]) -> BTreeMap<String, String> {
+        entries
+            .iter()
+            .map(|(o, e)| ((*o).to_owned(), (*e).to_owned()))
+            .collect()
+    }
+
+    #[test]
+    fn an_output_only_folia_plans_is_a_difference_unless_an_approved_entry_names_it() {
+        let outputs = [generated("a.xml"), generated("b c.xml")];
+        let jekyll = row("a.xml");
+        let rows = [&jekyll];
+        assert!(!check_generated(&rows, &outputs, &BTreeMap::new()));
+        assert!(check_generated(
+            &rows,
+            &outputs,
+            &only(&[("b c.xml", "C-7")])
+        ));
+        // The entry names only that output: another one only Folia plans still fails.
+        let more = [generated("a.xml"), generated("b c.xml"), generated("d.xml")];
+        assert!(!check_generated(&rows, &more, &only(&[("b c.xml", "C-7")])));
+    }
+
+    #[test]
+    fn a_folia_only_entry_that_is_stale_or_names_what_jekyll_writes_fails() {
+        let outputs = [generated("a.xml")];
+        let jekyll = row("a.xml");
+        let rows = [&jekyll];
+        // Folia no longer plans it: stale.
+        assert!(!check_generated(
+            &rows,
+            &outputs,
+            &only(&[("gone.xml", "C-7")])
+        ));
+        // Jekyll writes it: not Folia-only, and the entry cannot excuse a real difference.
+        assert!(!check_generated(
+            &rows,
+            &outputs,
+            &only(&[("a.xml", "C-7")])
+        ));
     }
 }
