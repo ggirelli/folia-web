@@ -1,0 +1,164 @@
+name: Release
+
+# Builds the `folia` binary for Linux x86_64 from a release tag and checks it. On a pushed tag `v*`
+# it also attaches the tarball and its checksum to the GitHub release (a draft, if the tag has none
+# yet). Run by hand (`workflow_dispatch`) it builds an existing tag, and attaches the files only if
+# `publish` is ticked: that is how binaries are added to a release that already exists.
+# On a pull request that changes this file it builds the pull request's code and uploads nothing
+# to any release, to test the workflow before it is merged.
+# What it never does: publish to crates.io, or build anything from the site's private inputs.
+# See docs/development/releasing.md.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The existing tag to build, such as v0.1.0"
+        required: true
+        type: string
+      publish:
+        description: "Attach the files to the tag's GitHub release"
+        required: false
+        default: false
+        type: boolean
+  pull_request:
+    paths: [".github/workflows/release.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event_name == 'pull_request' && github.ref || inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    # An old enough Ubuntu that the binary runs on the glibc most Linux systems have (2.35).
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write # the build provenance attestation
+      attestations: write
+    outputs:
+      tag: ${{ steps.name.outputs.tag }}
+    steps:
+      - name: Check out the tag (or, on a pull request, its code)
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.sha || format('refs/tags/{0}', github.event_name == 'push' && github.ref_name || inputs.tag) }}
+          persist-credentials: false
+
+      - name: Name the release and check the tag against the version
+        id: name
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          TAG_INPUT: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
+          if [ "$EVENT" = pull_request ]; then
+            tag="v${version}-test"
+          else
+            if [ "$EVENT" = push ]; then tag="$REF_NAME"; else tag="$TAG_INPUT"; fi
+            if ! printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+              echo "::error::'$tag' is not a version tag such as v0.1.0"; exit 1
+            fi
+            if [ "$tag" != "v${version}" ]; then
+              echo "::error::the tag is $tag but Cargo.toml says version $version"; exit 1
+            fi
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+
+      # No dependency cache: a release is built from the sources and the lockfile only.
+      - name: Build
+        run: cargo build --release --locked -p folia
+
+      - name: Check the binary
+        env:
+          VERSION: ${{ steps.name.outputs.version }}
+        run: |
+          set -euo pipefail
+          test "$(target/release/folia --version)" = "folia ${VERSION}"
+          ldd target/release/folia
+          dir="$(mktemp -d)"
+          target/release/folia build --site examples/minimal-site --dest "${dir}/out"
+          test -f "${dir}/out/index.html"
+
+      - name: Package
+        id: package
+        env:
+          TAG: ${{ steps.name.outputs.tag }}
+        run: |
+          set -euo pipefail
+          name="folia-${TAG}-x86_64-unknown-linux-gnu"
+          mkdir -p "dist/${name}"
+          cp target/release/folia LICENSE DISCLAIMER.md "dist/${name}/"
+          tar -C dist -czf "dist/${name}.tar.gz" "${name}"
+          (cd dist && sha256sum "${name}.tar.gz" > "${name}.tar.gz.sha256")
+          rm -r "dist/${name}"
+          ls -l dist
+          echo "path=dist/${name}.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Attest the build provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: ${{ steps.package.outputs.path }}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: folia-linux-x86_64
+          path: dist/
+          if-no-files-found: error
+
+  attach:
+    name: Attach to the release
+    needs: build
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish) }}
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write # create a draft release or attach files to one; nothing else
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: refs/tags/${{ needs.build.outputs.tag }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: folia-linux-x86_64
+          path: dist
+
+      - name: Attach the files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # A release that exists (published or draft) keeps its text; only files are added.
+            gh release upload "$TAG" dist/* --clobber
+          else
+            notes="docs/release-notes/${TAG}.md"
+            if [ -f "$notes" ]; then
+              # The notes link to the docs with relative paths (`../known-limitations.md`), which
+              # work in the docs site and break on a release page: point them at the tag's files.
+              tail -n +3 "$notes" | sed -E \
+                "s#\]\(\.\./([A-Za-z0-9_/.-]+\.md)\)#](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/docs/\1)#g" \
+                > "${RUNNER_TEMP}/notes.md"
+            else
+              printf 'See CHANGELOG.md.\n' > "${RUNNER_TEMP}/notes.md"
+            fi
+            # A draft: the owner reads it and publishes it.
+            gh release create "$TAG" dist/* --draft --verify-tag \
+              --title "Folia ${TAG#v}" --notes-file "${RUNNER_TEMP}/notes.md"
+          fi

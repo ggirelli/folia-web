@@ -1,8 +1,8 @@
 # Releasing
 
-How a Folia release is cut. There is **no release workflow** yet: a release is a tag and a GitHub
-release made by hand from a commit of `main` that passed its checks, by the project owner. Nothing
-here runs by itself, and nothing here publishes to crates.io (`publish = false`).
+How a Folia release is cut. The tag and the GitHub release are made by hand by the project owner,
+from a commit of `main` that passed its checks; the Linux binary is built by the
+[release workflow](#the-release-workflow). Nothing here publishes to crates.io (`publish = false`).
 
 ## Checklist
 
@@ -21,30 +21,41 @@ Everything on `main`, CI green:
    that commit say what you expect; the classified verdicts (*clean build*, *exact parity*) go in
    the release's private evidence, never in this repository.
 
-Then, from the commit you checked:
+Then, from the commit you checked, the owner tags it and pushes the tag:
 
 ```sh
-git tag -a vX.Y.Z -m "Folia X.Y.Z"           # the owner's decision, after the checklist
+git tag -s -a vX.Y.Z -m "Folia X.Y.Z"   # signed, after the checklist
 git push origin vX.Y.Z
-cargo build --release --locked -p folia      # target/release/folia
-sha256sum target/release/folia > folia-vX.Y.Z-linux-x86_64.sha256
 ```
 
-Create the GitHub release from the tag with `docs/release-notes/vX.Y.Z.md` as its text, and attach
-the binary and its checksum if you want to offer one (built on the platform you name in the file:
-CI and the install guide cover Ubuntu 24.04 only). Mark it a pre-release while the version is 0.x.
+The tag starts the release workflow (below), which builds the binary and leaves a **draft** release
+with it attached. Read the draft, check that its text is `docs/release-notes/vX.Y.Z.md`, and
+publish it (mark it a pre-release while the version is 0.x). The links in the notes are relative
+(they work in the docs site); the workflow rewrites them to the tag's files on GitHub.
 
-## A release workflow, if one is wanted
+## The release workflow
 
-Not built; what would make sense, in order of how little it risks:
+`.github/workflows/release.yml` builds `folia` for **Linux x86_64** (glibc 2.35, Ubuntu 22.04) with
+`cargo build --release --locked`, with no dependency cache. It then:
 
-1. **On a tag `v*`**, a job that checks the tag equals the workspace version, runs `just check`'s
-   Rust half, builds `folia` with `--release --locked` on Ubuntu (and macOS once its CI job has been
-   green for a while), and uploads the binaries and their SHA-256 sums as workflow artifacts. It
-   creates no release by itself.
-2. **A draft release** from those artifacts and the matching release notes file, left as a draft
-   for the owner to read and publish.
-3. Never: publishing automatically, crates.io, or any step that needs private site inputs.
+- refuses a tag that is not `vX.Y.Z` or does not equal the workspace version;
+- checks the binary (`folia --version` is the version; it builds the example site);
+- packs `folia-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz` (the binary, `LICENSE`, `DISCLAIMER.md`)
+  with a `.sha256` file, and attests the tarball's build provenance (GitHub artifact attestation);
+- on a pushed tag, attaches both to the release: a new **draft** from the notes file if the tag has
+  no release, else the existing one, whose text it never changes.
 
-It could be tested before a real tag with `workflow_dispatch` on a branch, uploading artifacts
-only. It is not a release blocker.
+Run by hand (Actions, "Release", with the tag) it builds an existing tag; ticking `publish` attaches
+the files to that tag's release. That is how a release made before the workflow got its binary.
+
+Verify a download:
+
+```sh
+sha256sum -c folia-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz.sha256
+gh attestation verify folia-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz --repo ggirelli/folia-web
+```
+
+The workflow's permissions are the least that work (`contents: write` only in the job that
+attaches files); its actions are pinned by commit. It builds nothing from a site's private inputs,
+and never publishes by itself. macOS is not built: its CI job is informational and has not been
+green for long. Windows is not supported.
