@@ -194,13 +194,14 @@ fn a_destination_inside_the_site_is_refused_before_anything_is_written() {
 #[test]
 fn the_manifest_is_sorted_bytewise_and_stable() {
     let fixture = Fixture::new("manifest");
-    for path in ["tree/b", "tree/a/c", "tree/A", "tree/a.b", "tree/a-b"] {
+    // `Z` and not `A`: on a case-insensitive filesystem (macOS's default) `A` is the directory `a`.
+    for path in ["tree/b", "tree/a/c", "tree/Z", "tree/a.b", "tree/a-b"] {
         fixture.write(path, path);
     }
     let tree = fixture.0.join("tree");
     let paths: Vec<String> = builds_manifest(&tree).into_iter().map(|(p, _)| p).collect();
-    // Bytewise: `-` (0x2d) < `.` (0x2e) < `/` (0x2f) < `A` < `a` < `b`.
-    assert_eq!(paths, ["A", "a-b", "a.b", "a/c", "b"]);
+    // Bytewise: `Z` (0x5a) < `a`, and `-` (0x2d) < `.` (0x2e) < `/` (0x2f) after `a`, then `b`.
+    assert_eq!(paths, ["Z", "a-b", "a.b", "a/c", "b"]);
     assert_eq!(builds_manifest(&tree), builds_manifest(&tree));
 }
 
@@ -543,7 +544,11 @@ fn an_untracked_file_whose_name_is_not_utf8_is_identified_by_its_contents() {
     // hash the same placeholder whatever the file holds.
     let name = std::ffi::OsStr::from_bytes(b"caf\xe9.txt");
     let file = fixture.site().join(name);
-    std::fs::write(&file, "one").unwrap();
+    if std::fs::write(&file, "one").is_err() {
+        // macOS's filesystem refuses names that are not UTF-8: nothing to test there.
+        eprintln!("skipped: this filesystem refuses file names that are not UTF-8");
+        return;
+    }
     let one = changes_of(&fixture).expect("changed");
     std::fs::write(&file, "two").unwrap();
     let two = changes_of(&fixture).expect("changed");

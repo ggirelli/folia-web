@@ -34,6 +34,19 @@ jobs:
       - run: just test
       - run: just doc
 
+  # The same tests on macOS, to learn whether Folia builds and passes there (it is developed and
+  # deployed on Linux; Windows is not supported, see docs/development.md). Not part of branch
+  # protection: a failure here is a finding, not a blocker, until it has been green for a while.
+  rust-macos:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --locked --no-fail-fast
+
   deny:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
