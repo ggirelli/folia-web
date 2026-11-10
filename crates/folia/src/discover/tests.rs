@@ -50,6 +50,7 @@ fn config(exclude: &[&str]) -> Config {
         garden: crate::config::GardenConfig::default(),
         feeds: None,
         search: None,
+        redirects: crate::config::RedirectsConfig::default(),
     }
 }
 

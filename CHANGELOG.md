@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Redirect stubs can take the site's background and colour scheme from `[redirects]`, so that an
+  old URL does not flash a white page on a dark site
+  ([#59](https://github.com/ggirelli/folia-web/issues/59);
+  [configuration](docs/configuration.md#redirects)). Without it, a stub is as before.
 - `folia serve`: builds the site, serves it locally and builds it again, reloading the open pages,
   when a file changes ([#46](https://github.com/ggirelli/folia-web/issues/46);
   [guide](docs/guide/building.md#previewing-while-you-write),

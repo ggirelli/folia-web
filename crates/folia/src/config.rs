@@ -55,6 +55,49 @@ pub struct Config {
     /// The site's search script; without it, it is not built.
     #[serde(default)]
     pub search: Option<crate::search::SearchConfig>,
+    /// How the redirect stubs look while they redirect.
+    #[serde(default)]
+    pub redirects: RedirectsConfig,
+}
+
+/// How the redirect stubs look while they redirect: by default, as `jekyll-redirect-from` wrote
+/// them, with neither, so the browser paints its own (white) background for a frame.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct RedirectsConfig {
+    /// The stub's background, a CSS colour (`#1d1f21`), painted from its first frame.
+    #[serde(default)]
+    pub background: Option<String>,
+    /// The stub's `color-scheme` (`dark`, `light dark`), which also colours what the browser
+    /// paints before the page's own styles.
+    #[serde(default)]
+    pub color_scheme: Option<String>,
+}
+
+impl RedirectsConfig {
+    /// What is wrong with these settings, if anything: they are written into the stubs as they
+    /// are, so each must be a value of its kind and nothing more.
+    fn problem(&self) -> Option<String> {
+        if let Some(background) = &self.background {
+            let allowed = |c: char| c.is_ascii_alphanumeric() || " #%(),.-/".contains(c);
+            if background.trim().is_empty() || !background.chars().all(allowed) {
+                return Some(format!(
+                    "[redirects] background {background:?} is not a CSS colour such as \"#1d1f21\""
+                ));
+            }
+        }
+        if let Some(scheme) = &self.color_scheme {
+            let keywords = ["normal", "light", "dark", "only"];
+            let words: Vec<&str> = scheme.split_whitespace().collect();
+            if words.is_empty() || !words.iter().all(|word| keywords.contains(word)) {
+                return Some(format!(
+                    "[redirects] color-scheme {scheme:?} is not a colour scheme: one or more of \
+                     normal, light, dark and only, such as \"dark\" or \"light dark\""
+                ));
+            }
+        }
+        None
+    }
 }
 
 /// The garden's settings: what the site's front matter defaults gave every note.
@@ -243,6 +286,9 @@ pub enum ConfigError {
         "invalid configuration {0}: the author {1} has {2} set to an empty value; leave it out instead"
     )]
     EmptyAuthorField(String, String, String),
+    /// A value is not one of its kind.
+    #[error("invalid configuration {0}: {1}")]
+    Invalid(String, String),
 }
 
 impl Config {
@@ -251,7 +297,8 @@ impl Config {
     /// # Errors
     ///
     /// Fails when the file cannot be read, or is not a valid configuration: one an author of
-    /// which has a field set to an empty value is not.
+    /// which has a field set to an empty value is not, nor are `[redirects]` values that are not
+    /// a colour or a colour scheme.
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
         let name = path.display().to_string();
         let text = std::fs::read_to_string(path).map_err(|e| ConfigError::Io(name.clone(), e))?;
@@ -264,6 +311,9 @@ impl Config {
                     (*field).to_owned(),
                 ));
             }
+        }
+        if let Some(problem) = config.redirects.problem() {
+            return Err(ConfigError::Invalid(name, problem));
         }
         Ok(config)
     }
@@ -344,6 +394,43 @@ mod tests {
             error.ends_with(
                 "the author gg has facebook set to an empty value; leave it out instead"
             ),
+            "{error}"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn redirect_stub_colours_are_read_and_checked_on_load() {
+        let dir = std::env::temp_dir().join(format!("folia-redirects-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("folia.toml");
+        let base = "time-zone = \"UTC\"\n[roots]\nblog = \"b\"\nmicro = \"m\"\ngarden = \"g\"\n[site]\nurl = \"u\"\ntitle = \"t\"\ndescription = \"d\"\n";
+        let load = |redirects: &str| {
+            std::fs::write(&path, format!("{base}[redirects]\n{redirects}")).unwrap();
+            Config::load(&path)
+        };
+        std::fs::write(&path, base).unwrap();
+        assert_eq!(
+            Config::load(&path).unwrap().redirects,
+            RedirectsConfig::default()
+        );
+        let config = load("background = \"#1d1f21\"\ncolor-scheme = \"light dark\"\n").unwrap();
+        assert_eq!(config.redirects.background.as_deref(), Some("#1d1f21"));
+        assert_eq!(config.redirects.color_scheme.as_deref(), Some("light dark"));
+        assert!(load("background = \"rgb(29, 31, 33)\"\n").is_ok());
+        for bad in [
+            "background = \"red}body{display:none\"\n",
+            "background = \"#000</style><script>\"\n",
+            "background = \" \"\n",
+            "color-scheme = \"dim\"\n",
+            "color-scheme = \"\"\n",
+            "colour = \"dark\"\n",
+        ] {
+            assert!(load(bad).is_err(), "{bad}");
+        }
+        let error = load("color-scheme = \"dark\\\" onload=\\\"x\"\n").unwrap_err();
+        assert!(
+            error.to_string().contains("is not a colour scheme"),
             "{error}"
         );
         std::fs::remove_dir_all(&dir).unwrap();

@@ -17,7 +17,7 @@ use folia_core::content::{Diagnostic, DocId, Mode, Preview, Route, SiteClock, So
 use folia_core::publish::PlannedOutput;
 use jiff::Timestamp;
 
-use crate::config::Config;
+use crate::config::{Config, RedirectsConfig};
 use crate::discover::{Discovery, discover};
 
 /// A site whose outputs are all planned.
@@ -160,13 +160,25 @@ pub fn assemble(
 
 /// The page `jekyll-redirect-from` writes at an old URL, sending readers to `to`, an absolute
 /// URL: a canonical link, a script and a meta refresh. The URL is written as given, unescaped, as
-/// the plugin does.
+/// the plugin does. With `look` set, the stub also declares the site's colour scheme and paints
+/// its background from the first frame; unset, it is the plugin's, byte for byte.
 #[must_use]
-pub fn redirect_stub(to: &str) -> String {
+pub fn redirect_stub(to: &str, look: &RedirectsConfig) -> String {
+    let scheme = look
+        .color_scheme
+        .as_ref()
+        .map_or_else(String::new, |scheme| {
+            format!("  <meta name=\"color-scheme\" content=\"{scheme}\">\n")
+        });
+    let background = look.background.as_ref().map_or_else(String::new, |colour| {
+        format!("  <style>html{{background:{colour}}}</style>\n")
+    });
+    let head = scheme + &background;
     format!(
         "<!DOCTYPE html>\n\
          <html lang=\"en-US\">\n  \
-         <meta charset=\"utf-8\">\n  \
+         <meta charset=\"utf-8\">\n\
+         {head}  \
          <title>Redirecting&hellip;</title>\n  \
          <link rel=\"canonical\" href=\"{to}\">\n  \
          <script>location=\"{to}\"</script>\n  \
@@ -291,9 +303,38 @@ mod tests {
     }
 
     #[test]
+    fn a_redirect_stub_can_take_the_sites_colours_from_the_first_frame() {
+        let look = RedirectsConfig {
+            background: Some("#1d1f21".to_owned()),
+            color_scheme: Some("dark".to_owned()),
+        };
+        let stub = redirect_stub("https://ggirelli.info/about", &look);
+        assert!(
+            stub.starts_with(
+                "<!DOCTYPE html>\n<html lang=\"en-US\">\n  <meta charset=\"utf-8\">\n  \
+                 <meta name=\"color-scheme\" content=\"dark\">\n  \
+                 <style>html{background:#1d1f21}</style>\n  <title>Redirecting&hellip;</title>\n"
+            ),
+            "{stub}"
+        );
+        let plain = redirect_stub("https://ggirelli.info/about", &RedirectsConfig::default());
+        let only_scheme = RedirectsConfig {
+            color_scheme: Some("light dark".to_owned()),
+            ..RedirectsConfig::default()
+        };
+        assert_eq!(
+            redirect_stub("https://ggirelli.info/about", &only_scheme),
+            plain.replace(
+                "  <title>",
+                "  <meta name=\"color-scheme\" content=\"light dark\">\n  <title>"
+            )
+        );
+    }
+
+    #[test]
     fn a_redirect_stub_is_written_as_the_plugin_writes_it() {
         assert_eq!(
-            redirect_stub("https://ggirelli.info/about"),
+            redirect_stub("https://ggirelli.info/about", &RedirectsConfig::default()),
             "<!DOCTYPE html>\n<html lang=\"en-US\">\n  <meta charset=\"utf-8\">\n  <title>Redirecting&hellip;</title>\n  <link rel=\"canonical\" href=\"https://ggirelli.info/about\">\n  <script>location=\"https://ggirelli.info/about\"</script>\n  <meta http-equiv=\"refresh\" content=\"0; url=https://ggirelli.info/about\">\n  <meta name=\"robots\" content=\"noindex\">\n  <h1>Redirecting&hellip;</h1>\n  <a href=\"https://ggirelli.info/about\">Click here if you are not redirected.</a>\n</html>\n"
         );
     }
