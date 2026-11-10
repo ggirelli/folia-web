@@ -125,6 +125,7 @@ redirect_from:
 |-|-|
 | `layout` | The template, `page` meaning `page.html`. **Without a layout the page is its content alone** |
 | `title`, `author`, `hide_title`, `title_icon` | What the template shows |
+| `noindex` | `true` asks the template to keep the page out of search engines, as `page.noindex`; the template writes the robots tag |
 | `permalink` | The page's URL, including its extension when it has one (`/feed.xml`) |
 | `redirect_from` | Old URLs: each becomes a stub that redirects to this page; all are listed in `/redirects.json` |
 | `published` | `false` leaves it out |
