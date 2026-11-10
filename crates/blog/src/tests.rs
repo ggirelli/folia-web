@@ -53,6 +53,20 @@ fn unpublished_and_future_posts_are_left_out() {
 }
 
 #[test]
+fn future_posts_are_kept_when_the_clock_allows_them() {
+    let docs = [
+        post("_posts/2026/2026-10-25-today.md", ""),
+        post("_posts/2026/2026-10-26-tomorrow.md", ""),
+        post("_posts/2021/2021-01-01-draft.md", "published: false"),
+    ];
+    let outputs = routes(&docs, &clock().with_future(true)).unwrap();
+    assert_eq!(
+        urls(&outputs, None),
+        ["/blog/2026/10/25/today", "/blog/2026/10/26/tomorrow"]
+    );
+}
+
+#[test]
 fn listing_pages_count_only_listed_posts() {
     let mut docs: Vec<_> = (1..=10)
         .map(|day| post(&format!("_posts/2021/2021-01-{day:02}-p.md"), ""))

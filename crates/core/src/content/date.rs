@@ -20,12 +20,31 @@ pub enum DateError {
     Form(String),
 }
 
+/// What a preview build adds to the normal one: drafts, and documents dated after the build.
+/// A site built with either is for looking at, not for publishing.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+pub struct Preview {
+    /// Also read the posts in `_drafts`.
+    pub drafts: bool,
+    /// Also build documents dated after the build.
+    pub future: bool,
+}
+
+impl Preview {
+    /// Whether this is the normal build, with neither added.
+    #[must_use]
+    pub fn is_normal(self) -> bool {
+        !self.drafts && !self.future
+    }
+}
+
 /// The site's time zone and the moment of the build, against which future-dated content is
-/// held back.
+/// held back (unless the clock allows it).
 #[derive(Clone, Debug)]
 pub struct SiteClock {
     zone: TimeZone,
     now: Timestamp,
+    future_allowed: bool,
 }
 
 impl SiteClock {
@@ -37,13 +56,31 @@ impl SiteClock {
     pub fn new(zone: &str, now: Timestamp) -> Result<Self, DateError> {
         let tz =
             TimeZone::get(zone).map_err(|error| DateError::TimeZone(zone.to_owned(), error))?;
-        Ok(Self { zone: tz, now })
+        Ok(Self {
+            zone: tz,
+            now,
+            future_allowed: false,
+        })
     }
 
-    /// Whether a moment is after the build, comparing whole seconds as Jekyll does.
+    /// The same clock, holding back future-dated content unless `allowed`.
+    #[must_use]
+    pub fn with_future(mut self, allowed: bool) -> Self {
+        self.future_allowed = allowed;
+        self
+    }
+
+    /// Whether a moment is after the build, comparing whole seconds as Jekyll does. Never, when
+    /// the clock allows future content.
     #[must_use]
     pub fn is_future(&self, moment: Timestamp) -> bool {
-        moment.as_second() > self.now.as_second()
+        !self.future_allowed && moment.as_second() > self.now.as_second()
+    }
+
+    /// The civil date of a moment, in the site's time zone.
+    #[must_use]
+    pub fn date_of(&self, moment: Timestamp) -> Date {
+        moment.to_zoned(self.zone.clone()).date()
     }
 
     /// The moment of the build.
@@ -137,6 +174,19 @@ mod tests {
 
     fn clock() -> SiteClock {
         SiteClock::new("Europe/Stockholm", "2026-10-25T09:00:00Z".parse().unwrap()).unwrap()
+    }
+
+    #[test]
+    fn a_future_moment_is_not_future_when_the_clock_allows_it() {
+        let moment: Timestamp = "2026-10-26T09:00:00Z".parse().unwrap();
+        assert!(clock().is_future(moment));
+        assert!(!clock().with_future(true).is_future(moment));
+    }
+
+    #[test]
+    fn date_of_gives_the_civil_date_in_the_site_zone() {
+        let moment: Timestamp = "2026-10-25T23:30:00Z".parse().unwrap();
+        assert_eq!(clock().date_of(moment), Date::new(2026, 10, 26).unwrap());
     }
 
     #[test]

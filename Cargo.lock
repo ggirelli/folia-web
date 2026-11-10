@@ -344,6 +344,7 @@ dependencies = [
  "jiff",
  "pulldown-cmark",
  "regex",
+ "serde",
  "serde_json",
  "syntect",
  "thiserror",

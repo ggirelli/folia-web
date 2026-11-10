@@ -390,6 +390,27 @@ fn a_note_dated_after_the_build_is_linked_to_and_links_but_has_no_page() {
 }
 
 #[test]
+fn future_notes_are_due_when_the_clock_allows_them() {
+    let docs = with_future_notes();
+    let only: Vec<&str> = docs.iter().map(|doc| doc.id.as_str()).collect();
+    let output = build(
+        &docs,
+        ROOT,
+        &only,
+        None,
+        &LastCommits::default(),
+        &clock().with_future(true),
+    )
+    .unwrap();
+    let mut pages: Vec<&str> = output.pages.iter().map(|page| page.route.url()).collect();
+    pages.sort_unstable();
+    assert_eq!(
+        pages,
+        ["/dg/later", "/dg/now", "/dg/quotes/2026-10-26-tomorrow"]
+    );
+}
+
+#[test]
 fn a_note_dated_after_the_build_has_a_page_once_the_build_reaches_its_date() {
     let docs = with_future_notes();
     let only: Vec<&str> = docs.iter().map(|doc| doc.id.as_str()).collect();

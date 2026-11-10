@@ -206,4 +206,15 @@ mod tests {
         assert!(outputs.iter().all(|o| o.source.is_none()));
         assert_eq!(outputs.len(), 5);
     }
+
+    #[test]
+    fn future_entries_are_kept_when_the_clock_allows_them() {
+        let outputs = routes(
+            &[entry("_micro/notes/2026-10-26-soon.md", "")],
+            "_micro",
+            &clock().with_future(true),
+        )
+        .unwrap();
+        assert!(outputs.iter().any(|o| o.source.is_some()));
+    }
 }
