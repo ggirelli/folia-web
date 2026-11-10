@@ -39,11 +39,11 @@ or Zola, although the code is public and you are welcome to use it.
 
 ## Status
 
-Folia 0.1.0 is the first pre-1.0 release. It builds the author's own site, its checks pass, and it
+Folia 0.2.0 is a pre-1.0 release. It builds the author's own site, its checks pass, and it
 refuses to overwrite files it did not write. It is a release of the software: its output equals
 Jekyll's for most of that site and differs, on purpose or by a known limitation, for the rest, so
 read [Known limitations](known-limitations.md) before replacing a Jekyll site. See the
-[release notes](release-notes/v0.1.0.md).
+[release notes](release-notes/v0.2.0.md).
 
 ## Support
 

@@ -59,6 +59,7 @@ nav:
       - Releasing: development/releasing.md
       - How it is made: how-it-is-made.md
   - Release notes:
+      - Folia 0.2.0: release-notes/v0.2.0.md
       - Folia 0.1.0: release-notes/v0.1.0.md
 
 markdown_extensions:

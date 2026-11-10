@@ -22,11 +22,11 @@ alternative to Jekyll, Hugo, or Zola, although the code is public.
 
 ## Status
 
-Folia 0.1.0 is the first pre-1.0 release: it builds the whole reference site, its checks pass and it
+Folia 0.2.0 is a pre-1.0 release: it builds the whole reference site, its checks pass and it
 refuses to overwrite files it did not write. **A clean build is not exact parity**: some outputs
 differ from Jekyll's on purpose or are known to differ ([known limitations](docs/known-limitations.md)),
 and Folia does not claim to replace a Jekyll site on its own. See the
-[release notes](docs/release-notes/v0.1.0.md).
+[release notes](docs/release-notes/v0.2.0.md).
 
 The documentation is published at <https://ggirelli.github.io/folia-web/>.
 
