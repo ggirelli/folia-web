@@ -121,15 +121,16 @@ Only for building part of a site (parity work): the documents to build, each of 
 
 ## Command-line flags
 
-These are flags, not configuration keys: a `future` or `unpublished` key in `folia.toml` is an unknown
-key, and an error. Both default to off.
+These are flags, not configuration keys: a `future`, `unpublished` or `at` key in `folia.toml` is an
+unknown key, and an error. `--future` and `--unpublished` default to off, and `--at` to now.
 
 | Flag | Commands | What |
 |-|-|-|
 | `--future` | `build`, `serve` | Also build posts, garden notes and micro entries dated after the build |
 | `--unpublished` | `build`, `serve` | Also build documents whose front matter says `published: false` |
+| `--at <TIME>` | `build` | Build as of an RFC 3339 timestamp, such as `2026-01-01T00:00:00Z`, instead of now |
 
-A build with either flag is a preview, not for publishing. See
+A build with `--future` or `--unpublished` is a preview, not for publishing. See
 [previewing drafts and scheduled posts](guide/building.md#previewing-drafts-and-scheduled-posts).
 
 ## Environment
