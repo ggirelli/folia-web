@@ -36,6 +36,16 @@ impl Preview {
     pub fn is_normal(self) -> bool {
         !self.drafts && !self.future
     }
+
+    /// The names of what is added, such as `drafts, future`; `None` for the normal build.
+    #[must_use]
+    pub fn label(self) -> Option<String> {
+        let names: Vec<&str> = [(self.drafts, "drafts"), (self.future, "future")]
+            .into_iter()
+            .filter_map(|(on, name)| on.then_some(name))
+            .collect();
+        (!names.is_empty()).then(|| names.join(", "))
+    }
 }
 
 /// The site's time zone and the moment of the build, against which future-dated content is
@@ -187,6 +197,17 @@ mod tests {
     fn date_of_gives_the_civil_date_in_the_site_zone() {
         let moment: Timestamp = "2026-10-25T23:30:00Z".parse().unwrap();
         assert_eq!(clock().date_of(moment), Date::new(2026, 10, 26).unwrap());
+    }
+
+    #[test]
+    fn a_preview_names_what_it_adds() {
+        assert_eq!(Preview::default().label(), None);
+        let both = Preview {
+            drafts: true,
+            future: true,
+        };
+        assert_eq!(both.label().as_deref(), Some("drafts, future"));
+        assert!(!both.is_normal());
     }
 
     #[test]

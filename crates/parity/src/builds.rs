@@ -8,7 +8,7 @@
 //! |-|-|
 //! | `site/` | Folia's output, whole; absent if the build failed |
 //! | `sha256.txt` | one line per file of `site/`, `<sha256>  ./<path>`, sorted by path bytewise (the A0 reference's format) |
-//! | `build.json` | the inputs and the result ([`Record`]) |
+//! | `build.json` | the inputs and the result ([`Record`]), including that it is not a preview build (`preview`: no drafts, no future documents) |
 //! | `build.log` | the summary, then each warning or problem, one per line |
 //!
 //! Nothing is ever deleted or overwritten: an existing destination, or one inside the site, is
@@ -20,7 +20,7 @@ use std::process::Command;
 
 use folia::build::{Built, build};
 use folia::config::Config;
-use folia_core::content::Diagnostic;
+use folia_core::content::{Diagnostic, Preview};
 use jiff::Timestamp;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -73,6 +73,9 @@ pub struct Record {
     pub result: Outcome,
     /// How many files `site/` holds; `None` when the build failed.
     pub files: Option<usize>,
+    /// What the build added to the normal one. Parity always builds the default, so this is
+    /// always the normal build; it is recorded so that a kept build says so.
+    pub preview: Preview,
 }
 
 /// A directory, and the git commit it is checked out at, when it is in a repository.
@@ -189,6 +192,7 @@ pub fn keep(request: &Request) -> Result<Kept, String> {
             .map(str::to_owned),
         result,
         files,
+        preview: Preview::default(),
     };
     let json = serde_json::to_string_pretty(&record).map_err(|e| e.to_string())? + "\n";
     write(&dir.join("build.json"), &json)?;

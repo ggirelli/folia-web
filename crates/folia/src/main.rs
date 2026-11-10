@@ -10,8 +10,10 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use folia::build::build;
+use folia::build::{build_as, preview_notice};
 use folia::config::Config;
+use folia::output::Writer;
+use folia_core::content::Preview;
 use jiff::Timestamp;
 
 #[derive(Parser)]
@@ -37,6 +39,9 @@ enum Command {
         /// Where to write the site: a directory outside it, absent, empty or written by Folia
         #[arg(long)]
         dest: PathBuf,
+        /// Also build documents dated after now. The output is a preview, not for publishing
+        #[arg(long)]
+        future: bool,
     },
     /// Build the site, serve it on this machine, and build it again when its sources change,
     /// reloading the pages open in a browser
@@ -64,24 +69,45 @@ enum Command {
         /// The port to listen on; 0 picks a free one
         #[arg(long, default_value_t = 4000)]
         port: u16,
+        /// Also build documents dated after now. The output is a preview, not for publishing
+        #[arg(long)]
+        future: bool,
     },
 }
 
 fn main() -> ExitCode {
     match Cli::parse().command {
-        Command::Build { site, config, dest } => build_site(&site, config, &dest),
+        Command::Build {
+            site,
+            config,
+            dest,
+            future,
+        } => build_site(
+            &site,
+            config,
+            &dest,
+            Preview {
+                future,
+                ..Preview::default()
+            },
+        ),
         Command::Serve {
             site,
             config,
             dest,
             host,
             port,
+            future,
         } => {
             let options = folia::serve::Options {
                 config: config.unwrap_or_else(|| site.join("_folia/folia.toml")),
                 site,
                 dest,
                 address: SocketAddr::new(host, port),
+                preview: Preview {
+                    future,
+                    ..Preview::default()
+                },
             };
             match folia::serve::run(&options) {
                 Err(error) => {
@@ -93,7 +119,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn build_site(site: &Path, config: Option<PathBuf>, dest: &Path) -> ExitCode {
+fn build_site(site: &Path, config: Option<PathBuf>, dest: &Path, preview: Preview) -> ExitCode {
     let config_path = config.unwrap_or_else(|| site.join("_folia/folia.toml"));
     let config = match Config::load(&config_path) {
         Ok(config) => config,
@@ -102,7 +128,14 @@ fn build_site(site: &Path, config: Option<PathBuf>, dest: &Path) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    match build(site, &config, dest, Timestamp::now()) {
+    match build_as(
+        site,
+        &config,
+        dest,
+        Timestamp::now(),
+        Writer::Build,
+        preview,
+    ) {
         Ok(built) => {
             for warning in &built.warnings {
                 eprintln!("warning: {warning}");
@@ -116,14 +149,22 @@ fn build_site(site: &Path, config: Option<PathBuf>, dest: &Path) -> ExitCode {
                     built.skipped.len()
                 );
             }
+            let notice = preview_notice(built.preview);
+            if let Some(label) = built.preview.label() {
+                eprintln!(
+                    "warning: this is a preview build ({label}): it is not for publishing, and \
+                     `folia build` will not replace it with a normal build"
+                );
+            }
             println!(
-                "Built {} pages, {} redirect stubs, {} generated files and {} static files into {}; {} planned outputs are not built yet.",
+                "Built {} pages, {} redirect stubs, {} generated files and {} static files into {}; {} planned outputs are not built yet.{}",
                 built.pages.len(),
                 built.stubs.len(),
                 built.artifacts.len(),
                 built.statics,
                 dest.display(),
-                built.not_built
+                built.not_built,
+                notice.unwrap_or_default()
             );
             ExitCode::SUCCESS
         }

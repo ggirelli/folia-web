@@ -16,6 +16,12 @@
 //!   its place, and the old one (which the record vouched for) removed. Between the two renames
 //!   the destination is briefly absent, but it is never partial; if the second rename fails, the
 //!   old one is put back. Last, the record is rewritten.
+//! - **A preview build never mixes with a normal one.** A build with `--drafts` or `--future` is
+//!   not for publishing, so its record says so, with lines no top-level entry can have
+//!   (`/folia drafts`, `/folia future`); `folia build` refuses to replace a destination whose
+//!   record differs from it in being a preview, in either direction, so that a preview is never
+//!   deployed by mistake and a published site is never lost to a preview. `folia serve` may
+//!   change a destination either way.
 //! - **`folia serve` keeps to destinations it wrote** ([`claim_for_serve`]): its record says so,
 //!   with a line no top-level entry can have (`/folia serve`), which `folia build` reads as one
 //!   more entry and ignores. Serve refuses a destination `folia build` wrote, which may be about
@@ -27,7 +33,7 @@ use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 
-use folia_core::content::Diagnostic;
+use folia_core::content::{Diagnostic, Preview};
 
 /// What an output holds.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -59,19 +65,22 @@ pub fn write(
     site_root: &Path,
     outputs: &BTreeMap<String, Content>,
 ) -> Result<(), Diagnostic> {
-    write_as(dest, site_root, outputs, Writer::Build)
+    write_as(dest, site_root, outputs, Writer::Build, Preview::default())
 }
 
-/// Writes the destination as [`write()`] does, for the command `writer`.
+/// Writes the destination as [`write()`] does, for the command `writer`, as a build with what
+/// `preview` adds to the normal one.
 ///
 /// # Errors
 ///
-/// As [`write()`].
+/// As [`write()`]; and fails, changing nothing, when `writer` is `folia build` and the
+/// destination's record says it holds a preview build and this is not one, or the reverse.
 pub fn write_as(
     dest: &Path,
     site_root: &Path,
     outputs: &BTreeMap<String, Content>,
     writer: Writer,
+    preview: Preview,
 ) -> Result<(), Diagnostic> {
     let (parent, name) = resolve(dest, site_root)?;
     let dest = parent.join(&name);
@@ -79,14 +88,14 @@ pub fn write_as(
     let old = parent.join(format!(".{name}.folia-old"));
     let record = record_path(&parent, &name);
     check_no_leftovers(&dest, &new, &old)?;
-    check_replaceable(&dest, &record)?;
+    check_replaceable(&dest, &record, writer, preview)?;
 
     if let Err(problem) = fill(&new, outputs) {
         let _ = fs::remove_dir_all(&new);
         return Err(problem);
     }
     let had_dest = swap(&new, &dest, &old)?;
-    write_record(&record, &dest, outputs, writer)?;
+    write_record(&record, &dest, outputs, writer, preview)?;
     if had_dest {
         // The old directory is the previous output the record vouched for: Folia's to remove.
         fs::remove_dir_all(&old).map_err(|e| {
@@ -127,6 +136,19 @@ const RECORD_HEADER: &str = "folia-output 1";
 /// with a `/`.
 const SERVE_MARK: &str = "/folia serve";
 
+/// The record's lines that say a preview build wrote the destination, with drafts or future
+/// documents: like [`SERVE_MARK`], no top-level entry is named with a `/`.
+const DRAFTS_MARK: &str = "/folia drafts";
+const FUTURE_MARK: &str = "/folia future";
+
+/// What the record's text says the destination's build added to the normal one.
+fn recorded_preview(text: &str) -> Preview {
+    Preview {
+        drafts: text.lines().any(|line| line == DRAFTS_MARK),
+        future: text.lines().any(|line| line == FUTURE_MARK),
+    }
+}
+
 /// Checks `dest` is a destination `folia serve` may write the site at `site_root` to, and
 /// returns it, resolved: one apart from the site, not a symbolic link, and absent, empty, or
 /// written by `folia serve`. In one it wrote, what an interrupted serve left beside it is
@@ -154,7 +176,7 @@ pub fn claim_for_serve(dest: &Path, site_root: &Path) -> Result<PathBuf, Diagnos
         recover(&dest, &new, &old)?;
     }
     check_no_leftovers(&dest, &new, &old)?;
-    check_replaceable(&dest, &record)?;
+    check_replaceable(&dest, &record, Writer::Serve, Preview::default())?;
     let empty = match fs::read_dir(&dest) {
         Ok(mut entries) => entries.next().is_none(),
         Err(e) if e.kind() == io::ErrorKind::NotFound => true,
@@ -219,12 +241,23 @@ fn top_level(outputs: &BTreeMap<String, Content>) -> BTreeSet<String> {
 }
 
 /// The record's text: the header, the directory it vouches for, whether `folia serve` wrote it,
-/// and each top-level entry.
-fn record_text(dest: &Path, outputs: &BTreeMap<String, Content>, writer: Writer) -> String {
+/// what a preview build added, and each top-level entry.
+fn record_text(
+    dest: &Path,
+    outputs: &BTreeMap<String, Content>,
+    writer: Writer,
+    preview: Preview,
+) -> String {
     let mut text = format!("{RECORD_HEADER}\n{}\n", dest.display());
     if writer == Writer::Serve {
         text.push_str(SERVE_MARK);
         text.push('\n');
+    }
+    for (on, mark) in [(preview.drafts, DRAFTS_MARK), (preview.future, FUTURE_MARK)] {
+        if on {
+            text.push_str(mark);
+            text.push('\n');
+        }
     }
     for entry in top_level(outputs) {
         text.push_str(&entry);
@@ -238,9 +271,10 @@ fn write_record(
     dest: &Path,
     outputs: &BTreeMap<String, Content>,
     writer: Writer,
+    preview: Preview,
 ) -> Result<(), Diagnostic> {
     let tmp = record.with_extension("folia-output.tmp");
-    fs::write(&tmp, record_text(dest, outputs, writer))
+    fs::write(&tmp, record_text(dest, outputs, writer, preview))
         .and_then(|()| fs::rename(&tmp, record))
         .map_err(|e| {
             let _ = fs::remove_file(&tmp);
@@ -253,8 +287,14 @@ fn write_record(
         })
 }
 
-/// Fails unless `dest` is absent, empty, or a previous Folia output its record vouches for.
-fn check_replaceable(dest: &Path, record: &Path) -> Result<(), Diagnostic> {
+/// Fails unless `dest` is absent, empty, or a previous Folia output its record vouches for; and,
+/// for `folia build`, unless that output is a preview exactly when this build is one.
+fn check_replaceable(
+    dest: &Path,
+    record: &Path,
+    writer: Writer,
+    preview: Preview,
+) -> Result<(), Diagnostic> {
     let refuse = |why: &str| {
         Diagnostic::site(format!(
             "cannot write the site to {}: {why}. Folia only replaces a directory it wrote itself; \
@@ -292,6 +332,9 @@ fn check_replaceable(dest: &Path, record: &Path) -> Result<(), Diagnostic> {
             "it is not empty, and its record is not for this directory",
         ));
     }
+    if writer == Writer::Build {
+        check_same_kind(dest, recorded_preview(&text), preview)?;
+    }
     let wrote: BTreeSet<&str> = lines.collect();
     let foreign: Vec<&String> = held
         .iter()
@@ -306,6 +349,26 @@ fn check_replaceable(dest: &Path, record: &Path) -> Result<(), Diagnostic> {
         )));
     }
     Ok(())
+}
+
+/// Fails when the destination's build (`held`) and this one (`new`) differ in being a preview.
+fn check_same_kind(dest: &Path, held: Preview, new: Preview) -> Result<(), Diagnostic> {
+    let why = match (held.label(), new.label()) {
+        (Some(held), None) => format!(
+            "it holds a preview build ({held}), not for publishing, and this build is a normal \
+             one. A normal build does not replace a preview one"
+        ),
+        (None, Some(new)) => format!(
+            "it holds a normal build, and this build is a preview one ({new}), not for \
+             publishing. A preview build does not replace a normal one"
+        ),
+        _ => return Ok(()),
+    };
+    Err(Diagnostic::site(format!(
+        "cannot write the site to {}: {why}; nothing was changed. Build into another directory, \
+         or remove this one yourself",
+        dest.display()
+    )))
 }
 
 /// The destination's absolute parent directory, created if need be, and its name; checked to be

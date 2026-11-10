@@ -243,3 +243,57 @@ fn the_exit_status_is_0_for_a_build_1_for_a_failed_build_and_2_for_usage_and_con
     assert_eq!(failed.status.code(), Some(1), "{}", stderr(&failed));
     assert!(!inside.exists());
 }
+
+/// `folia build` with more arguments.
+fn folia_with(site: &Path, dest: &Path, extra: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_folia"))
+        .arg("build")
+        .arg("--site")
+        .arg(site)
+        .arg("--dest")
+        .arg(dest)
+        .args(extra)
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn build_with_future_marks_the_summary_and_the_record() {
+    let scratch = Scratch::new("future");
+    let dest = scratch.path("out");
+    let output = folia_with(&example_site(), &dest, &["--future"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    let summary = String::from_utf8_lossy(&output.stdout).into_owned();
+    assert!(
+        summary
+            .trim_end()
+            .ends_with("PREVIEW BUILD (future): not for publishing."),
+        "{summary}"
+    );
+    assert!(stderr(&output).contains("warning: this is a preview build (future)"));
+    let record = std::fs::read_to_string(scratch.path(".out.folia-output")).unwrap();
+    assert!(
+        record.lines().any(|line| line == "/folia future"),
+        "{record}"
+    );
+
+    let normal = folia(&example_site(), &scratch.path("normal"));
+    let summary = String::from_utf8_lossy(&normal.stdout).into_owned();
+    assert!(!summary.contains("PREVIEW"), "{summary}");
+}
+
+#[test]
+fn a_normal_build_over_a_preview_destination_is_refused() {
+    let scratch = Scratch::new("preview-refused");
+    let dest = scratch.path("out");
+    let preview = folia_with(&example_site(), &dest, &["--future"]);
+    assert!(preview.status.success(), "{}", stderr(&preview));
+    let normal = folia(&example_site(), &dest);
+    assert_eq!(normal.status.code(), Some(1), "{}", stderr(&normal));
+    assert!(
+        stderr(&normal).contains("it holds a preview build (future)"),
+        "{}",
+        stderr(&normal)
+    );
+    assert!(dest.join("index.html").exists());
+}
