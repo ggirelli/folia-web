@@ -112,7 +112,8 @@ directory with a dated file name and `published: false`
 
 ## `folia serve`
 
-- Every change builds the whole site again; there is no incremental build.
+- Every change builds the whole site again; there is no incremental build. Only the files whose
+  bytes changed are written, though.
 - A git commit alone triggers nothing, though a page's last-modified date comes from its last
   commit: build again by changing a file.
 - The served site's URL is the local address, so its output differs from production's. Deploy
