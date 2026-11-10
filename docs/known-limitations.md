@@ -87,18 +87,16 @@ false.
 
 ### Drafts
 
-Drafts, future-dated content and `published: false` documents are built only with `--drafts`,
-`--future` and `--unpublished`, and such a build is a preview (see [previewing drafts and scheduled posts](guide/building.md#previewing-drafts-and-scheduled-posts)).
-Jekyll's flags differ from Folia's in these ways:
+Folia does not read a `_drafts` directory and has no `--drafts` flag; Jekyll has both. A draft is a
+document with `published: false`, built only with `--unpublished`, and scheduled content is built
+only with `--future`. Such a build is a preview (see
+[previewing drafts and scheduled posts](guide/building.md#previewing-drafts-and-scheduled-posts)).
 
-- `--drafts` reads only the `_drafts` directory at the site's root, and only its Markdown files
-  (`.md`, `.markdown`), as posts. A `_drafts` directory anywhere else is not read.
-- A draft's date is its file's modification time. A checkout resets modification times, and
-  editing a draft changes its date and URL, so a draft's output is not reproducible.
-- `--unpublished` is independent of the other two, as in Jekyll: `--drafts` alone leaves out a
-  draft with `published: false`.
-- A date at the start of a draft's file name is not read: it stays in the slug, which is the file
-  name without its extension (unless the front matter sets `slug`).
+Jekyll dates a draft by its file's modification time. A checkout resets modification times, and
+editing a draft changes its date and URL, so a draft's output is not reproducible. Folia dates
+every post by its file name. Instead of a `_drafts` directory, put the draft in the posts
+directory with a dated file name and `published: false`
+([migrating](migrating/index.md#sites-with-a-_drafts-directory)).
 
 ## Source-content issues Folia reproduces
 
@@ -119,7 +117,7 @@ Jekyll's flags differ from Folia's in these ways:
   commit: build again by changing a file.
 - The served site's URL is the local address, so its output differs from production's. Deploy
   what `folia build` writes.
-- `folia serve` takes `--drafts`, `--future` and `--unpublished` like `folia build`. It may switch
+- `folia serve` takes `--future` and `--unpublished` like `folia build`. It may switch
   its destination between a normal and a preview build, which `folia build` refuses to do.
 
 ## Not covered by parity checks

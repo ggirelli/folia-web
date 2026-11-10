@@ -13,9 +13,9 @@ folia build --site ../my-site --dest ../my-site-out
 | `--dest` | required | Where to write the site |
 
 `folia --version` prints the version, and `folia build --help` the options. Its
-other command is [`folia serve`](#previewing-while-you-write). Both take `--drafts`,
-`--future` and `--unpublished`, which build drafts, scheduled posts and unpublished documents for a
-preview ([below](#previewing-drafts-and-scheduled-posts)). A post dated after the build, or with
+other command is [`folia serve`](#previewing-while-you-write). Both take `--future` and
+`--unpublished`, which build scheduled posts and unpublished documents for a preview
+([below](#previewing-drafts-and-scheduled-posts)). A post dated after the build, or with
 `published: false`, is not built.
 
 While it builds, Folia prints **warnings** (a broken wiki-link) and `skipped:` lines for any
@@ -55,36 +55,28 @@ To build into a directory that holds something else, empty it yourself.
 
 ## Previewing drafts and scheduled posts
 
-Three flags build content that a normal build leaves out, so that you can look at it before it is
+A draft is a document with `published: false` in its front matter, and a normal build leaves it
+out. Two flags build what a normal build leaves out, so that you can look at it before it is
 published. They default to off, and a build without them is unchanged. They are command-line
 flags on `folia build` and `folia serve`, not configuration keys.
 
 ```sh
-folia build --site ../my-site --dest ../my-site-preview --drafts --future --unpublished
+folia build --site ../my-site --dest ../my-site-preview --future --unpublished
 ```
 
-- **`--drafts`** also builds the posts in `_drafts/` at the site's root, including those in its
-  subdirectories. Only Markdown files (`.md`, `.markdown`) are read, as posts: other files
-  in `_drafts/` are left out, a `_drafts` directory elsewhere in the site is not read, and the
-  configuration's `exclude` still applies. A draft's date is the modification time of its
-  file, as a civil date in the site's time zone. Its slug is the file name without its extension,
-  so a date at the start of the name stays in the slug (`2026-01-01-idea.md` is
-  `2026-01-01-idea`) and does not date the draft; a `slug` in its front matter replaces it. A
-  `date` in a draft's front matter is an error, as it is for any post.
-- **`--future`** also builds the posts, garden notes and micro entries dated after the build.
-- **`--unpublished`** also builds the documents whose front matter says `published: false`: posts,
-  garden notes, micro entries and pages (and stylesheets). It is independent of the other two:
-  `--drafts` alone still leaves out a draft with `published: false`, and a future-dated one needs
-  `--future` as well.
-- A modification time is not reproducible: a fresh checkout resets it, and editing a draft
-  changes its date and so its URL. Drafts therefore exist only with the flag.
+- **`--unpublished`** builds the documents whose front matter says `published: false`: posts,
+  garden notes, micro entries and pages (and stylesheets). A draft post is written like any
+  post, in the posts directory with a dated file name, and gets its date from the name. A draft
+  that is also dated after the build needs `--future` as well.
+- **`--future`** builds the posts, garden notes and micro entries dated after the build: scheduled
+  content.
 
 A build with any of them is a **preview build**, and Folia says so in three places:
 
-- the summary line ends with `PREVIEW BUILD (drafts, future, unpublished): not for publishing.`,
+- the summary line ends with `PREVIEW BUILD (future, unpublished): not for publishing.`,
   naming the flags that were set;
 - a `warning:` line on stderr says the same;
-- the record of the destination, `.<name>.folia-output`, gets a `/folia drafts`, `/folia future`
+- the record of the destination, `.<name>.folia-output`, gets a `/folia future`
   and/or `/folia unpublished` line, which is how `folia build` recognizes the directory later (see
   [the destination](#the-destination)).
 
