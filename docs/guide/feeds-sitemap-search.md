@@ -8,6 +8,16 @@ automatic as noted.
 A page's `redirect_from` makes a stub page at each old URL that redirects to the new one, and all
 of them are listed in `/redirects.json`. The stub's target uses the configuration's `[site] url`.
 
+A stub refreshes to its target at once, and names it as its canonical URL. On a dark site, give the
+stubs the site's colours with [`[redirects]`](../configuration.md#redirects), so that following an
+old URL does not flash a white page:
+
+```toml
+[redirects]
+background = "#1d1f21"
+color-scheme = "dark"
+```
+
 ## Atom feeds
 
 Written only when the configuration has [`[feeds]`](../configuration.md#feeds):

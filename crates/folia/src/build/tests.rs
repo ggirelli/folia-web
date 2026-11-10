@@ -153,6 +153,7 @@ fn config() -> Config {
         garden: crate::config::GardenConfig::default(),
         feeds: None,
         search: None,
+        redirects: crate::config::RedirectsConfig::default(),
     }
 }
 
@@ -176,7 +177,10 @@ fn the_slice_builds_its_page_its_stub_and_the_static_files() {
     );
     assert_eq!(
         fixture.read("blog/about.html"),
-        redirect_stub("https://ggirelli.info/about")
+        redirect_stub(
+            "https://ggirelli.info/about",
+            &crate::config::RedirectsConfig::default()
+        )
     );
     assert_eq!(fixture.read("CNAME"), "ggirelli.info\n");
     assert_eq!(fixture.read("assets/images/cc.png"), "png");

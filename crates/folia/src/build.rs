@@ -161,7 +161,7 @@ pub fn build_as(
         let to = format!("{}{}", config.site.url, entry.route.url());
         for from in &entry.redirect_from {
             built.stubs.push(from.clone());
-            let stub = Content::Bytes(redirect_stub(&to).into_bytes());
+            let stub = Content::Bytes(redirect_stub(&to, &config.redirects).into_bytes());
             add(&mut outputs, from.output_path(), stub)
                 .unwrap_or_else(|clash| problems.push(clash));
         }

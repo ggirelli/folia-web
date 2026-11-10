@@ -101,6 +101,20 @@ Without it, no search script is written.
 | `fragment` | string, **required** | The script's code after the `documents` array, read from the site and written as it is |
 | `content-block` | string | The template block that holds a page's content. A listing is indexed by that block's text without the navigation and footer; without it, by the whole rendered page |
 
+## `[redirects]`
+
+How the redirect stubs (one per `redirect_from` URL) look for the moment they show. Without it, a
+stub is what `jekyll-redirect-from` wrote, byte for byte, and the browser paints its own white
+background until the target loads: on a dark site, a white flash.
+
+| Key | Type | What |
+|-|-|-|
+| `background` | string | A CSS colour (`#1d1f21`, `rgb(29, 31, 33)`), painted from the stub's first frame |
+| `color-scheme` | string | The stub's colour scheme: one or more of `normal`, `light`, `dark` and `only` (`dark`, `light dark`) |
+
+Each is written into every stub as it is, so a value that is not a colour or a colour scheme is
+refused.
+
 ## `[sass]`
 
 | Key | Type | Default | What |
@@ -192,6 +206,10 @@ kinds = ["notes", "likes", "bookmarks", "rsvps"]
 
 [garden]
 author = "ada"
+
+[redirects]
+background = "#1d1f21"
+color-scheme = "dark"
 
 [blog]
 index = { source = "blog/index.html", template = "blog_index.html" }
