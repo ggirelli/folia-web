@@ -5,16 +5,18 @@ that one site, and it is [fully vibe coded](DISCLAIMER.md).
 
 ## Getting started
 
-You need [just](https://just.systems), a Rust toolchain with `cargo-deny`, Ruby with Bundler
-(for the Jekyll reference builds), [uv](https://docs.astral.sh/uv/) (for the docs, shellcheck and
-Ruff) and Node.js (for markdownlint); the parity recipes also need a checkout of the reference
-Jekyll site (`FOLIA_SITE`) and its owner's private inputs (see
+You need [just](https://just.systems), a Rust toolchain with `cargo-deny`,
+[uv](https://docs.astral.sh/uv/) (for the docs, shellcheck and Ruff) and Node.js (for
+markdownlint); that is all `just check` needs. Ruby with Bundler (for StandardRB and the Jekyll
+reference builds) is needed only for `just check-parity` and the Ruby recipes. The parity recipes
+also need a checkout of the reference Jekyll site (`FOLIA_SITE`) and its owner's private inputs (see
 [A site's private inputs](docs/development.md#a-sites-private-inputs)).
 The linters are pinned in the justfile and fetched on first use; nothing needs installing globally.
 
 ```sh
 just          # list the recipes
 just check    # run every check
+just check-parity    # the parity-only checks (need Ruby)
 just docs     # preview the docs
 ```
 
@@ -25,8 +27,9 @@ check it in a browser, with no private inputs.
 
 1. Keep changes focused: one feature or fix per change, split into small commits that each pass
    the checks.
-2. Run `just check`. CI runs the same recipes on every pull request, and `main` only takes
-   changes that pass them.
+2. Run `just check`, and `just check-parity` too when the change touches `crates/parity`, `parity/`,
+   the parity scripts or the Ruby files. CI runs the same recipes on every pull request, and `main`
+   only takes changes that pass them.
 3. Add or update tests and checks for what you changed.
 4. Update the docs that describe it: the guide in [docs/](docs/) (what a user does) or
    [docs/development.md](docs/development.md) (how it is built), and [README.md](README.md) for

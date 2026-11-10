@@ -19,7 +19,7 @@ writes what Jekyll wrote.
 | git | Folia reads dates from the site's git history, so a site must be a git repository | `git --version` |
 | [uv](https://docs.astral.sh/uv/) | shellcheck, Ruff and MkDocs, pinned in the justfile and fetched on first use | `uvx --version` |
 | Node.js, with `npx` | markdownlint, pinned in the justfile | `node --version` |
-| Ruby and Bundler | StandardRB, `just baseline-negative`, and Jekyll baselines | `ruby --version`, `bundle --version` |
+| Ruby and Bundler | `just check-parity` (StandardRB, `just baseline-negative`), and Jekyll baselines | `ruby --version`, `bundle --version` |
 | Python 3 | the parity scripts and `just serve` (standard library only) | `python3 --version` |
 | [Dart Sass](https://github.com/sass/dart-sass/releases/tag/1.100.0), exactly 1.100.0 | only sites with Sass stylesheets; the example site has none | `sass --version` prints `1.100.0` |
 | Docker | only `just toolchain-compare` and `just toolchain-negative` | `docker --version` |
@@ -72,7 +72,8 @@ Environment variables:
 ## Automated checks
 
 ```sh
-just check          # every check below, as CI runs them
+just check          # every check below but the parity ones, as CI runs them
+just check-parity   # the parity-only checks (need Ruby)
 ```
 
 Or one at a time:
@@ -85,12 +86,12 @@ Or one at a time:
 | `just doc` | the API docs, warnings as errors |
 | `just deny` | advisories, licences and sources of the dependencies |
 | `just file-length` | no source file over 1,000 lines |
-| `just lint-sh`, `just lint-md`, `just lint-rb`, `just lint-py` | shellcheck, markdownlint, StandardRB, Ruff |
-| `just baseline-negative`, `just accept-negative` | the baseline and acceptance scripts refuse what they must, on throwaway repositories |
+| `just lint-sh`, `just lint-md`, `just lint-py` | shellcheck, markdownlint, Ruff |
+| `just check-parity` (`just lint-rb`, `just baseline-negative`, `just accept-negative`) | StandardRB, and the baseline and acceptance scripts refuse what they must, on throwaway repositories |
 | `just docs-build` | this documentation, with MkDocs in strict mode |
 
 CI runs the same recipes in the jobs [Checks](../development.md#checks) lists, so a branch that
-passes `just check` passes CI.
+passes `just check` (and `just check-parity`) passes CI.
 
 Fixture tests build throwaway sites in the temporary directory, each its own git repository, and
 need nothing else. Two are worth knowing by name:

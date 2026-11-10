@@ -99,13 +99,13 @@ Each mode crate depends on `folia-core` only, never on another mode.
   - `verify-baseline.sh`: runs the baseline's acceptance checks on fresh builds, which it keeps;
     an existing baseline is left as it is. `baseline-negative.sh` shows both scripts refuse
     changes outside the approved paths, on throwaway repositories with a stand-in for Jekyll
-    (part of `just check`).
+    (part of `just check-parity`).
   - `determinism-negative.sh`: shows the determinism check fails on a changed reference and
     refuses an existing or misplaced directory, a malformed reference and other templates.
   - `accept.sh`: the acceptance runner behind `just accept`: runs every check built so far
     against a baseline, in order, into one evidence folder. `accept-negative.sh` shows it fails,
     refuses and records a tree with changes as it should, from a throwaway copy with a stand-in
-    for the checks (part of `just check`).
+    for the checks (part of `just check-parity`).
   - `determinism-reference.sh`: chooses the determinism reference, fail-closed: A0's for
     `FOLIA_A0_LABEL`, another baseline's only when configured and declared its own (`just determinism`,
     `just determinism-negative`, `just accept`).
@@ -279,7 +279,9 @@ name into `accepted_by` or `owners` on their own.
 
 ## Checks
 
-`just check` runs every check; CI runs the same recipes, in three jobs of `.github/workflows/ci.yml`
+`just check` runs every check that needs Rust, uv and Node; `just check-parity` runs the
+parity-only ones, which need Ruby, and is required when a change touches `crates/parity`,
+`parity/`, the parity scripts or the Ruby files. CI runs the same recipes, in four jobs of `.github/workflows/ci.yml`
 and one of `.github/workflows/docs.yml`, which also publishes the docs to
 [GitHub Pages](https://ggirelli.github.io/folia-web/) from `main`:
 
@@ -288,5 +290,6 @@ and one of `.github/workflows/docs.yml`, which also publishes the docs to
 | `rust` | `fmt-check`, `clippy` (pedantic, warnings are errors), `test`, `doc` |
 | `rust-macos` | `cargo test --workspace` on macOS (informational: `continue-on-error`, not required) |
 | `deny` | `cargo deny check` (advisories, licences, duplicate crates, sources) |
-| `lint` | `file-length`, `lint-sh` (shellcheck), `lint-md` (markdownlint), `lint-rb` (StandardRB), `lint-py` (Ruff) |
+| `lint` | `file-length`, `lint-sh` (shellcheck), `lint-md` (markdownlint), `lint-py` (Ruff) |
+| `parity` | `check-parity`: `lint-rb` (StandardRB), `baseline-negative`, `accept-negative` |
 | `docs` | `docs-build` (MkDocs, strict) |
