@@ -5,6 +5,7 @@
 //! - [`build`]: the pipeline, so far for the first vertical slice (plan v6, §12.2 step 1).
 //! - [`render`]: pages through their `MiniJinja` templates.
 //! - [`output`]: the destination, written whole or not at all.
+//! - [`serve`]: `folia serve`, which builds the site again as it changes and serves it.
 
 pub mod build;
 pub mod config;
@@ -15,5 +16,6 @@ pub mod redirects;
 pub mod render;
 pub mod sass;
 pub mod search;
+pub mod serve;
 pub mod site;
 pub mod sitemap;
