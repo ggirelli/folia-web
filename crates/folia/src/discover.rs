@@ -9,8 +9,9 @@
 //! - Below a mode root, every file is a document of that mode. Below the blog root, only files
 //!   named with a date (`2021-08-08-title.md`) are posts; Jekyll ignores the others.
 //! - With drafts asked for, the `_drafts` directory at the site's root (unless `exclude` names
-//!   it) is read too: every file below it, by the same rules for hidden and excluded names, is
-//!   a post of the blog, whatever its name.
+//!   it) is read too: every Markdown file (`.md` or `.markdown`) below it, by the same rules for
+//!   hidden and excluded names, is a post of the blog, whatever its name. Other files there are
+//!   left out.
 //! - Anywhere else, a file with front matter is a page, and any other file is static.
 //!
 //! Jekyll applies the hidden-name rule below the micro and garden roots to the top directory and
@@ -135,7 +136,7 @@ impl Walker<'_> {
             && !self.exclude.is_match(path)
     }
 
-    /// Walks the drafts directory, where every file is a post of the blog, dated or not.
+    /// Walks the drafts directory, where every Markdown file is a post of the blog, dated or not.
     fn walk_drafts(&mut self, dir: &str) {
         for (name, is_dir) in self.entries(dir) {
             let path = join(dir, &name);
@@ -143,8 +144,12 @@ impl Walker<'_> {
                 self.found.excluded.push((path, reason));
             } else if is_dir {
                 self.walk_drafts(&path);
-            } else {
+            } else if is_markdown(&name) {
                 self.found.documents.push((Mode::Blog, DocId::new(path)));
+            } else {
+                self.found
+                    .excluded
+                    .push((path, "not a Markdown file, so not a draft"));
             }
         }
     }
@@ -221,6 +226,12 @@ impl Walker<'_> {
             }
         }
     }
+}
+
+fn is_markdown(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown"))
 }
 
 fn join(dir: &str, name: &str) -> String {

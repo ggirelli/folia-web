@@ -195,6 +195,29 @@ fn drafts_are_documents_of_the_blog_only_when_asked() {
 }
 
 #[test]
+fn other_files_inside_drafts_are_not_documents() {
+    let site = Site::new(
+        "drafts-other",
+        &[
+            ("_drafts/idea.md", FRONT),
+            ("_drafts/sketch.png", "not markdown"),
+            ("_drafts/series/notes.txt", "words"),
+        ],
+    );
+    let found = discover(&site.0, &config(&[]), true).unwrap();
+    assert_eq!(ids(&found.documents, Mode::Blog), ["_drafts/idea.md"]);
+    assert_eq!(found.statics.len(), 0);
+    assert!(found.excluded.contains(&(
+        "_drafts/sketch.png".into(),
+        "not a Markdown file, so not a draft"
+    )));
+    assert!(found.excluded.contains(&(
+        "_drafts/series/notes.txt".into(),
+        "not a Markdown file, so not a draft"
+    )));
+}
+
+#[test]
 fn a_drafts_directory_below_the_root_is_not_read() {
     let site = Site::new("drafts-below", &[("notes/_drafts/idea.md", FRONT)]);
     let found = discover(&site.0, &config(&[]), true).unwrap();
