@@ -132,6 +132,8 @@ Ctrl+C.
 - **Every change builds the whole site**, with the configuration read again and `site.url` set to
   the local address, so that links stay on the local server. The output therefore differs from
   production's in the URL: `folia build` is still what you deploy.
+- **Each rebuild is stamped with the time** in the terminal, in your local time zone:
+  `[14:03:22] Changed: _posts/hello.md; building again`.
 - **A failed build keeps the last good one.** The build is written as `folia build` writes it, whole
   or not at all. The problems are printed in the terminal and shown over the open pages, which
   clear when a build succeeds.
