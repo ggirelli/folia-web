@@ -36,7 +36,7 @@
 use folia_core::content::markdown::{description, excerpt_html, to_html};
 use folia_core::content::{
     Diagnostic, LastCommits, SiteClock, SourceDoc, Toc, TocPlacement, cover, hide_website_junk,
-    interactions, modified, syndications, table_of_contents,
+    interactions, lang as front_lang, modified, syndications, table_of_contents,
 };
 use folia_core::publish::{EntrySummary, FeedItem, ModeOutput, PageSpec};
 use serde_json::{Value, json};
@@ -160,7 +160,7 @@ fn build_post(
     let narrow_post = narrow_post(doc).map_err(|message| problem(&message))?;
     let footer = footer(doc).map_err(|message| problem(&message))?;
 
-    let context = json!({
+    let mut context = json!({
         "url": post.route.url(),
         "title": post.title,
         "layout": "post",
@@ -181,6 +181,9 @@ fn build_post(
         "interactions": interactions(doc),
     });
 
+    if let Some(lang) = front_lang(doc) {
+        context["lang"] = lang;
+    }
     let page = PageSpec {
         route: post.route.clone(),
         template: POST_TEMPLATE.to_owned(),

@@ -63,7 +63,8 @@ matter, or `permalink:`). Without a `title`, the title is made from the file nam
 | `cover` | A picture and where it goes (`position`: `behind` the page or `after_title`) |
 | `featured`, `hidden` | `featured` posts head the blog index; `hidden` ones are left out of its listings |
 | `published`, `slug`, `permalink`, `redirect_from` | Whether it is built; its URL; old URLs that redirect to it |
-| `last_modified_at`, `lang`, `footer`, `syndications`, `narrow_post` | Extras the post template can show |
+| `lang` | Its language, as written (`[italian]` or `italian`); templates read it as `page.lang` |
+| `last_modified_at`, `footer`, `syndications`, `narrow_post` | Extras the post template can show |
 
 The **modified date** a template sees comes from the front matter, else the file's last git
 commit, else the post's date. Commit your changes: an uncommitted edit does not move it.

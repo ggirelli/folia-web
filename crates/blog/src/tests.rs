@@ -546,6 +546,25 @@ fn the_feed_reads_a_post_s_singular_category_alone() {
 }
 
 #[test]
+fn a_post_s_lang_is_passed_to_the_template_as_written() {
+    let lang = |front: &str| {
+        build_one(&[post(SAMPLE_POST, front)]).unwrap().pages[0]
+            .context
+            .get("lang")
+            .cloned()
+    };
+    assert_eq!(
+        lang("title: T\nlang: [italian]"),
+        Some(serde_json::json!(["italian"]))
+    );
+    assert_eq!(
+        lang("title: T\nlang: italian"),
+        Some(serde_json::json!("italian"))
+    );
+    assert_eq!(lang("title: T"), None);
+}
+
+#[test]
 fn a_post_s_lang_is_its_text_or_its_list_s_texts_joined() {
     let lang = |front: &str| {
         let output = build_one(&[post(SAMPLE_POST, front)])

@@ -18,6 +18,7 @@
 //! | `url`, `title`, `layout` | its URL, title, and its kind's layout (`page`, `like`, `bookmark`, `rsvp`) |
 //! | `date`, `modified` | its file name's date, at midnight in the site's time zone; its last modification (plan v7, §7.3) |
 //! | `description` | its excerpt without markup, cut to 160 characters, as HTML text |
+//! | `lang` | its front matter `lang` as written (`[italian]`), absent without one |
 //! | `author` | the configuration's micro author, if any |
 //! | `categories`, `tags` | its kind's category, `[{name, anchor}]`; none |
 //! | `hide_post_junk` | `{categories: true, tags: true}`: neither is shown |
@@ -32,7 +33,8 @@
 
 use folia_core::content::markdown::{description, excerpt_html, to_html};
 use folia_core::content::{
-    Diagnostic, LastCommits, SiteClock, SourceDoc, cover, interactions, modified, syndications,
+    Diagnostic, LastCommits, SiteClock, SourceDoc, cover, interactions, lang, modified,
+    syndications,
 };
 use folia_core::publish::{EntrySummary, FeedItem, ModeOutput, PageSpec};
 use serde_json::{Map, Value, json};
@@ -40,8 +42,9 @@ use serde_json::{Map, Value, json};
 use super::{entry_output, kind_of};
 
 /// The front matter keys every entry may have.
-const KEYS: [&str; 6] = [
+const KEYS: [&str; 7] = [
     "title",
+    "lang",
     "narrow_post",
     "syndications",
     "redirect_from",
@@ -166,6 +169,9 @@ fn build_entry(
         context[*key] = value;
     }
 
+    if let Some(lang) = lang(doc) {
+        context["lang"] = lang;
+    }
     let page = PageSpec {
         route: planned.route.clone(),
         template: format!("{layout}.html"),

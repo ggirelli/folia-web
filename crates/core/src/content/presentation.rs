@@ -164,6 +164,13 @@ pub fn cover(doc: &SourceDoc) -> Result<Cover, Diagnostic> {
     })
 }
 
+/// The front matter `lang` of `doc`, as written (text, or a list of texts like `[italian]`), or
+/// nothing without one, so that a template finds `page.lang` undefined.
+#[must_use]
+pub fn lang(doc: &SourceDoc) -> Option<Value> {
+    doc.front.json("lang")
+}
+
 /// Which parts of the site's frame `doc` hides (`hide_website_junk`), each `true` or `false`.
 /// Other keys of the mapping are ignored, as the site's templates ignored them.
 #[must_use]

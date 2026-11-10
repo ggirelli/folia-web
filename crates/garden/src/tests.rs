@@ -245,6 +245,26 @@ fn a_note_shows_its_dates_and_its_description_keeps_wiki_links_as_written() {
 }
 
 #[test]
+fn a_note_s_lang_is_passed_to_the_template_as_written() {
+    let lang = |front: &str| {
+        let docs = [with_body(
+            "_digital_garden/topic/index.md",
+            front,
+            "Body.\n",
+        )];
+        build_all(&docs).unwrap().pages[0]
+            .context
+            .get("lang")
+            .cloned()
+    };
+    assert_eq!(
+        lang("title: Tips\ndate: 2023-01-30 12:20\nlang: [italian]"),
+        Some(serde_json::json!(["italian"]))
+    );
+    assert_eq!(lang("title: Tips\ndate: 2023-01-30 12:20"), None);
+}
+
+#[test]
 fn a_description_shows_a_line_with_an_aliased_wiki_link_as_kramdown_s_table_row() {
     let docs = [with_body(
         "_digital_garden/topic/index.md",

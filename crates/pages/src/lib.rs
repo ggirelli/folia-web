@@ -30,6 +30,7 @@
 //! | `error_type` | its front matter `error-type`, the error an error page shows (`404 Not Found`), or none |
 //! | `author` | its front matter `author`, a key of the site's authors (the author page's, `layout: author`), or none |
 //! | `additional_body_class` | its front matter `additional_body_class`, a class the page's `<body>` adds, or none |
+//! | `lang` | its front matter `lang` as written (`[italian]`), absent without one |
 //! | `date`, `description`, `previous`, `next` | none: a page has no date, excerpt or neighbours |
 //! | `categories`, `tags`, `syndications` | empty |
 //!
@@ -57,15 +58,16 @@
 use folia_core::content::markdown::to_html;
 use folia_core::content::{
     Cover, Diagnostic, LastCommits, Route, SiteClock, SourceDoc, Toc, TocPlacement, cover,
-    hide_website_junk, modified, table_of_contents,
+    hide_website_junk, lang, modified, table_of_contents,
 };
 use folia_core::publish::{EntrySummary, ModeOutput, NO_LAYOUT_TEMPLATE, PageSpec, PlannedOutput};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
 /// The front matter keys a page may have, besides the switches.
-const KEYS: [&str; 14] = [
+const KEYS: [&str; 15] = [
     "layout",
+    "lang",
     "author",
     "additional_body_class",
     "title",
@@ -220,7 +222,7 @@ fn build_page(
         .map_err(|e| problem(&e))?;
     let corner_backlink = corner_backlink(doc).map_err(|message| problem(&message))?;
 
-    let context = json!({
+    let mut context = json!({
         "url": planned.route.url(),
         "title": title,
         "layout": layout,
@@ -243,6 +245,9 @@ fn build_page(
         "previous": null,
         "next": null,
     });
+    if let Some(lang) = lang(doc) {
+        context["lang"] = lang;
+    }
     let page = PageSpec {
         route: planned.route.clone(),
         template: match (claim, &layout) {
@@ -745,6 +750,14 @@ mod tests {
         }
         let about = build_one(about()).unwrap();
         assert_eq!(about.pages[0].context["toc"], Value::Null);
+    }
+
+    #[test]
+    fn a_page_s_lang_is_passed_to_the_template_as_written() {
+        let output = build_one(policy("lang: [italian]\n")).unwrap();
+        assert_eq!(output.pages[0].context["lang"], json!(["italian"]));
+        let output = build_one(policy("")).unwrap();
+        assert!(output.pages[0].context.get("lang").is_none());
     }
 
     #[test]
