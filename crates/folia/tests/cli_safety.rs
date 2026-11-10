@@ -345,3 +345,36 @@ fn build_with_future_and_unpublished_names_both_in_the_summary_and_the_record() 
         stderr(&normal)
     );
 }
+
+#[test]
+fn build_at_sets_the_build_time_and_is_not_a_preview() {
+    let scratch = Scratch::new("at");
+    let site = example_site();
+    let posted = |at: &str, name: &str| {
+        let dest = scratch.path(name);
+        let output = folia_with(&site, &dest, &["--at", at]);
+        assert!(output.status.success(), "{}", stderr(&output));
+        let summary = String::from_utf8_lossy(&output.stdout).into_owned();
+        assert!(!summary.contains("PREVIEW"), "{summary}");
+        dest.join("blog/2026/01/10/hello-folia.html").exists()
+    };
+    // The example's post is dated 2026-01-10.
+    assert!(!posted("2026-01-01T00:00:00Z", "before"));
+    assert!(posted("2026-03-01T12:00:00+02:00", "after"));
+}
+
+#[test]
+fn build_at_with_a_bad_time_fails_clearly_and_builds_nothing() {
+    let scratch = Scratch::new("at-bad");
+    for bad in ["yesterday", "2026-01-01", "2026-13-01T00:00:00Z", ""] {
+        let dest = scratch.path("out");
+        let output = folia_with(&example_site(), &dest, &["--at", bad]);
+        assert_eq!(output.status.code(), Some(2), "{bad}: {}", stderr(&output));
+        let message = stderr(&output);
+        assert!(
+            message.contains("--at") && message.contains("RFC 3339"),
+            "{bad}: {message}"
+        );
+        assert!(!dest.exists(), "{bad}");
+    }
+}

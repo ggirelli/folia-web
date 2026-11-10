@@ -11,6 +11,7 @@ folia build --site ../my-site --dest ../my-site-out
 | `--site` | `.` | The site: a git repository |
 | `--config` | `<site>/_folia/folia.toml` | The configuration ([reference](../configuration.md)) |
 | `--dest` | required | Where to write the site |
+| `--at` | now | Build as of this moment, an RFC 3339 timestamp such as `2026-01-01T00:00:00Z` ([below](#building-as-of-a-moment)) |
 
 `folia --version` prints the version, and `folia build --help` the options. Its
 other command is [`folia serve`](#previewing-while-you-write). Both take `--future` and
@@ -81,6 +82,20 @@ A build with any of them is a **preview build**, and Folia says so in three plac
   [the destination](#the-destination)).
 
 Keep a preview out of production: deploy only what a normal `folia build` wrote.
+
+## Building as of a moment
+
+A build takes the time of the build from the clock: a post dated after it is not built. `--at`
+sets that moment instead, so that the same sources give the same site on any day.
+
+```sh
+folia build --site ../my-site --dest ../my-site-out --at 2026-01-01T00:00:00Z
+```
+
+The value is an RFC 3339 timestamp with a time and an offset (`Z` or `+02:00`); anything else
+is an error, and nothing is built. It is not a preview: documents dated after it are held back, as
+with the clock, unless `--future` is set. `folia serve` has no `--at`, because it builds again on
+every change and each build is as of its own moment.
 
 ## Stylesheets
 

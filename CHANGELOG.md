@@ -14,6 +14,9 @@
   build, not for publishing, and `folia build` refuses to replace a normal build with one, or the
   reverse ([#47](https://github.com/ggirelli/folia-web/issues/47);
   [guide](docs/guide/building.md#previewing-drafts-and-scheduled-posts)).
+- `folia build --at <TIME>` builds as of an RFC 3339 timestamp instead of now, so that a build is
+  reproducible ([#50](https://github.com/ggirelli/folia-web/issues/50);
+  [guide](docs/guide/building.md#building-as-of-a-moment)).
 - A release workflow that builds the Linux x86_64 binary from a tag
   ([releasing](docs/development/releasing.md#the-release-workflow)).
 

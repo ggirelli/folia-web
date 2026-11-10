@@ -46,6 +46,10 @@ enum Command {
         /// preview, not for publishing
         #[arg(long)]
         unpublished: bool,
+        /// Build as of this moment instead of now, an RFC 3339 timestamp such as
+        /// 2026-01-01T00:00:00Z: documents dated after it count as future
+        #[arg(long, value_name = "TIME", value_parser = parse_time)]
+        at: Option<Timestamp>,
     },
     /// Build the site, serve it on this machine, and build it again when its sources change,
     /// reloading the pages open in a browser
@@ -91,6 +95,7 @@ fn main() -> ExitCode {
             dest,
             future,
             unpublished,
+            at,
         } => build_site(
             &site,
             config,
@@ -99,6 +104,7 @@ fn main() -> ExitCode {
                 future,
                 unpublished,
             },
+            at.unwrap_or_else(Timestamp::now),
         ),
         Command::Serve {
             site,
@@ -129,7 +135,23 @@ fn main() -> ExitCode {
     }
 }
 
-fn build_site(site: &Path, config: Option<PathBuf>, dest: &Path, preview: Preview) -> ExitCode {
+/// Reads the `--at` value, an RFC 3339 timestamp.
+fn parse_time(text: &str) -> Result<Timestamp, String> {
+    text.parse().map_err(|error| {
+        format!(
+            "{error}; expected an RFC 3339 timestamp with a time and an offset, \
+             such as 2026-01-01T00:00:00Z"
+        )
+    })
+}
+
+fn build_site(
+    site: &Path,
+    config: Option<PathBuf>,
+    dest: &Path,
+    preview: Preview,
+    now: Timestamp,
+) -> ExitCode {
     let config_path = config.unwrap_or_else(|| site.join("_folia/folia.toml"));
     let config = match Config::load(&config_path) {
         Ok(config) => config,
@@ -138,14 +160,7 @@ fn build_site(site: &Path, config: Option<PathBuf>, dest: &Path, preview: Previe
             return ExitCode::from(2);
         }
     };
-    match build_as(
-        site,
-        &config,
-        dest,
-        Timestamp::now(),
-        Writer::Build,
-        preview,
-    ) {
+    match build_as(site, &config, dest, now, Writer::Build, preview) {
         Ok(built) => {
             for warning in &built.warnings {
                 eprintln!("warning: {warning}");

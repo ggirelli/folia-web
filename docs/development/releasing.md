@@ -13,8 +13,10 @@ Everything on `main`, CI green:
    `folia --version` prints it, and the example's feeds `generator` matches (a test checks it).
 3. **Release notes:** `docs/release-notes/vX.Y.Z.md` and `CHANGELOG.md` are current, and say what the
    release is *not* (it does not claim the Jekyll site is replaced).
-4. **Checks:** `just check` passes, CI on the commit is green, and `cargo deny check` is clean.
-5. **Clean clone:** in a fresh clone of that commit, `just check`, `just build-example DIR` and
+4. **Checks:** `just check` and `just check-parity` pass, CI on the commit is green, and
+   `cargo deny check` is clean.
+5. **Clean clone:** in a fresh clone of that commit, `just check`, `just check-parity`,
+   `just build-example DIR` and
    `just serve DIR` work (the [manual testing guide](manual-testing.md); for a clean machine, its
    install commands).
 6. **Real site (if you have its private inputs):** `just pages <label>` and `just determinism` on

@@ -63,17 +63,22 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+      - uses: taiki-e/install-action@just
+      - run: just file-length
+      - run: just lint-sh
+      - run: just lint-md
+      - run: just lint-py
+
+  parity:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
           bundler-cache: true
       - uses: taiki-e/install-action@just
-      - run: just file-length
-      - run: just lint-sh
-      - run: just lint-md
-      - run: just lint-rb
-      - run: just lint-py
-      # Needs git and Ruby only (a stand-in replaces Jekyll), so it runs here, beside lint-rb
-      - run: just baseline-negative
-      # Needs git and Python only (a stand-in replaces the checks)
-      - run: just accept-negative
+      # lint-rb, baseline-negative (git and Ruby only: a stand-in replaces Jekyll) and
+      # accept-negative (git and Python only: a stand-in replaces the checks)
+      - run: just check-parity

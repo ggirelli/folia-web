@@ -40,9 +40,9 @@ default:
 require name value:
     @[ -n {{quote(value)}} ] || { echo "{{name}} is not set: the site's inputs are kept outside Folia's repository (docs/development.md)" >&2; exit 2; }
 
-# Run every check
+# Run every check that needs Rust, uv and Node (not Ruby: see `check-parity`)
 [group('checks')]
-check: file-length fmt-check clippy test doc deny lint-sh lint-md lint-rb lint-py baseline-negative accept-negative docs-build
+check: file-length fmt-check clippy test doc deny lint-sh lint-md lint-py docs-build
 
 # Check no source file exceeds 1,000 lines
 [group('checks')]
@@ -136,8 +136,13 @@ compare a b expected="":
 baseline-verify label *flags:
     scripts/verify-baseline.sh {{flags}} {{site}} {{baselines}} {{label}}
 
+# Run the parity-only checks, which need Ruby and Bundler: required when a change touches
+# crates/parity, parity/, the parity scripts or the Ruby files (the site and its inputs are not needed)
+[group('parity')]
+check-parity: lint-rb baseline-negative accept-negative
+
 # Check the baseline scripts refuse changes outside the approved paths, never touch an existing
-# baseline and keep every build (throwaway repositories, a stand-in for Jekyll; part of `check`,
+# baseline and keep every build (throwaway repositories, a stand-in for Jekyll; part of `check-parity`,
 # as it needs neither the site nor a baseline)
 [group('parity')]
 baseline-negative:

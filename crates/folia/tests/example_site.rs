@@ -148,3 +148,56 @@ fn the_example_names_the_workspace_version_as_its_feeds_generator() {
         "the example's `generator` should say {wanted}"
     );
 }
+
+/// Every file under `root`, by path relative to it, with its bytes.
+fn tree(root: &Path) -> std::collections::BTreeMap<String, Vec<u8>> {
+    fn walk(dir: &Path, root: &Path, files: &mut std::collections::BTreeMap<String, Vec<u8>>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(&path, root, files);
+            } else {
+                let relative = path
+                    .strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned();
+                files.insert(relative, std::fs::read(&path).unwrap());
+            }
+        }
+    }
+    let mut files = std::collections::BTreeMap::new();
+    walk(root, root, &mut files);
+    files
+}
+
+/// The same sources at the same build time give the same bytes, whichever directory they are
+/// built into.
+#[test]
+fn the_example_site_builds_identically_twice_at_a_fixed_time() {
+    let site = example_site();
+    let config = Config::load(&site.join("_folia/folia.toml")).unwrap();
+    let id = std::process::id();
+    let first = Dest(std::env::temp_dir().join(format!("folia-determinism-a-{id}")));
+    let second = Dest(std::env::temp_dir().join(format!("folia-determinism-b-{id}")));
+    for dest in [&first, &second] {
+        let _ = std::fs::remove_dir_all(&dest.0);
+        build(
+            &site,
+            &config,
+            &dest.0,
+            "2026-03-01T12:00:00Z".parse().unwrap(),
+        )
+        .unwrap();
+    }
+    let (a, b) = (tree(&first.0), tree(&second.0));
+    assert!(a.len() > 20, "the build wrote {} files", a.len());
+    assert_eq!(
+        a.keys().collect::<Vec<_>>(),
+        b.keys().collect::<Vec<_>>(),
+        "the two builds wrote different files"
+    );
+    for (path, bytes) in &a {
+        assert!(bytes == &b[path], "{path} differs between the two builds");
+    }
+}
