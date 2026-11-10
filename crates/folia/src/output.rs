@@ -16,6 +16,11 @@
 //!   its place, and the old one (which the record vouched for) removed. Between the two renames
 //!   the destination is briefly absent, but it is never partial; if the second rename fails, the
 //!   old one is put back. Last, the record is rewritten.
+//! - **`folia serve` keeps to destinations it wrote** ([`claim_for_serve`]): its record says so,
+//!   with a line no top-level entry can have (`/folia serve`), which `folia build` reads as one
+//!   more entry and ignores. Serve refuses a destination `folia build` wrote, which may be about
+//!   to be deployed, and, in one it wrote, recovers what a serve stopped mid-build left: it
+//!   removes `.folia-new`, and puts `.folia-old` back if the destination is gone.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -33,6 +38,15 @@ pub enum Content {
     Copy(PathBuf),
 }
 
+/// The command that writes a destination, which its record names.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Writer {
+    /// `folia build`.
+    Build,
+    /// `folia serve`.
+    Serve,
+}
+
 /// Writes `outputs`, keyed by output path, as the destination `dest`, replacing whatever it
 /// held, for the site at `site_root`.
 ///
@@ -45,21 +59,26 @@ pub fn write(
     site_root: &Path,
     outputs: &BTreeMap<String, Content>,
 ) -> Result<(), Diagnostic> {
+    write_as(dest, site_root, outputs, Writer::Build)
+}
+
+/// Writes the destination as [`write()`] does, for the command `writer`.
+///
+/// # Errors
+///
+/// As [`write()`].
+pub fn write_as(
+    dest: &Path,
+    site_root: &Path,
+    outputs: &BTreeMap<String, Content>,
+    writer: Writer,
+) -> Result<(), Diagnostic> {
     let (parent, name) = resolve(dest, site_root)?;
     let dest = parent.join(&name);
     let new = parent.join(format!(".{name}.folia-new"));
     let old = parent.join(format!(".{name}.folia-old"));
     let record = record_path(&parent, &name);
-    for leftover in [&new, &old] {
-        if fs::symlink_metadata(leftover).is_ok() {
-            return Err(Diagnostic::site(format!(
-                "cannot write the site to {}: {} exists, left by an interrupted build or not \
-                 Folia's; Folia does not delete it: look at it, remove it, and build again",
-                dest.display(),
-                leftover.display()
-            )));
-        }
-    }
+    check_no_leftovers(&dest, &new, &old)?;
     check_replaceable(&dest, &record)?;
 
     if let Err(problem) = fill(&new, outputs) {
@@ -67,7 +86,7 @@ pub fn write(
         return Err(problem);
     }
     let had_dest = swap(&new, &dest, &old)?;
-    write_record(&record, &dest, outputs)?;
+    write_record(&record, &dest, outputs, writer)?;
     if had_dest {
         // The old directory is the previous output the record vouched for: Folia's to remove.
         fs::remove_dir_all(&old).map_err(|e| {
@@ -82,12 +101,114 @@ pub fn write(
     Ok(())
 }
 
+/// Fails if `new` or `old`, the temporary siblings of `dest`, exist.
+fn check_no_leftovers(dest: &Path, new: &Path, old: &Path) -> Result<(), Diagnostic> {
+    for leftover in [new, old] {
+        if fs::symlink_metadata(leftover).is_ok() {
+            return Err(Diagnostic::site(format!(
+                "cannot write the site to {}: {} exists, left by an interrupted build or not \
+                 Folia's; Folia does not delete it: look at it, remove it, and build again",
+                dest.display(),
+                leftover.display()
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Where the record of what Folia wrote to `name` is kept.
 fn record_path(parent: &Path, name: &str) -> PathBuf {
     parent.join(format!(".{name}.folia-output"))
 }
 
 const RECORD_HEADER: &str = "folia-output 1";
+
+/// The record's line that says `folia serve` wrote the destination: no top-level entry is named
+/// with a `/`.
+const SERVE_MARK: &str = "/folia serve";
+
+/// Checks `dest` is a destination `folia serve` may write the site at `site_root` to, and
+/// returns it, resolved: one apart from the site, not a symbolic link, and absent, empty, or
+/// written by `folia serve`. In one it wrote, what an interrupted serve left beside it is
+/// recovered first.
+///
+/// # Errors
+///
+/// Fails, changing nothing, when the destination cannot be written by `folia build` either, or
+/// holds a site `folia build` wrote, or when the leftovers beside it cannot be recovered.
+pub fn claim_for_serve(dest: &Path, site_root: &Path) -> Result<PathBuf, Diagnostic> {
+    if fs::symlink_metadata(dest).is_ok_and(|meta| meta.is_symlink()) {
+        return Err(Diagnostic::site(format!(
+            "cannot serve the site from {}: it is a symbolic link; give `folia serve` the \
+             directory itself, or another destination",
+            dest.display()
+        )));
+    }
+    let (parent, name) = resolve(dest, site_root)?;
+    let dest = parent.join(&name);
+    let record = record_path(&parent, &name);
+    let new = parent.join(format!(".{name}.folia-new"));
+    let old = parent.join(format!(".{name}.folia-old"));
+    let served = written_by_serve(&dest, &record)?;
+    if served {
+        recover(&dest, &new, &old)?;
+    }
+    check_no_leftovers(&dest, &new, &old)?;
+    check_replaceable(&dest, &record)?;
+    let empty = match fs::read_dir(&dest) {
+        Ok(mut entries) => entries.next().is_none(),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => true,
+        Err(e) => return Err(fail(&dest, &e)),
+    };
+    if !served && !empty {
+        return Err(Diagnostic::site(format!(
+            "cannot serve the site from {}: `folia build` wrote it, and `folia serve` would \
+             replace it with a build for the local server only. Give `folia serve` another \
+             destination, or remove this one yourself",
+            dest.display()
+        )));
+    }
+    Ok(dest)
+}
+
+/// Whether the record of `dest` says `folia serve` wrote it.
+fn written_by_serve(dest: &Path, record: &Path) -> Result<bool, Diagnostic> {
+    let text = match fs::read_to_string(record) {
+        Ok(text) => text,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(e) => return Err(fail(record, &e)),
+    };
+    let mut lines = text.lines();
+    Ok(lines.next() == Some(RECORD_HEADER)
+        && lines.next() == Some(&dest.display().to_string())
+        && lines.any(|line| line == SERVE_MARK))
+}
+
+/// Recovers what a write stopped midway left: removes `new`, and puts `old` back in the place of
+/// `dest` if it is gone, or else removes it.
+fn recover(dest: &Path, new: &Path, old: &Path) -> Result<(), Diagnostic> {
+    let exists = |path: &Path| fs::symlink_metadata(path).is_ok();
+    let restores = exists(old) && !exists(dest);
+    if restores && !fs::symlink_metadata(old).is_ok_and(|meta| meta.is_dir()) {
+        return Err(Diagnostic::site(format!(
+            "cannot serve the site from {}: {} is not a directory Folia left, so Folia does not \
+             put it in its place; nothing was changed: look at it, and remove it yourself",
+            dest.display(),
+            old.display()
+        )));
+    }
+    if exists(new) {
+        fs::remove_dir_all(new).map_err(|e| fail(new, &e))?;
+    }
+    if exists(old) {
+        if exists(dest) {
+            fs::remove_dir_all(old).map_err(|e| fail(old, &e))?;
+        } else {
+            fs::rename(old, dest).map_err(|e| fail(dest, &e))?;
+        }
+    }
+    Ok(())
+}
 
 /// The top-level entries the outputs make, sorted and without duplicates.
 fn top_level(outputs: &BTreeMap<String, Content>) -> BTreeSet<String> {
@@ -97,9 +218,14 @@ fn top_level(outputs: &BTreeMap<String, Content>) -> BTreeSet<String> {
         .collect()
 }
 
-/// The record's text: the header, the directory it vouches for, and each top-level entry.
-fn record_text(dest: &Path, outputs: &BTreeMap<String, Content>) -> String {
+/// The record's text: the header, the directory it vouches for, whether `folia serve` wrote it,
+/// and each top-level entry.
+fn record_text(dest: &Path, outputs: &BTreeMap<String, Content>, writer: Writer) -> String {
     let mut text = format!("{RECORD_HEADER}\n{}\n", dest.display());
+    if writer == Writer::Serve {
+        text.push_str(SERVE_MARK);
+        text.push('\n');
+    }
     for entry in top_level(outputs) {
         text.push_str(&entry);
         text.push('\n');
@@ -111,9 +237,10 @@ fn write_record(
     record: &Path,
     dest: &Path,
     outputs: &BTreeMap<String, Content>,
+    writer: Writer,
 ) -> Result<(), Diagnostic> {
     let tmp = record.with_extension("folia-output.tmp");
-    fs::write(&tmp, record_text(dest, outputs))
+    fs::write(&tmp, record_text(dest, outputs, writer))
         .and_then(|()| fs::rename(&tmp, record))
         .map_err(|e| {
             let _ = fs::remove_file(&tmp);

@@ -35,7 +35,7 @@ use crate::config::Config;
 #[cfg(doc)]
 use crate::config::Slice;
 use crate::feed::{self, Feed};
-use crate::output::{self, Content};
+use crate::output::{self, Content, Writer};
 use crate::redirects::redirects_json;
 use crate::render::Renderer;
 use crate::sass::Sass;
@@ -75,6 +75,22 @@ pub fn build(
     config: &Config,
     dest: &Path,
     now: Timestamp,
+) -> Result<Built, Vec<Diagnostic>> {
+    build_as(root, config, dest, now, Writer::Build)
+}
+
+/// Builds the site as [`build`] does, for the command `writer`, which the destination's record
+/// names.
+///
+/// # Errors
+///
+/// As [`build`].
+pub fn build_as(
+    root: &Path,
+    config: &Config,
+    dest: &Path,
+    now: Timestamp,
+    writer: Writer,
 ) -> Result<Built, Vec<Diagnostic>> {
     let site = plan(root, config, now)?;
     let clock = SiteClock::new(&config.time_zone, now).map_err(|e| vec![Diagnostic::site(e)])?;
@@ -175,7 +191,7 @@ pub fn build(
         .filter(|e| shown.contains(&e.doc))
         .collect();
     built.warnings = pages.warnings;
-    output::write(dest, root, &outputs).map_err(|e| vec![e])?;
+    output::write_as(dest, root, &outputs, writer).map_err(|e| vec![e])?;
     Ok(built)
 }
 

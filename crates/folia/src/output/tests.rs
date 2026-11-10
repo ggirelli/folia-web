@@ -309,3 +309,119 @@ fn leftover_temporary_directories_are_refused_not_deleted() {
         fs::remove_dir_all(&path).unwrap();
     }
 }
+
+/// Writes `a.html` to `out` as `writer`, and returns the destination.
+fn written_as(scratch: &Scratch, writer: Writer) -> PathBuf {
+    let dest = scratch.0.join("out");
+    write_as(
+        &dest,
+        &scratch.site(),
+        &outputs(&[("a.html", bytes("a"))]),
+        writer,
+    )
+    .unwrap();
+    dest
+}
+
+#[test]
+fn serve_takes_an_absent_or_empty_destination_and_one_it_wrote() {
+    let scratch = Scratch::new("claim");
+    let dest = scratch.0.join("out");
+    let claimed = claim_for_serve(&dest, &scratch.site()).unwrap();
+    assert_eq!(claimed, scratch.0.canonicalize().unwrap().join("out"));
+    fs::create_dir(&dest).unwrap();
+    claim_for_serve(&dest, &scratch.site()).unwrap();
+    written_as(&scratch, Writer::Serve);
+    claim_for_serve(&dest, &scratch.site()).unwrap();
+}
+
+#[test]
+fn serve_refuses_a_destination_build_wrote_but_build_takes_one_serve_wrote() {
+    let scratch = Scratch::new("claim-build");
+    let dest = written_as(&scratch, Writer::Build);
+    let problem = claim_for_serve(&dest, &scratch.site()).unwrap_err();
+    assert!(
+        problem.message.contains("`folia build` wrote it"),
+        "{problem}"
+    );
+    assert_eq!(fs::read_to_string(dest.join("a.html")).unwrap(), "a");
+
+    written_as(&scratch, Writer::Serve);
+    write(&dest, &scratch.site(), &outputs(&[("b.html", bytes("b"))])).unwrap();
+    assert_eq!(scratch.names("out"), ["b.html"]);
+    assert!(
+        claim_for_serve(&dest, &scratch.site()).is_err(),
+        "build's record no longer says serve wrote it"
+    );
+}
+
+#[test]
+fn serve_refuses_what_build_refuses() {
+    let scratch = Scratch::new("claim-refused");
+    let dest = scratch.0.join("mine");
+    fs::create_dir(&dest).unwrap();
+    fs::write(dest.join("id_rsa"), "key").unwrap();
+    let problem = claim_for_serve(&dest, &scratch.site()).unwrap_err();
+    assert!(problem.message.contains("no record"), "{problem}");
+    assert!(
+        claim_for_serve(&scratch.0, &scratch.site()).is_err(),
+        "it holds the site"
+    );
+    let link = scratch.0.join("link");
+    std::os::unix::fs::symlink(scratch.0.join("elsewhere"), &link).unwrap();
+    fs::create_dir(scratch.0.join("elsewhere")).unwrap();
+    let problem = claim_for_serve(&link, &scratch.site()).unwrap_err();
+    assert!(problem.message.contains("is a symbolic link"), "{problem}");
+    let new = scratch.0.join(".empty.folia-new");
+    fs::create_dir(&new).unwrap();
+    assert!(
+        claim_for_serve(&scratch.0.join("empty"), &scratch.site()).is_err(),
+        "a leftover beside a destination serve did not write is not touched"
+    );
+    assert!(new.exists());
+}
+
+#[test]
+fn serve_recovers_what_an_interrupted_serve_left() {
+    let scratch = Scratch::new("recover");
+    let dest = written_as(&scratch, Writer::Serve);
+    let new = scratch.0.join(".out.folia-new");
+    fs::create_dir(&new).unwrap();
+    fs::write(new.join("half.html"), "half").unwrap();
+    claim_for_serve(&dest, &scratch.site()).unwrap();
+    assert!(!new.exists(), "a half-written build is removed");
+
+    let old = scratch.0.join(".out.folia-old");
+    fs::rename(&dest, &old).unwrap();
+    fs::create_dir(&new).unwrap();
+    claim_for_serve(&dest, &scratch.site()).unwrap();
+    assert_eq!(
+        fs::read_to_string(dest.join("a.html")).unwrap(),
+        "a",
+        "the previous output is put back"
+    );
+    assert_eq!(scratch.names(""), [".out.folia-output", "out", "site"]);
+
+    fs::create_dir(&old).unwrap();
+    claim_for_serve(&dest, &scratch.site()).unwrap();
+    assert!(!old.exists(), "an old output not yet removed is removed");
+    assert_eq!(fs::read_to_string(dest.join("a.html")).unwrap(), "a");
+}
+
+#[test]
+fn serve_does_not_put_back_an_old_output_that_is_a_symbolic_link() {
+    let scratch = Scratch::new("recover-link");
+    let dest = written_as(&scratch, Writer::Serve);
+    fs::remove_dir_all(&dest).unwrap();
+    let elsewhere = scratch.0.join("elsewhere");
+    fs::create_dir(&elsewhere).unwrap();
+    let old = scratch.0.join(".out.folia-old");
+    std::os::unix::fs::symlink(&elsewhere, &old).unwrap();
+    let new = scratch.0.join(".out.folia-new");
+    fs::create_dir(&new).unwrap();
+    let problem = claim_for_serve(&dest, &scratch.site()).unwrap_err();
+    assert!(problem.message.contains("nothing was changed"), "{problem}");
+    assert!(fs::symlink_metadata(&old).unwrap().is_symlink());
+    assert!(new.exists(), "nothing was changed");
+    assert!(!dest.exists());
+}
