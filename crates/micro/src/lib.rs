@@ -152,6 +152,7 @@ mod tests {
 
     fn entry(path: &str, front: &str) -> SourceDoc {
         SourceDoc {
+            file_time: None,
             id: DocId::new(path),
             mode: Mode::Micro,
             front: FrontMatter::parse(front).unwrap(),

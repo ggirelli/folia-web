@@ -80,7 +80,7 @@ pub fn run(site_dir: &Path, config_path: &Path) -> Result<bool, String> {
 ///
 /// As [`run`].
 pub fn check(site_dir: &Path, config: &Config) -> Result<(usize, Vec<Finding>), String> {
-    let discovery = discover(site_dir, config).map_err(|problems| {
+    let discovery = discover(site_dir, config, false).map_err(|problems| {
         problems
             .iter()
             .map(ToString::to_string)

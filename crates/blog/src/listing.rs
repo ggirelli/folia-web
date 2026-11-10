@@ -240,6 +240,7 @@ fn archives(
 ) -> Result<Vec<PageSpec>, Vec<Diagnostic>> {
     // An archive has no source: its frame is a page's without front matter.
     let blank = SourceDoc {
+        file_time: None,
         id: DocId::new("archive"),
         mode: Mode::Blog,
         front: FrontMatter::parse("").expect("empty front matter parses"),

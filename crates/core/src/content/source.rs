@@ -101,7 +101,13 @@ pub struct SourceDoc {
     pub front: FrontMatter,
     /// The text after the front matter.
     pub body: String,
+    /// When the file was last modified; `None` when that is not known. It dates a draft.
+    pub file_time: Option<jiff::Timestamp>,
 }
+
+/// The directory, at the site's root, whose posts are drafts: read only when drafts are asked
+/// for.
+pub const DRAFTS_ROOT: &str = "_drafts";
 
 impl SourceDoc {
     /// Reads the document `id` below the site root `root`.
@@ -110,8 +116,12 @@ impl SourceDoc {
     ///
     /// Fails when the file cannot be read as UTF-8, or its front matter cannot be read.
     pub fn read(root: &Path, id: DocId, mode: Mode) -> Result<Self, SourceError> {
-        let text = std::fs::read_to_string(root.join(id.as_str()))
-            .map_err(|e| SourceError::Io(id.clone(), e))?;
+        let path = root.join(id.as_str());
+        let text = std::fs::read_to_string(&path).map_err(|e| SourceError::Io(id.clone(), e))?;
+        let file_time = std::fs::metadata(&path)
+            .and_then(|meta| meta.modified())
+            .ok()
+            .and_then(|time| jiff::Timestamp::try_from(time).ok());
         let (front, body) = match split_front_matter(&text) {
             Some((yaml, body)) => (
                 FrontMatter::parse(yaml).map_err(|e| SourceError::FrontMatter(id.clone(), e))?,
@@ -125,7 +135,17 @@ impl SourceDoc {
             mode,
             front,
             body,
+            file_time,
         })
+    }
+
+    /// Whether this is a draft: a document below [`DRAFTS_ROOT`].
+    #[must_use]
+    pub fn is_draft(&self) -> bool {
+        self.id
+            .as_str()
+            .strip_prefix(DRAFTS_ROOT)
+            .is_some_and(|rest| rest.starts_with('/'))
     }
 
     /// The old URLs that redirect to this document (`redirect_from`).

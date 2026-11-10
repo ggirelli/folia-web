@@ -297,3 +297,54 @@ fn a_normal_build_over_a_preview_destination_is_refused() {
     );
     assert!(dest.join("index.html").exists());
 }
+
+#[test]
+fn build_with_drafts_builds_an_untracked_draft_post() {
+    let scratch = Scratch::new("drafts");
+    let site = scratch.site_copy();
+    // Not committed: the build's last-commit lookup must cope with a file git does not know.
+    std::fs::create_dir(site.join("_drafts")).unwrap();
+    std::fs::write(
+        site.join("_drafts/an-idea.md"),
+        "---\ntitle: An idea\n---\nSoon.\n",
+    )
+    .unwrap();
+
+    let plain = folia(&site, &scratch.path("plain"));
+    assert!(plain.status.success(), "{}", stderr(&plain));
+    assert!(!blog_page_exists(&scratch.path("plain"), "an-idea"));
+
+    let dest = scratch.path("out");
+    let output = folia_with(&site, &dest, &["--drafts"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    let summary = String::from_utf8_lossy(&output.stdout).into_owned();
+    assert!(
+        summary
+            .trim_end()
+            .ends_with("PREVIEW BUILD (drafts): not for publishing."),
+        "{summary}"
+    );
+    assert!(blog_page_exists(&dest, "an-idea"), "{summary}");
+    let record = std::fs::read_to_string(scratch.path(".out.folia-output")).unwrap();
+    assert!(
+        record.lines().any(|line| line == "/folia drafts"),
+        "{record}"
+    );
+}
+
+/// Whether the destination holds a blog post page whose file is named `slug`.
+fn blog_page_exists(dest: &Path, slug: &str) -> bool {
+    fn find(dir: &Path, slug: &str) -> bool {
+        std::fs::read_dir(dir).is_ok_and(|entries| {
+            entries.flatten().any(|entry| {
+                let path = entry.path();
+                if path.is_dir() {
+                    find(&path, slug)
+                } else {
+                    path.file_stem().is_some_and(|stem| stem == slug)
+                }
+            })
+        })
+    }
+    find(&dest.join("blog"), slug)
+}

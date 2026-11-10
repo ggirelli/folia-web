@@ -8,6 +8,7 @@ fn clock() -> SiteClock {
 
 fn post(path: &str, front: &str) -> SourceDoc {
     SourceDoc {
+        file_time: None,
         id: DocId::new(path),
         mode: Mode::Blog,
         front: FrontMatter::parse(front).unwrap(),
@@ -63,6 +64,64 @@ fn future_posts_are_kept_when_the_clock_allows_them() {
     assert_eq!(
         urls(&outputs, None),
         ["/blog/2026/10/25/today", "/blog/2026/10/26/tomorrow"]
+    );
+}
+
+fn draft(path: &str, front: &str, modified: Option<&str>) -> SourceDoc {
+    SourceDoc {
+        file_time: modified.map(|time| time.parse().unwrap()),
+        ..post(path, front)
+    }
+}
+
+#[test]
+fn a_draft_is_dated_by_its_modification_time() {
+    // 23:30 UTC is already the next day in Stockholm; the date is the civil one in the site zone.
+    let docs = [draft(
+        "_drafts/2020-01-01-an idea.md",
+        "title: An idea",
+        Some("2030-03-04T23:30:00Z"),
+    )];
+    let outputs = routes(&docs, &clock()).unwrap();
+    assert_eq!(
+        urls(&outputs, None),
+        ["/blog/2030/03/05/2020-01-01-an-idea"]
+    );
+
+    let posts = read_posts(&docs, &clock()).unwrap();
+    assert_eq!(posts[0].date, Date::new(2030, 3, 5).unwrap());
+    assert_eq!(posts[0].published, "2030-03-04T23:30:00Z".parse().unwrap());
+    assert_eq!(posts[0].title, "An idea");
+
+    let problems = routes(&[draft("_drafts/x.md", "", None)], &clock()).unwrap_err();
+    assert!(
+        problems[0]
+            .message
+            .contains("cannot read the modification time"),
+        "{}",
+        problems[0]
+    );
+    let dated = routes(
+        &[draft(
+            "_drafts/x.md",
+            "date: 2026-01-01",
+            Some("2026-01-01T00:00:00Z"),
+        )],
+        &clock(),
+    );
+    assert!(dated.is_err());
+}
+
+#[test]
+fn a_draft_with_published_false_is_left_out() {
+    let docs = [draft(
+        "_drafts/idea.md",
+        "published: false",
+        Some("2026-01-01T00:00:00Z"),
+    )];
+    assert_eq!(
+        urls(&routes(&docs, &clock()).unwrap(), None),
+        Vec::<String>::new()
     );
 }
 
@@ -229,6 +288,7 @@ const SAMPLE_POST: &str = "_posts/2021/2021-08-08-sample-post.md";
 
 fn sample_post() -> SourceDoc {
     SourceDoc {
+        file_time: None,
         body: "Intro.\n\n### One *a*\n\n#### Two\n\n### Three\n".into(),
         ..post(
             SAMPLE_POST,

@@ -69,7 +69,7 @@ pub fn plan_for(
     let clock = SiteClock::new(&config.time_zone, now)
         .map_err(|e| vec![Diagnostic::site(e)])?
         .with_future(preview.future);
-    let discovery = discover(root, config)?;
+    let discovery = discover(root, config, preview.drafts)?;
 
     let mut docs: BTreeMap<Mode, Vec<SourceDoc>> = BTreeMap::new();
     let mut problems = Vec::new();

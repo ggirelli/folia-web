@@ -404,6 +404,7 @@ mod tests {
 
     fn page(path: &str, front: &str) -> SourceDoc {
         SourceDoc {
+            file_time: None,
             id: DocId::new(path),
             mode: Mode::Pages,
             front: FrontMatter::parse(front).unwrap(),
@@ -417,6 +418,7 @@ mod tests {
 
     fn about() -> SourceDoc {
         SourceDoc {
+            file_time: None,
             body: "### Other things\n".into(),
             ..page(
                 "pages/profile.md",
@@ -428,6 +430,7 @@ mod tests {
     #[test]
     fn an_html_page_is_written_as_it_is_with_its_error_type() {
         let doc = SourceDoc {
+            file_time: None,
             body: "\n<p class=\"x\">Not *Markdown*</p>\n".to_owned(),
             ..page(
                 "404.html",
@@ -472,6 +475,7 @@ mod tests {
     #[test]
     fn a_claimed_page_takes_the_claim_s_template_and_no_body() {
         let doc = SourceDoc {
+            file_time: None,
             body: "{% for item in site.micro %}{{ item.title }}{% endfor %}\n".to_owned(),
             ..page(
                 "blog/microblog.html",
@@ -650,6 +654,7 @@ mod tests {
         let problems = build(
             &[
                 SourceDoc {
+                    file_time: None,
                     body: "{% for post in site.posts %}{% endfor %}".to_owned(),
                     ..page("blog/c.html", "layout: page\ntitle: C")
                 },
@@ -697,6 +702,7 @@ mod tests {
     /// A page shaped like `pages/disclosure.md`, with a table of contents on the left.
     fn policy(toc: &str) -> SourceDoc {
         SourceDoc {
+            file_time: None,
             body: "# Policy\n\n## Purpose\n\n## Scope\n\n### Out of scope\n\n##### Deep\n\n\
                    ## Timelines & response\n"
                 .into(),
