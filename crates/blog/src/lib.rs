@@ -132,7 +132,9 @@ fn read_post(doc: &SourceDoc, clock: &SiteClock) -> Result<Option<Post>, Diagnos
             &"a front matter date on a post is not supported yet; the file name dates it",
         ));
     }
-    if !doc.front.published() || (!doc.is_draft() && clock.is_future(published)) {
+    if (!doc.front.published() && !clock.unpublished_allowed())
+        || (!doc.is_draft() && clock.is_future(published))
+    {
         return Ok(None);
     }
 

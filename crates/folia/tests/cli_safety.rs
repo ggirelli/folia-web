@@ -283,6 +283,27 @@ fn build_with_future_marks_the_summary_and_the_record() {
 }
 
 #[test]
+fn build_with_unpublished_marks_the_summary_and_the_record() {
+    let scratch = Scratch::new("unpublished");
+    let dest = scratch.path("out");
+    let output = folia_with(&example_site(), &dest, &["--unpublished"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    let summary = String::from_utf8_lossy(&output.stdout).into_owned();
+    assert!(
+        summary
+            .trim_end()
+            .ends_with("PREVIEW BUILD (unpublished): not for publishing."),
+        "{summary}"
+    );
+    assert!(stderr(&output).contains("warning: this is a preview build (unpublished)"));
+    let record = std::fs::read_to_string(scratch.path(".out.folia-output")).unwrap();
+    assert!(
+        record.lines().any(|line| line == "/folia unpublished"),
+        "{record}"
+    );
+}
+
+#[test]
 fn a_normal_build_over_a_preview_destination_is_refused() {
     let scratch = Scratch::new("preview-refused");
     let dest = scratch.path("out");

@@ -68,7 +68,8 @@ pub fn plan_for(
 ) -> Result<Site, Vec<Diagnostic>> {
     let clock = SiteClock::new(&config.time_zone, now)
         .map_err(|e| vec![Diagnostic::site(e)])?
-        .with_future(preview.future);
+        .with_future(preview.future)
+        .with_unpublished(preview.unpublished);
     let discovery = discover(root, config, preview.drafts)?;
 
     let mut docs: BTreeMap<Mode, Vec<SourceDoc>> = BTreeMap::new();
@@ -86,7 +87,7 @@ pub fn plan_for(
         folia_blog::routes(of(Mode::Blog), &clock),
         folia_micro::routes(of(Mode::Micro), &config.roots.micro, &clock),
         folia_garden::routes(of(Mode::Garden), &config.roots.garden, &clock),
-        folia_pages::routes(of(Mode::Pages)),
+        folia_pages::routes(of(Mode::Pages), &clock),
     ] {
         match result {
             Ok(outputs) => planned.extend(outputs),

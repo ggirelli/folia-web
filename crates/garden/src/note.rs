@@ -50,7 +50,7 @@ use super::{GRAPH_URL, Note, WikiLinks, file_route, read_notes};
 pub const NOTE_TEMPLATE: &str = "garden_post.html";
 
 /// The front matter keys the note template can show.
-const KEYS: [&str; 3] = ["title", "date", "hide_garden_map"];
+const KEYS: [&str; 4] = ["title", "date", "hide_garden_map", "published"];
 
 /// How long a graph label may be before it is cut, and how much of it is kept, in characters.
 const LABEL_LENGTH: usize = 25;

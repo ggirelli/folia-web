@@ -67,6 +67,19 @@ fn future_posts_are_kept_when_the_clock_allows_them() {
     );
 }
 
+#[test]
+fn an_unpublished_post_is_kept_when_unpublished_is_allowed() {
+    let docs = [
+        post("_posts/2021/2021-01-01-hidden.md", "published: false"),
+        post("_posts/2026/2026-10-26-tomorrow.md", "published: false"),
+    ];
+    let outputs = routes(&docs, &clock().with_unpublished(true)).unwrap();
+    // Allowing the unpublished does not allow the future.
+    assert_eq!(urls(&outputs, None), ["/blog/2021/01/01/hidden"]);
+    let both = clock().with_future(true).with_unpublished(true);
+    assert_eq!(urls(&routes(&docs, &both).unwrap(), None).len(), 2);
+}
+
 fn draft(path: &str, front: &str, modified: Option<&str>) -> SourceDoc {
     SourceDoc {
         file_time: modified.map(|time| time.parse().unwrap()),
@@ -607,4 +620,20 @@ fn a_post_s_lang_is_its_text_or_its_list_s_texts_joined() {
         refused[0].contains("lang should be text or a list of texts"),
         "{refused:?}"
     );
+}
+
+#[test]
+fn a_draft_with_published_false_is_kept_when_unpublished_is_allowed() {
+    let docs = [draft(
+        "_drafts/idea.md",
+        "published: false",
+        Some("2020-03-04T10:00:00Z"),
+    )];
+    // Drafts are read, but `published: false` still leaves the draft out.
+    assert_eq!(
+        urls(&routes(&docs, &clock()).unwrap(), None),
+        [] as [&str; 0]
+    );
+    let outputs = routes(&docs, &clock().with_unpublished(true)).unwrap();
+    assert_eq!(urls(&outputs, None), ["/blog/2020/03/04/idea"]);
 }

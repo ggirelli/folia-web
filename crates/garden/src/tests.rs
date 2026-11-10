@@ -574,3 +574,23 @@ fn a_note_without_a_title_is_titled_from_its_file_name_as_jekyll_does() {
     // Wiki-links find a note by the title Jekyll gave it: both links resolve, so none is broken.
     assert_eq!(output.warnings.len(), 0, "{:?}", output.warnings);
 }
+
+#[test]
+fn an_unpublished_note_is_kept_when_unpublished_is_allowed() {
+    let docs = [with_body(
+        "_digital_garden/hidden.md",
+        "title: Hidden\ndate: 2026-10-01\npublished: false",
+        "Secret.\n",
+    )];
+    let only: Vec<&str> = docs.iter().map(|doc| doc.id.as_str()).collect();
+    let pages = |clock: &SiteClock| {
+        let output = build(&docs, ROOT, &only, None, &LastCommits::default(), clock).unwrap();
+        output
+            .pages
+            .iter()
+            .map(|page| page.route.url().to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(pages(&clock()), [] as [String; 0]);
+    assert_eq!(pages(&clock().with_unpublished(true)), ["/dg/hidden"]);
+}

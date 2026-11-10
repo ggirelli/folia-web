@@ -327,11 +327,19 @@ fn written_as(scratch: &Scratch, writer: Writer) -> PathBuf {
 const FUTURE: Preview = Preview {
     drafts: false,
     future: true,
+    unpublished: false,
 };
 
 const BOTH: Preview = Preview {
     drafts: true,
     future: true,
+    unpublished: false,
+};
+
+const UNPUBLISHED: Preview = Preview {
+    drafts: false,
+    future: false,
+    unpublished: true,
 };
 
 fn written_with(scratch: &Scratch, writer: Writer, preview: Preview) -> Result<(), Diagnostic> {
@@ -368,6 +376,36 @@ fn a_preview_build_is_recorded_in_the_destination_record() {
     let record = record_of(&scratch);
     assert_eq!(recorded_preview(&record), Preview::default());
     assert!(!record.contains("/folia drafts"), "{record}");
+}
+
+#[test]
+fn an_unpublished_build_is_recorded_and_never_mixes_with_a_normal_one() {
+    let scratch = Scratch::new("unpublished-record");
+    written_with(&scratch, Writer::Build, UNPUBLISHED).unwrap();
+    let record = record_of(&scratch);
+    assert!(
+        record.lines().any(|line| line == "/folia unpublished"),
+        "{record}"
+    );
+    assert_eq!(recorded_preview(&record), UNPUBLISHED);
+    let problem = written_with(&scratch, Writer::Build, Preview::default()).unwrap_err();
+    assert!(
+        problem
+            .message
+            .contains("it holds a preview build (unpublished)"),
+        "{problem}"
+    );
+    written_with(&scratch, Writer::Serve, Preview::default()).unwrap();
+    assert_eq!(recorded_preview(&record_of(&scratch)), Preview::default());
+    let other = Scratch::new("normal-then-unpublished");
+    written_with(&other, Writer::Build, Preview::default()).unwrap();
+    let problem = written_with(&other, Writer::Build, UNPUBLISHED).unwrap_err();
+    assert!(
+        problem
+            .message
+            .contains("this build is a preview one (unpublished)"),
+        "{problem}"
+    );
 }
 
 #[test]

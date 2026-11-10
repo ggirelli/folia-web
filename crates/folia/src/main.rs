@@ -46,6 +46,10 @@ enum Command {
         /// Also build documents dated after now. The output is a preview, not for publishing
         #[arg(long)]
         future: bool,
+        /// Also build documents whose front matter says `published: false`. The output is a
+        /// preview, not for publishing
+        #[arg(long)]
+        unpublished: bool,
     },
     /// Build the site, serve it on this machine, and build it again when its sources change,
     /// reloading the pages open in a browser
@@ -80,6 +84,10 @@ enum Command {
         /// Also build documents dated after now. The output is a preview, not for publishing
         #[arg(long)]
         future: bool,
+        /// Also build documents whose front matter says `published: false`. The output is a
+        /// preview, not for publishing
+        #[arg(long)]
+        unpublished: bool,
     },
 }
 
@@ -91,7 +99,17 @@ fn main() -> ExitCode {
             dest,
             drafts,
             future,
-        } => build_site(&site, config, &dest, Preview { drafts, future }),
+            unpublished,
+        } => build_site(
+            &site,
+            config,
+            &dest,
+            Preview {
+                drafts,
+                future,
+                unpublished,
+            },
+        ),
         Command::Serve {
             site,
             config,
@@ -100,13 +118,18 @@ fn main() -> ExitCode {
             port,
             drafts,
             future,
+            unpublished,
         } => {
             let options = folia::serve::Options {
                 config: config.unwrap_or_else(|| site.join("_folia/folia.toml")),
                 site,
                 dest,
                 address: SocketAddr::new(host, port),
-                preview: Preview { drafts, future },
+                preview: Preview {
+                    drafts,
+                    future,
+                    unpublished,
+                },
             };
             match folia::serve::run(&options) {
                 Err(error) => {

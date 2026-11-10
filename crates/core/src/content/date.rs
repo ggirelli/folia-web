@@ -20,30 +20,37 @@ pub enum DateError {
     Form(String),
 }
 
-/// What a preview build adds to the normal one: drafts, and documents dated after the build.
-/// A site built with either is for looking at, not for publishing.
+/// What a preview build adds to the normal one: drafts, documents dated after the build, and
+/// documents whose front matter says `published: false`. A site built with any is for looking at,
+/// not for publishing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
 pub struct Preview {
     /// Also read the posts in `_drafts`.
     pub drafts: bool,
     /// Also build documents dated after the build.
     pub future: bool,
+    /// Also build documents whose front matter says `published: false`.
+    pub unpublished: bool,
 }
 
 impl Preview {
     /// Whether this is the normal build, with neither added.
     #[must_use]
     pub fn is_normal(self) -> bool {
-        !self.drafts && !self.future
+        !self.drafts && !self.future && !self.unpublished
     }
 
     /// The names of what is added, such as `drafts, future`; `None` for the normal build.
     #[must_use]
     pub fn label(self) -> Option<String> {
-        let names: Vec<&str> = [(self.drafts, "drafts"), (self.future, "future")]
-            .into_iter()
-            .filter_map(|(on, name)| on.then_some(name))
-            .collect();
+        let names: Vec<&str> = [
+            (self.drafts, "drafts"),
+            (self.future, "future"),
+            (self.unpublished, "unpublished"),
+        ]
+        .into_iter()
+        .filter_map(|(on, name)| on.then_some(name))
+        .collect();
         (!names.is_empty()).then(|| names.join(", "))
     }
 }
@@ -55,6 +62,7 @@ pub struct SiteClock {
     zone: TimeZone,
     now: Timestamp,
     future_allowed: bool,
+    unpublished_allowed: bool,
 }
 
 impl SiteClock {
@@ -70,6 +78,7 @@ impl SiteClock {
             zone: tz,
             now,
             future_allowed: false,
+            unpublished_allowed: false,
         })
     }
 
@@ -78,6 +87,19 @@ impl SiteClock {
     pub fn with_future(mut self, allowed: bool) -> Self {
         self.future_allowed = allowed;
         self
+    }
+
+    /// The same clock, keeping documents whose front matter says `published: false` if `allowed`.
+    #[must_use]
+    pub fn with_unpublished(mut self, allowed: bool) -> Self {
+        self.unpublished_allowed = allowed;
+        self
+    }
+
+    /// Whether documents whose front matter says `published: false` are kept.
+    #[must_use]
+    pub fn unpublished_allowed(&self) -> bool {
+        self.unpublished_allowed
     }
 
     /// Whether a moment is after the build, comparing whole seconds as Jekyll does. Never, when
@@ -202,12 +224,18 @@ mod tests {
     #[test]
     fn a_preview_names_what_it_adds() {
         assert_eq!(Preview::default().label(), None);
-        let both = Preview {
+        let all = Preview {
             drafts: true,
             future: true,
+            unpublished: true,
         };
-        assert_eq!(both.label().as_deref(), Some("drafts, future"));
-        assert!(!both.is_normal());
+        assert_eq!(all.label().as_deref(), Some("drafts, future, unpublished"));
+        assert!(!all.is_normal());
+        let one = Preview {
+            unpublished: true,
+            ..Preview::default()
+        };
+        assert_eq!(one.label().as_deref(), Some("unpublished"));
     }
 
     #[test]

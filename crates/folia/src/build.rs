@@ -111,7 +111,8 @@ pub fn build_as(
     let site = plan_for(root, config, now, preview)?;
     let clock = SiteClock::new(&config.time_zone, now)
         .map_err(|e| vec![Diagnostic::site(e)])?
-        .with_future(preview.future);
+        .with_future(preview.future)
+        .with_unpublished(preview.unpublished);
     let strict = config.slice.is_some();
     let mut built = Built {
         preview,
@@ -249,7 +250,7 @@ impl Generated<'_> {
         problems: &mut Vec<Diagnostic>,
     ) -> Result<(), Vec<Diagnostic>> {
         let mut generated = Vec::new();
-        for (route, path, text) in stylesheets(self.root, self.config, self.site)? {
+        for (route, path, text) in stylesheets(self.root, self.config, self.site, self.clock)? {
             generated.push((route, path, text));
         }
         let (config, site, clock) = (self.config, self.site, self.clock);
@@ -829,10 +830,17 @@ type Written = (Route, String, String);
 ///
 /// Fails when Dart Sass is missing or not the version required, or cannot compile a
 /// stylesheet; no other compiler is tried.
-fn stylesheets(root: &Path, config: &Config, site: &Site) -> Result<Vec<Written>, Vec<Diagnostic>> {
+fn stylesheets(
+    root: &Path,
+    config: &Config,
+    site: &Site,
+    clock: &SiteClock,
+) -> Result<Vec<Written>, Vec<Diagnostic>> {
     let sheets: Vec<(&SourceDoc, Route)> = documents(site, Mode::Pages)
         .iter()
-        .filter(|doc| is_sass(doc.id.as_str()) && doc.front.published())
+        .filter(|doc| {
+            is_sass(doc.id.as_str()) && (doc.front.published() || clock.unpublished_allowed())
+        })
         .filter_map(|doc| {
             site.routes
                 .outputs()
