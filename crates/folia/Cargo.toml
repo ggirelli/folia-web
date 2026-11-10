@@ -17,6 +17,7 @@ folia-pages.workspace = true
 globset.workspace = true
 jiff.workspace = true
 minijinja = { version = "3.0.3", default-features = false, features = ["builtins", "debug", "multi_template", "serde"] }
+notify.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

@@ -197,7 +197,7 @@ fn join(dir: &str, name: &str) -> String {
 }
 
 /// The patterns as one set, anchored at the site root; `*` stays within a path segment.
-fn glob_set(patterns: &[String]) -> Result<GlobSet, Diagnostic> {
+pub(crate) fn glob_set(patterns: &[String]) -> Result<GlobSet, Diagnostic> {
     let mut set = GlobSetBuilder::new();
     for pattern in patterns {
         let glob = GlobBuilder::new(pattern.trim_start_matches('/'))
