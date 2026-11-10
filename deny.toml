@@ -25,6 +25,13 @@ allow = [
     "Unlicense",
     "Zlib",
 ]
+# `folia serve`'s file watcher: notify is CC0-1.0, and its inotify bindings ISC, both permissive,
+# with no conditions beyond MIT's. Allowed for these crates only.
+exceptions = [
+    { crate = "notify", allow = ["CC0-1.0"] },
+    { crate = "inotify", allow = ["ISC"] },
+    { crate = "inotify-sys", allow = ["ISC"] },
+]
 
 [licenses.private]
 ignore = true

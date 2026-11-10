@@ -97,6 +97,14 @@ false.
 - **Unknown front matter** is refused, except the one documented exception (see
   [Writing content](guide/content.md)); Jekyll ignored it silently.
 
+## `folia serve`
+
+- Every change builds the whole site again; there is no incremental build.
+- A git commit alone triggers nothing, though a page's last-modified date comes from its last
+  commit: build again by changing a file.
+- The served site's URL is the local address, so its output differs from production's. Deploy
+  what `folia build` writes.
+
 ## Not covered by parity checks
 
 - Stylesheets need Dart Sass exactly 1.100.0.

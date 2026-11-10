@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `folia serve`: builds the site, serves it locally and builds it again, reloading the open pages,
+  when a file changes ([#46](https://github.com/ggirelli/folia-web/issues/46);
+  [guide](docs/guide/building.md#previewing-while-you-write),
+  [limitations](docs/known-limitations.md#folia-serve)).
 - Documentation: a user guide (getting started, content, templates, building and deploying, feeds,
   sitemap and search), a guide to migrating from Jekyll, and the parity tools reduced to a reference
   for that exercise. The design plans were removed from the docs; they remain in the git history.
