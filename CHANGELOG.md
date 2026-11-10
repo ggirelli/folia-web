@@ -21,6 +21,9 @@
   `page.lang`, as written (`[italian]` or `italian`), or absent without one
   ([#56](https://github.com/ggirelli/folia-web/issues/56)).
 - `folia serve` stamps each rebuild with the local time of day (`[14:03:22] Changed: …`).
+- `folia serve` rewrites only the files a rebuild changed, and removes those it no longer makes,
+  instead of replacing the whole destination: on a slow disk, a rebuild took minutes
+  ([guide](docs/guide/building.md#previewing-while-you-write)).
 - A release workflow that builds the Linux x86_64 binary from a tag
   ([releasing](docs/development/releasing.md#the-release-workflow)).
 

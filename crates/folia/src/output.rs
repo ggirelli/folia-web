@@ -27,6 +27,10 @@
 //!   more entry and ignores. Serve refuses a destination `folia build` wrote, which may be about
 //!   to be deployed, and, in one it wrote, recovers what a serve stopped mid-build left: it
 //!   removes `.folia-new`, and puts `.folia-old` back if the destination is gone.
+//! - **`folia serve` rewrites only what changed** (the `update` module): a destination it
+//!   already wrote is updated in place rather than replaced, so that a rebuild costs the files it
+//!   changed, not the whole site (on a slow disk, the difference between seconds and minutes).
+//!   Each file is still replaced whole, never served half-written.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -90,6 +94,9 @@ pub fn write_as(
     check_no_leftovers(&dest, &new, &old)?;
     check_replaceable(&dest, &record, writer, preview)?;
 
+    if writer == Writer::Serve && fs::symlink_metadata(&dest).is_ok() {
+        return update::update(&dest, &new, &record, outputs, preview);
+    }
     if let Err(problem) = fill(&new, outputs) {
         let _ = fs::remove_dir_all(&new);
         return Err(problem);
@@ -241,10 +248,10 @@ fn top_level(outputs: &BTreeMap<String, Content>) -> BTreeSet<String> {
 }
 
 /// The record's text: the header, the directory it vouches for, whether `folia serve` wrote it,
-/// what a preview build added, and each top-level entry.
+/// what a preview build added, and each top-level entry in `entries`.
 fn record_text(
     dest: &Path,
-    outputs: &BTreeMap<String, Content>,
+    entries: &BTreeSet<String>,
     writer: Writer,
     preview: Preview,
 ) -> String {
@@ -262,8 +269,8 @@ fn record_text(
             text.push('\n');
         }
     }
-    for entry in top_level(outputs) {
-        text.push_str(&entry);
+    for entry in entries {
+        text.push_str(entry);
         text.push('\n');
     }
     text
@@ -276,8 +283,19 @@ fn write_record(
     writer: Writer,
     preview: Preview,
 ) -> Result<(), Diagnostic> {
+    write_record_of(record, dest, &top_level(outputs), writer, preview)
+}
+
+/// Writes the record of `dest`, vouching for its top-level `entries`.
+fn write_record_of(
+    record: &Path,
+    dest: &Path,
+    entries: &BTreeSet<String>,
+    writer: Writer,
+    preview: Preview,
+) -> Result<(), Diagnostic> {
     let tmp = record.with_extension("folia-output.tmp");
-    fs::write(&tmp, record_text(dest, outputs, writer, preview))
+    fs::write(&tmp, record_text(dest, entries, writer, preview))
         .and_then(|()| fs::rename(&tmp, record))
         .map_err(|e| {
             let _ = fs::remove_file(&tmp);
@@ -412,19 +430,25 @@ fn resolve(dest: &Path, site_root: &Path) -> Result<(PathBuf, String), Diagnosti
     }
 }
 
+/// Fails unless `output` is a relative path that stays inside the destination.
+fn check_relative(output: &str) -> Result<&Path, Diagnostic> {
+    let relative = Path::new(output);
+    if relative
+        .components()
+        .all(|part| matches!(part, Component::Normal(_)))
+    {
+        Ok(relative)
+    } else {
+        Err(Diagnostic::site(format!(
+            "{output} is not a relative output path"
+        )))
+    }
+}
+
 fn fill(dir: &Path, outputs: &BTreeMap<String, Content>) -> Result<(), Diagnostic> {
     fs::create_dir(dir).map_err(|e| fail(dir, &e))?;
     for (output, content) in outputs {
-        let relative = Path::new(output);
-        if !relative
-            .components()
-            .all(|part| matches!(part, Component::Normal(_)))
-        {
-            return Err(Diagnostic::site(format!(
-                "{output} is not a relative output path"
-            )));
-        }
-        let path = dir.join(relative);
+        let path = dir.join(check_relative(output)?);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|e| fail(parent, &e))?;
         }
@@ -458,6 +482,8 @@ fn swap(new: &Path, dest: &Path, old: &Path) -> Result<bool, Diagnostic> {
 fn fail(path: &Path, error: &io::Error) -> Diagnostic {
     Diagnostic::site(format!("cannot write {}: {error}", path.display()))
 }
+
+mod update;
 
 #[cfg(test)]
 mod tests;

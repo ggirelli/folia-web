@@ -548,3 +548,118 @@ fn serve_does_not_put_back_an_old_output_that_is_a_symbolic_link() {
     assert!(new.exists(), "nothing was changed");
     assert!(!dest.exists());
 }
+
+fn serve_write(scratch: &Scratch, entries: &[(&str, Content)]) -> PathBuf {
+    let dest = scratch.0.join("out");
+    write_as(
+        &dest,
+        &scratch.site(),
+        &outputs(entries),
+        Writer::Serve,
+        Preview::default(),
+    )
+    .unwrap();
+    dest
+}
+
+fn inode(path: &Path) -> (std::time::SystemTime, u64) {
+    let meta = fs::metadata(path).unwrap();
+    #[cfg(unix)]
+    let id = std::os::unix::fs::MetadataExt::ino(&meta);
+    #[cfg(not(unix))]
+    let id = meta.len();
+    (meta.modified().unwrap(), id)
+}
+
+#[test]
+fn serve_rewrites_only_the_files_that_changed() {
+    let scratch = Scratch::new("serve-unchanged");
+    fs::write(scratch.site().join("logo.svg"), "<svg/>").unwrap();
+    let logo = Content::Copy(scratch.site().join("logo.svg"));
+    let dest = serve_write(
+        &scratch,
+        &[
+            ("a.html", bytes("a")),
+            ("blog/b.html", bytes("b")),
+            ("logo.svg", logo.clone()),
+        ],
+    );
+    let before_a = inode(&dest.join("a.html"));
+    let before_logo = inode(&dest.join("logo.svg"));
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    serve_write(
+        &scratch,
+        &[
+            ("a.html", bytes("a")),
+            ("blog/b.html", bytes("b, changed")),
+            ("logo.svg", logo),
+        ],
+    );
+    assert_eq!(inode(&dest.join("a.html")), before_a);
+    assert_eq!(inode(&dest.join("logo.svg")), before_logo);
+    assert_eq!(
+        fs::read_to_string(dest.join("blog/b.html")).unwrap(),
+        "b, changed"
+    );
+    assert!(!scratch.0.join(".out.folia-new").exists());
+}
+
+#[test]
+fn serve_removes_what_a_rebuild_no_longer_makes_and_the_record_follows() {
+    let scratch = Scratch::new("serve-prune");
+    let dest = serve_write(
+        &scratch,
+        &[
+            ("a.html", bytes("a")),
+            ("gone.html", bytes("gone")),
+            ("old/x.html", bytes("x")),
+            ("blog/keep.html", bytes("keep")),
+            ("blog/drop.html", bytes("drop")),
+            ("tag", bytes("a file, then a directory")),
+            ("page", Content::Bytes(Vec::new())),
+        ],
+    );
+    fs::remove_file(dest.join("page")).unwrap();
+    fs::create_dir(dest.join("page")).unwrap();
+    fs::write(dest.join("page/inner.html"), "a directory, then a file").unwrap();
+    serve_write(
+        &scratch,
+        &[
+            ("a.html", bytes("a")),
+            ("blog/keep.html", bytes("keep")),
+            ("tag/t.html", bytes("t")),
+            ("page", bytes("page")),
+        ],
+    );
+    assert_eq!(scratch.names("out"), ["a.html", "blog", "page", "tag"]);
+    assert_eq!(scratch.names("out/blog"), ["keep.html"]);
+    assert_eq!(fs::read_to_string(dest.join("tag/t.html")).unwrap(), "t");
+    assert_eq!(fs::read_to_string(dest.join("page")).unwrap(), "page");
+    let record = record_of(&scratch);
+    assert!(
+        record.ends_with("/folia serve\na.html\nblog\npage\ntag\n"),
+        "{record}"
+    );
+    // The destination is still one serve may take.
+    claim_for_serve(&dest, &scratch.site()).unwrap();
+}
+
+#[test]
+fn serve_refuses_a_bad_output_path_before_changing_anything() {
+    let scratch = Scratch::new("serve-bad-path");
+    let dest = serve_write(&scratch, &[("a.html", bytes("a"))]);
+    let before = tree(&dest);
+    let record = record_of(&scratch);
+    assert!(
+        write_as(
+            &dest,
+            &scratch.site(),
+            &outputs(&[("b.html", bytes("b")), ("../escape.html", bytes("x"))]),
+            Writer::Serve,
+            Preview::default(),
+        )
+        .is_err()
+    );
+    assert_eq!(tree(&dest), before);
+    assert_eq!(record_of(&scratch), record);
+}

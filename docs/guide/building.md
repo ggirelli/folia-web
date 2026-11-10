@@ -134,9 +134,13 @@ Ctrl+C.
   production's in the URL: `folia build` is still what you deploy.
 - **Each rebuild is stamped with the time** in the terminal, in your local time zone:
   `[14:03:22] Changed: _posts/hello.md; building again`.
-- **A failed build keeps the last good one.** The build is written as `folia build` writes it, whole
-  or not at all. The problems are printed in the terminal and shown over the open pages, which
-  clear when a build succeeds.
+- **A failed build keeps the last good one.** A build that fails writes nothing. The problems are
+  printed in the terminal and shown over the open pages, which clear when a build succeeds.
+- **Only what changed is written.** Unlike `folia build`, which replaces its destination whole,
+  `folia serve` updates the destination it wrote in place: it writes the files whose bytes
+  changed and removes those the build no longer makes, so a rebuild costs what it changed even
+  on a slow disk. Each file is replaced whole, so a page is never served half-written; a disk
+  error partway leaves the site partly updated until the next build.
 - **The destination** defaults to `folia/serve/<site name>-<hash>` in your cache directory
   (`$XDG_CACHE_HOME`, or `~/.cache`; `~/Library/Caches` on macOS), and is kept between runs.
   `--dest` follows the rules of [the destination](#the-destination), checked before anything is
