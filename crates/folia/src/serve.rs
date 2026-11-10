@@ -30,7 +30,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 
 use folia_core::content::Preview;
-use jiff::Timestamp;
+use jiff::{Timestamp, Zoned};
 use tiny_http::Server;
 
 use crate::build::{build_as, preview_notice};
@@ -127,10 +127,11 @@ pub fn run(options: &Options) -> Result<Infallible, String> {
 
     while let Some(changed) = watch.next_change(|e| eprintln!("warning: watching: {e}")) {
         let shown = changed.strip_prefix(&builder.site).unwrap_or(&changed);
+        let at = time_of_day(&Zoned::now());
         if shown.as_os_str().is_empty() {
-            println!("The site may have changed; building again");
+            println!("[{at}] The site may have changed; building again");
         } else {
-            println!("Changed: {}; building again", shown.display());
+            println!("[{at}] Changed: {}; building again", shown.display());
         }
         let (error, skipped) = builder.build(false);
         versions.publish(error);
@@ -219,6 +220,11 @@ impl Builder {
         };
         (error, skipped)
     }
+}
+
+/// The time of day of `time`, as the rebuilds are stamped with: `14:03:22`, in its own time zone.
+fn time_of_day(time: &Zoned) -> String {
+    time.strftime("%H:%M:%S").to_string()
 }
 
 /// `n` and `noun`, plural unless `n` is 1.
@@ -348,6 +354,12 @@ mod tests {
         assert_eq!(url("[::]:4000"), "http://[::1]:4000");
         assert_eq!(url("192.168.1.2:80"), "http://192.168.1.2:80");
         assert_eq!(url("127.0.0.1:4000"), "http://127.0.0.1:4000");
+    }
+
+    #[test]
+    fn a_rebuild_is_stamped_with_the_time_of_day() {
+        let time: Zoned = "2026-11-10T14:03:22+01:00[Europe/Rome]".parse().unwrap();
+        assert_eq!(time_of_day(&time), "14:03:22");
     }
 
     #[test]
