@@ -13,9 +13,10 @@ folia build --site ../my-site --dest ../my-site-out
 | `--dest` | required | Where to write the site |
 
 `folia --version` prints the version, and `folia build --help` the options. Its
-other command is [`folia serve`](#previewing-while-you-write). There is no `--drafts` or
-`--future` yet ([#47](https://github.com/ggirelli/folia-web/issues/47)). A post dated after the
-build, or with `published: false`, is not built.
+other command is [`folia serve`](#previewing-while-you-write). Both take `--future` and
+`--unpublished`, which build scheduled posts and unpublished documents for a preview
+([below](#previewing-drafts-and-scheduled-posts)). A post dated after the build, or with
+`published: false`, is not built.
 
 While it builds, Folia prints **warnings** (a broken wiki-link) and `skipped:` lines for any
 document it does not support yet, each with the reason, then `Built N pages, …`.
@@ -45,7 +46,41 @@ touches the destination**. It deletes nothing it did not write:
   files, a moved copy or any other directory are refused, with nothing changed;
 - a leftover `.<name>.folia-new` or `.<name>.folia-old` is refused, never deleted.
 
+A preview build (see below) is recorded as one, and `folia build` never replaces a normal build
+with a preview, nor a preview with a normal build: it refuses, and nothing is changed. Build the
+preview into another directory, or remove the old one yourself. `folia serve` is not bound by this
+rule and may switch a destination either way.
+
 To build into a directory that holds something else, empty it yourself.
+
+## Previewing drafts and scheduled posts
+
+A draft is a document with `published: false` in its front matter, and a normal build leaves it
+out. Two flags build what a normal build leaves out, so that you can look at it before it is
+published. They default to off, and a build without them is unchanged. They are command-line
+flags on `folia build` and `folia serve`, not configuration keys.
+
+```sh
+folia build --site ../my-site --dest ../my-site-preview --future --unpublished
+```
+
+- **`--unpublished`** builds the documents whose front matter says `published: false`: posts,
+  garden notes, micro entries and pages (and stylesheets). A draft post is written like any
+  post, in the posts directory with a dated file name, and gets its date from the name. A draft
+  that is also dated after the build needs `--future` as well.
+- **`--future`** builds the posts, garden notes and micro entries dated after the build: scheduled
+  content.
+
+A build with any of them is a **preview build**, and Folia says so in three places:
+
+- the summary line ends with `PREVIEW BUILD (future, unpublished): not for publishing.`,
+  naming the flags that were set;
+- a `warning:` line on stderr says the same;
+- the record of the destination, `.<name>.folia-output`, gets a `/folia future`
+  and/or `/folia unpublished` line, which is how `folia build` recognizes the directory later (see
+  [the destination](#the-destination)).
+
+Keep a preview out of production: deploy only what a normal `folia build` wrote.
 
 ## Stylesheets
 

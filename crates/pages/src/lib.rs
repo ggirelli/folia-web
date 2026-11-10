@@ -107,10 +107,16 @@ const MARKDOWN_EXTENSIONS: [&str; 5] = [".markdown", ".mkdown", ".mkdn", ".mkd",
 ///
 /// Returns every problem found: front matter that cannot be read, or a permalink that is not a
 /// valid route for the page's output.
-pub fn routes(docs: &[SourceDoc]) -> Result<Vec<PlannedOutput>, Vec<Diagnostic>> {
+pub fn routes(
+    docs: &[SourceDoc],
+    clock: &SiteClock,
+) -> Result<Vec<PlannedOutput>, Vec<Diagnostic>> {
     let mut outputs = Vec::new();
     let mut problems = Vec::new();
-    for doc in docs.iter().filter(|doc| doc.front.published()) {
+    for doc in docs
+        .iter()
+        .filter(|doc| doc.front.published() || clock.unpublished_allowed())
+    {
         match page_output(doc) {
             Ok(output) => outputs.push(output),
             Err(problem) => problems.push(problem),
@@ -142,7 +148,10 @@ pub fn build(
 ) -> Result<ModeOutput, Vec<Diagnostic>> {
     let mut output = ModeOutput::default();
     let mut problems = Vec::new();
-    for doc in docs.iter().filter(|doc| doc.front.published()) {
+    for doc in docs
+        .iter()
+        .filter(|doc| doc.front.published() || clock.unpublished_allowed())
+    {
         let claim = claimed.get(doc.id.as_str()).map(String::as_str);
         match build_page(doc, commits, clock, claim) {
             Ok((entry, page)) => {
@@ -813,7 +822,7 @@ mod tests {
     }
 
     fn route(doc: SourceDoc) -> (String, String) {
-        let output = routes(&[doc]).unwrap().remove(0);
+        let output = routes(&[doc], &clock()).unwrap().remove(0);
         (output.route.url().to_owned(), output.route.output_path())
     }
 
@@ -871,14 +880,21 @@ mod tests {
     #[test]
     fn unpublished_pages_are_left_out() {
         assert_eq!(
-            routes(&[page("pages/draft.md", "published: false")]).unwrap(),
+            routes(&[page("pages/draft.md", "published: false")], &clock()).unwrap(),
             []
         );
     }
 
     #[test]
+    fn an_unpublished_page_is_kept_when_unpublished_is_allowed() {
+        let docs = [page("pages/draft.md", "published: false")];
+        let kept = routes(&docs, &clock().with_unpublished(true)).unwrap();
+        assert_eq!(kept.len(), 1);
+    }
+
+    #[test]
     fn a_non_html_page_needs_its_extension_in_the_url() {
-        let problems = routes(&[page("pages/rss.xml", "permalink: /feed")]).unwrap_err();
+        let problems = routes(&[page("pages/rss.xml", "permalink: /feed")], &clock()).unwrap_err();
         assert!(problems[0].message.contains("must end with .xml"));
     }
 }

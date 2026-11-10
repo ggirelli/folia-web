@@ -125,7 +125,7 @@ fn read_note(doc: &SourceDoc, root: &str, clock: &SiteClock) -> Result<Option<No
         Some(date) => Some(clock.parse(&date).map_err(|e| problem(&e))?),
         None => None,
     };
-    if !doc.front.published() {
+    if !doc.front.published() && !clock.unpublished_allowed() {
         return Ok(None);
     }
     let date = match front_date {

@@ -126,7 +126,7 @@ fn read_post(doc: &SourceDoc, clock: &SiteClock) -> Result<Option<Post>, Diagnos
         ));
     }
     let published = clock.midnight(date).map_err(|e| problem(&e))?;
-    if !doc.front.published() || clock.is_future(published) {
+    if (!doc.front.published() && !clock.unpublished_allowed()) || clock.is_future(published) {
         return Ok(None);
     }
 

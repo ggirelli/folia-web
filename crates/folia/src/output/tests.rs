@@ -318,9 +318,132 @@ fn written_as(scratch: &Scratch, writer: Writer) -> PathBuf {
         &scratch.site(),
         &outputs(&[("a.html", bytes("a"))]),
         writer,
+        Preview::default(),
     )
     .unwrap();
     dest
+}
+
+const FUTURE: Preview = Preview {
+    future: true,
+    unpublished: false,
+};
+
+const BOTH: Preview = Preview {
+    future: true,
+    unpublished: true,
+};
+
+const UNPUBLISHED: Preview = Preview {
+    future: false,
+    unpublished: true,
+};
+
+fn written_with(scratch: &Scratch, writer: Writer, preview: Preview) -> Result<(), Diagnostic> {
+    write_as(
+        &scratch.0.join("out"),
+        &scratch.site(),
+        &outputs(&[("a.html", bytes("a"))]),
+        writer,
+        preview,
+    )
+}
+
+fn record_of(scratch: &Scratch) -> String {
+    fs::read_to_string(scratch.0.join(".out.folia-output")).unwrap()
+}
+
+#[test]
+fn a_preview_build_is_recorded_in_the_destination_record() {
+    let scratch = Scratch::new("preview-record");
+    written_with(&scratch, Writer::Build, BOTH).unwrap();
+    let record = record_of(&scratch);
+    for mark in ["/folia future", "/folia unpublished"] {
+        assert!(record.lines().any(|line| line == mark), "{record}");
+    }
+    assert_eq!(recorded_preview(&record), BOTH);
+
+    written_with(&scratch, Writer::Build, BOTH).unwrap();
+    written_with(&scratch, Writer::Serve, Preview::default()).unwrap();
+    let record = record_of(&scratch);
+    assert_eq!(recorded_preview(&record), Preview::default());
+    assert!(!record.contains("/folia future"), "{record}");
+    assert!(!record.contains("/folia unpublished"), "{record}");
+}
+
+#[test]
+fn an_unpublished_build_is_recorded_and_never_mixes_with_a_normal_one() {
+    let scratch = Scratch::new("unpublished-record");
+    written_with(&scratch, Writer::Build, UNPUBLISHED).unwrap();
+    let record = record_of(&scratch);
+    assert!(
+        record.lines().any(|line| line == "/folia unpublished"),
+        "{record}"
+    );
+    assert_eq!(recorded_preview(&record), UNPUBLISHED);
+    let problem = written_with(&scratch, Writer::Build, Preview::default()).unwrap_err();
+    assert!(
+        problem
+            .message
+            .contains("it holds a preview build (unpublished)"),
+        "{problem}"
+    );
+    written_with(&scratch, Writer::Serve, Preview::default()).unwrap();
+    assert_eq!(recorded_preview(&record_of(&scratch)), Preview::default());
+    let other = Scratch::new("normal-then-unpublished");
+    written_with(&other, Writer::Build, Preview::default()).unwrap();
+    let problem = written_with(&other, Writer::Build, UNPUBLISHED).unwrap_err();
+    assert!(
+        problem
+            .message
+            .contains("this build is a preview one (unpublished)"),
+        "{problem}"
+    );
+}
+
+#[test]
+fn a_build_does_not_replace_a_normal_build_with_a_preview_one() {
+    let scratch = Scratch::new("normal-then-preview");
+    written_with(&scratch, Writer::Build, Preview::default()).unwrap();
+    let problem = written_with(&scratch, Writer::Build, FUTURE).unwrap_err();
+    assert!(
+        problem
+            .message
+            .contains("it holds a normal build, and this build is a preview one (future)"),
+        "{problem}"
+    );
+    assert!(problem.message.contains("nothing was changed"), "{problem}");
+    assert_eq!(scratch.names("out"), ["a.html"]);
+    assert_eq!(recorded_preview(&record_of(&scratch)), Preview::default());
+}
+
+#[test]
+fn a_build_does_not_replace_a_preview_build_with_a_normal_one() {
+    let scratch = Scratch::new("preview-then-normal");
+    written_with(&scratch, Writer::Build, BOTH).unwrap();
+    let problem = written_with(&scratch, Writer::Build, Preview::default()).unwrap_err();
+    assert!(
+        problem
+            .message
+            .contains("it holds a preview build (future, unpublished)"),
+        "{problem}"
+    );
+    assert!(problem.message.contains("nothing was changed"), "{problem}");
+    assert_eq!(recorded_preview(&record_of(&scratch)), BOTH);
+    // A preview replaces a preview.
+    written_with(&scratch, Writer::Build, FUTURE).unwrap();
+    assert_eq!(recorded_preview(&record_of(&scratch)), FUTURE);
+}
+
+#[test]
+fn serve_may_change_a_destination_between_normal_and_preview() {
+    let scratch = Scratch::new("serve-preview");
+    written_with(&scratch, Writer::Serve, Preview::default()).unwrap();
+    written_with(&scratch, Writer::Serve, BOTH).unwrap();
+    assert_eq!(recorded_preview(&record_of(&scratch)), BOTH);
+    claim_for_serve(&scratch.0.join("out"), &scratch.site()).unwrap();
+    written_with(&scratch, Writer::Serve, Preview::default()).unwrap();
+    assert_eq!(recorded_preview(&record_of(&scratch)), Preview::default());
 }
 
 #[test]

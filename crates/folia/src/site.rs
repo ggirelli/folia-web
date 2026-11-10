@@ -13,7 +13,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use folia_core::content::{Diagnostic, DocId, Mode, Route, SiteClock, SourceDoc};
+use folia_core::content::{Diagnostic, DocId, Mode, Preview, Route, SiteClock, SourceDoc};
 use folia_core::publish::PlannedOutput;
 use jiff::Timestamp;
 
@@ -52,7 +52,24 @@ impl RouteTable {
 ///
 /// Returns every problem found, by discovery, by a mode, or in the assembled table.
 pub fn plan(root: &Path, config: &Config, now: Timestamp) -> Result<Site, Vec<Diagnostic>> {
-    let clock = SiteClock::new(&config.time_zone, now).map_err(|e| vec![Diagnostic::site(e)])?;
+    plan_for(root, config, now, Preview::default())
+}
+
+/// Plans the site as [`plan`] does, with what `preview` adds to the normal build.
+///
+/// # Errors
+///
+/// As [`plan`].
+pub fn plan_for(
+    root: &Path,
+    config: &Config,
+    now: Timestamp,
+    preview: Preview,
+) -> Result<Site, Vec<Diagnostic>> {
+    let clock = SiteClock::new(&config.time_zone, now)
+        .map_err(|e| vec![Diagnostic::site(e)])?
+        .with_future(preview.future)
+        .with_unpublished(preview.unpublished);
     let discovery = discover(root, config)?;
 
     let mut docs: BTreeMap<Mode, Vec<SourceDoc>> = BTreeMap::new();
@@ -70,7 +87,7 @@ pub fn plan(root: &Path, config: &Config, now: Timestamp) -> Result<Site, Vec<Di
         folia_blog::routes(of(Mode::Blog), &clock),
         folia_micro::routes(of(Mode::Micro), &config.roots.micro, &clock),
         folia_garden::routes(of(Mode::Garden), &config.roots.garden, &clock),
-        folia_pages::routes(of(Mode::Pages)),
+        folia_pages::routes(of(Mode::Pages), &clock),
     ] {
         match result {
             Ok(outputs) => planned.extend(outputs),

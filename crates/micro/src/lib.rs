@@ -84,7 +84,7 @@ fn entry_output(
     {
         return Ok(None);
     }
-    if !doc.front.published() {
+    if !doc.front.published() && !clock.unpublished_allowed() {
         return Ok(None);
     }
 
@@ -205,5 +205,28 @@ mod tests {
         .unwrap();
         assert!(outputs.iter().all(|o| o.source.is_none()));
         assert_eq!(outputs.len(), 5);
+    }
+
+    #[test]
+    fn an_unpublished_entry_is_kept_when_unpublished_is_allowed() {
+        let docs = [entry(
+            "_micro/notes/2020-01-01-hidden.md",
+            "published: false",
+        )];
+        let outputs = routes(&docs, "_micro", &clock()).unwrap();
+        assert!(outputs.iter().all(|o| o.source.is_none()));
+        let outputs = routes(&docs, "_micro", &clock().with_unpublished(true)).unwrap();
+        assert!(outputs.iter().any(|o| o.source.is_some()));
+    }
+
+    #[test]
+    fn future_entries_are_kept_when_the_clock_allows_them() {
+        let outputs = routes(
+            &[entry("_micro/notes/2026-10-26-soon.md", "")],
+            "_micro",
+            &clock().with_future(true),
+        )
+        .unwrap();
+        assert!(outputs.iter().any(|o| o.source.is_some()));
     }
 }

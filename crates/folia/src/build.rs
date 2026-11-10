@@ -26,7 +26,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::Path;
 
-use folia_core::content::{Diagnostic, DocId, LastCommits, Mode, Route, SiteClock, SourceDoc};
+use folia_core::content::{
+    Diagnostic, DocId, LastCommits, Mode, Preview, Route, SiteClock, SourceDoc,
+};
 use folia_core::publish::{EntrySummary, FeedItem, ModeOutput, PageSpec};
 use jiff::Timestamp;
 use serde_json::json;
@@ -40,7 +42,7 @@ use crate::redirects::redirects_json;
 use crate::render::Renderer;
 use crate::sass::Sass;
 use crate::search;
-use crate::site::{Site, plan, redirect_stub};
+use crate::site::{Site, plan_for, redirect_stub};
 use crate::sitemap;
 
 /// What a build wrote.
@@ -62,6 +64,9 @@ pub struct Built {
     pub warnings: Vec<Diagnostic>,
     /// Without a slice, the documents Folia cannot build yet, each with why; they are not built.
     pub skipped: Vec<Diagnostic>,
+    /// What the build added to the normal one; not the normal build when set, and not for
+    /// publishing.
+    pub preview: Preview,
 }
 
 /// Builds the site at `root` into `dest`, as of the build time `now`.
@@ -76,26 +81,43 @@ pub fn build(
     dest: &Path,
     now: Timestamp,
 ) -> Result<Built, Vec<Diagnostic>> {
-    build_as(root, config, dest, now, Writer::Build)
+    build_as(root, config, dest, now, Writer::Build, Preview::default())
+}
+
+/// The sentence that says a build with `preview` is not for publishing, led by a space so it can
+/// end a summary line; `None` for the normal build.
+#[must_use]
+pub fn preview_notice(preview: Preview) -> Option<String> {
+    preview
+        .label()
+        .map(|label| format!(" PREVIEW BUILD ({label}): not for publishing."))
 }
 
 /// Builds the site as [`build`] does, for the command `writer`, which the destination's record
-/// names.
+/// names, and with what `preview` adds to the normal build.
 ///
 /// # Errors
 ///
-/// As [`build`].
+/// As [`build`]; and when `writer` is `folia build` and the destination holds a build of the
+/// other kind, normal or preview.
 pub fn build_as(
     root: &Path,
     config: &Config,
     dest: &Path,
     now: Timestamp,
     writer: Writer,
+    preview: Preview,
 ) -> Result<Built, Vec<Diagnostic>> {
-    let site = plan(root, config, now)?;
-    let clock = SiteClock::new(&config.time_zone, now).map_err(|e| vec![Diagnostic::site(e)])?;
+    let site = plan_for(root, config, now, preview)?;
+    let clock = SiteClock::new(&config.time_zone, now)
+        .map_err(|e| vec![Diagnostic::site(e)])?
+        .with_future(preview.future)
+        .with_unpublished(preview.unpublished);
     let strict = config.slice.is_some();
-    let mut built = Built::default();
+    let mut built = Built {
+        preview,
+        ..Built::default()
+    };
     let pages = build_documents(root, config, &site, &clock, &mut built.skipped)?;
     let index = site_index(config, &site, &clock)?;
 
@@ -176,14 +198,7 @@ pub fn build_as(
         .iter()
         .map(|o| o.route.output_path())
         .collect();
-    let unplanned: Vec<Diagnostic> = outputs
-        .keys()
-        .filter(|path| !planned.contains(*path))
-        .map(|path| Diagnostic::site(format!("{path} is built but not planned")))
-        .collect();
-    if !unplanned.is_empty() {
-        return Err(unplanned);
-    }
+    check_planned(&outputs, &planned)?;
     built.not_built = planned.len() - outputs.len();
     built.entries = pages
         .entries
@@ -191,8 +206,25 @@ pub fn build_as(
         .filter(|e| shown.contains(&e.doc))
         .collect();
     built.warnings = pages.warnings;
-    output::write_as(dest, root, &outputs, writer).map_err(|e| vec![e])?;
+    output::write_as(dest, root, &outputs, writer, preview).map_err(|e| vec![e])?;
     Ok(built)
+}
+
+/// Fails with each output that was built without being planned.
+fn check_planned(
+    outputs: &BTreeMap<String, Content>,
+    planned: &BTreeSet<String>,
+) -> Result<(), Vec<Diagnostic>> {
+    let unplanned: Vec<Diagnostic> = outputs
+        .keys()
+        .filter(|path| !planned.contains(*path))
+        .map(|path| Diagnostic::site(format!("{path} is built but not planned")))
+        .collect();
+    if unplanned.is_empty() {
+        Ok(())
+    } else {
+        Err(unplanned)
+    }
 }
 
 /// Adds the output `content` at `path`, unless another output is already there. The route table
@@ -218,7 +250,7 @@ impl Generated<'_> {
         problems: &mut Vec<Diagnostic>,
     ) -> Result<(), Vec<Diagnostic>> {
         let mut generated = Vec::new();
-        for (route, path, text) in stylesheets(self.root, self.config, self.site)? {
+        for (route, path, text) in stylesheets(self.root, self.config, self.site, self.clock)? {
             generated.push((route, path, text));
         }
         let (config, site, clock) = (self.config, self.site, self.clock);
@@ -798,10 +830,17 @@ type Written = (Route, String, String);
 ///
 /// Fails when Dart Sass is missing or not the version required, or cannot compile a
 /// stylesheet; no other compiler is tried.
-fn stylesheets(root: &Path, config: &Config, site: &Site) -> Result<Vec<Written>, Vec<Diagnostic>> {
+fn stylesheets(
+    root: &Path,
+    config: &Config,
+    site: &Site,
+    clock: &SiteClock,
+) -> Result<Vec<Written>, Vec<Diagnostic>> {
     let sheets: Vec<(&SourceDoc, Route)> = documents(site, Mode::Pages)
         .iter()
-        .filter(|doc| is_sass(doc.id.as_str()) && doc.front.published())
+        .filter(|doc| {
+            is_sass(doc.id.as_str()) && (doc.front.published() || clock.unpublished_allowed())
+        })
         .filter_map(|doc| {
             site.routes
                 .outputs()

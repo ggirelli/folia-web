@@ -47,7 +47,7 @@ use super::{Post, read_posts};
 pub const POST_TEMPLATE: &str = "post.html";
 
 /// The front matter keys the post template can show, besides the presentation keys.
-const KEYS: [&str; 8] = [
+const KEYS: [&str; 9] = [
     "layout",
     "title",
     "author",
@@ -56,6 +56,7 @@ const KEYS: [&str; 8] = [
     "tags",
     "lang",
     "last_modified_at",
+    "published",
 ];
 
 /// Keys that change nothing on a post's own page, each with the kind of value it takes: `trip`

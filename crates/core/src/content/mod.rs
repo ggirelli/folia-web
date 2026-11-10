@@ -14,7 +14,7 @@ mod slug;
 mod source;
 mod title;
 
-pub use date::{DateError, SiteClock, dated_file_name};
+pub use date::{DateError, Preview, SiteClock, dated_file_name};
 pub use diagnostic::Diagnostic;
 pub use front_matter::{FrontMatter, FrontMatterError, has_front_matter, split_front_matter};
 pub use git::{GitError, LastCommits};

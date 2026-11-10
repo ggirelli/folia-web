@@ -43,6 +43,13 @@ for every output, whether it is identical, differs for a reason you accept, or i
    host (below).
 6. **Deploy, and keep a way back.**
 
+## Sites with a `_drafts` directory
+
+Folia does not read `_drafts`. Move each draft into the posts directory with a dated file name
+(`_posts/2026/2026-11-10-idea.md`) and add `published: false` to its front matter. Preview it with
+`folia serve --unpublished`; remove the line when the post is ready. See the
+[known limitations](../known-limitations.md#drafts).
+
 ## Reading the result
 
 `just pages` ends with two verdicts that are never the same thing:

@@ -237,6 +237,19 @@ fn the_record_names_the_inputs() {
 }
 
 #[test]
+fn a_kept_build_records_that_it_is_not_a_preview() {
+    let fixture = Fixture::new("not-preview");
+    let kept = fixture
+        .keep(&fixture.0.join("build"), "2026-10-25T14:43:51Z")
+        .unwrap();
+    assert!(kept.record.preview.is_normal());
+    let json: serde_json::Value =
+        serde_json::from_str(&read(&kept.dir.join("build.json"))).unwrap();
+    assert_eq!(json["preview"]["future"], false);
+    assert_eq!(json["preview"]["unpublished"], false);
+}
+
+#[test]
 fn a_source_outside_a_repository_has_no_commit_and_an_unknown_identity() {
     let record = checkout(Path::new("/"));
     assert_eq!(record.path, "/");

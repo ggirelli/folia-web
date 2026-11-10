@@ -29,10 +29,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 
+use folia_core::content::Preview;
 use jiff::Timestamp;
 use tiny_http::Server;
 
-use crate::build::build_as;
+use crate::build::{build_as, preview_notice};
 use crate::config::Config;
 use crate::output::{self, Writer};
 use reload::Versions;
@@ -49,6 +50,8 @@ pub struct Options {
     pub dest: Option<PathBuf>,
     /// The address to listen on: port 0 picks a free port.
     pub address: SocketAddr,
+    /// What to add to the normal build; the site is then a preview.
+    pub preview: Preview,
 }
 
 /// Builds and serves the site until the process is stopped; the build's outcomes are printed.
@@ -100,6 +103,7 @@ pub fn run(options: &Options) -> Result<Infallible, String> {
         config,
         dest,
         url: site_url(address),
+        preview: options.preview,
     };
 
     let (error, skipped) = builder.build(true);
@@ -152,6 +156,7 @@ struct Builder {
     config: PathBuf,
     dest: PathBuf,
     url: String,
+    preview: Preview,
 }
 
 impl Builder {
@@ -173,6 +178,7 @@ impl Builder {
                     &self.dest,
                     Timestamp::now(),
                     Writer::Serve,
+                    self.preview,
                 )
                 .map_err(|problems| problems.iter().map(ToString::to_string).collect())
             });
@@ -193,9 +199,10 @@ impl Builder {
                     );
                 }
                 println!(
-                    "Built {} pages in {:.1} s.",
+                    "Built {} pages in {:.1} s.{}",
                     built.pages.len(),
-                    started.elapsed().as_secs_f64()
+                    started.elapsed().as_secs_f64(),
+                    preview_notice(built.preview).unwrap_or_default()
                 );
                 None
             }

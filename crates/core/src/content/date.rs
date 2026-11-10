@@ -20,12 +20,43 @@ pub enum DateError {
     Form(String),
 }
 
+/// What a preview build adds to the normal one: documents dated after the build, and documents
+/// whose front matter says `published: false`. A site built with any is for looking at,
+/// not for publishing.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+pub struct Preview {
+    /// Also build documents dated after the build.
+    pub future: bool,
+    /// Also build documents whose front matter says `published: false`.
+    pub unpublished: bool,
+}
+
+impl Preview {
+    /// Whether this is the normal build, with neither added.
+    #[must_use]
+    pub fn is_normal(self) -> bool {
+        !self.future && !self.unpublished
+    }
+
+    /// The names of what is added, such as `future, unpublished`; `None` for the normal build.
+    #[must_use]
+    pub fn label(self) -> Option<String> {
+        let names: Vec<&str> = [(self.future, "future"), (self.unpublished, "unpublished")]
+            .into_iter()
+            .filter_map(|(on, name)| on.then_some(name))
+            .collect();
+        (!names.is_empty()).then(|| names.join(", "))
+    }
+}
+
 /// The site's time zone and the moment of the build, against which future-dated content is
-/// held back.
+/// held back (unless the clock allows it).
 #[derive(Clone, Debug)]
 pub struct SiteClock {
     zone: TimeZone,
     now: Timestamp,
+    future_allowed: bool,
+    unpublished_allowed: bool,
 }
 
 impl SiteClock {
@@ -37,13 +68,39 @@ impl SiteClock {
     pub fn new(zone: &str, now: Timestamp) -> Result<Self, DateError> {
         let tz =
             TimeZone::get(zone).map_err(|error| DateError::TimeZone(zone.to_owned(), error))?;
-        Ok(Self { zone: tz, now })
+        Ok(Self {
+            zone: tz,
+            now,
+            future_allowed: false,
+            unpublished_allowed: false,
+        })
     }
 
-    /// Whether a moment is after the build, comparing whole seconds as Jekyll does.
+    /// The same clock, holding back future-dated content unless `allowed`.
+    #[must_use]
+    pub fn with_future(mut self, allowed: bool) -> Self {
+        self.future_allowed = allowed;
+        self
+    }
+
+    /// The same clock, keeping documents whose front matter says `published: false` if `allowed`.
+    #[must_use]
+    pub fn with_unpublished(mut self, allowed: bool) -> Self {
+        self.unpublished_allowed = allowed;
+        self
+    }
+
+    /// Whether documents whose front matter says `published: false` are kept.
+    #[must_use]
+    pub fn unpublished_allowed(&self) -> bool {
+        self.unpublished_allowed
+    }
+
+    /// Whether a moment is after the build, comparing whole seconds as Jekyll does. Never, when
+    /// the clock allows future content.
     #[must_use]
     pub fn is_future(&self, moment: Timestamp) -> bool {
-        moment.as_second() > self.now.as_second()
+        !self.future_allowed && moment.as_second() > self.now.as_second()
     }
 
     /// The moment of the build.
@@ -137,6 +194,29 @@ mod tests {
 
     fn clock() -> SiteClock {
         SiteClock::new("Europe/Stockholm", "2026-10-25T09:00:00Z".parse().unwrap()).unwrap()
+    }
+
+    #[test]
+    fn a_future_moment_is_not_future_when_the_clock_allows_it() {
+        let moment: Timestamp = "2026-10-26T09:00:00Z".parse().unwrap();
+        assert!(clock().is_future(moment));
+        assert!(!clock().with_future(true).is_future(moment));
+    }
+
+    #[test]
+    fn a_preview_names_what_it_adds() {
+        assert_eq!(Preview::default().label(), None);
+        let all = Preview {
+            future: true,
+            unpublished: true,
+        };
+        assert_eq!(all.label().as_deref(), Some("future, unpublished"));
+        assert!(!all.is_normal());
+        let one = Preview {
+            unpublished: true,
+            ..Preview::default()
+        };
+        assert_eq!(one.label().as_deref(), Some("unpublished"));
     }
 
     #[test]
