@@ -256,3 +256,17 @@ fn a_block_renders_without_the_frame_its_parents_put_around_it() {
         "<nav>Menu</nav><h1>About me</h1><footer>Foot</footer>"
     );
 }
+
+#[test]
+fn a_page_without_a_lang_has_none_defined_for_the_templates() {
+    let templates = Templates::new("lang", &[("page.html", "{{ page.lang is defined }}")]);
+    let renderer = Renderer::new(&templates.0);
+    let page = spec("/about", "page.html");
+    let html = renderer.render(&page, "", &json!({})).unwrap();
+    assert_eq!(html, "False");
+    let with_lang = PageSpec {
+        context: json!({"lang": ["italian"]}),
+        ..spec("/about", "page.html")
+    };
+    assert_eq!(renderer.render(&with_lang, "", &json!({})).unwrap(), "True");
+}

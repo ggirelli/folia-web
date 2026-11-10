@@ -45,6 +45,28 @@ fn note() -> SourceDoc {
 }
 
 #[test]
+fn an_entry_s_lang_is_passed_to_the_template_as_written() {
+    let lang = |path: &str, front: &str| {
+        page(&entry(path, front, "Body.\n"))
+            .context
+            .get("lang")
+            .cloned()
+    };
+    assert_eq!(
+        lang(
+            "_micro/bookmarks/2021-08-24-x.md",
+            "title: X\nlang: [english]\nbookmark:\n  url: https://example.com"
+        ),
+        Some(json!(["english"]))
+    );
+    assert_eq!(
+        lang("_micro/notes/2021-08-24-x.md", "title: X\nlang: italian"),
+        Some(json!("italian"))
+    );
+    assert_eq!(lang("_micro/notes/2021-08-24-x.md", "title: X"), None);
+}
+
+#[test]
 fn a_note_is_a_page_with_every_micro_default() {
     let page = page(&note());
     assert_eq!(page.template, "page.html");

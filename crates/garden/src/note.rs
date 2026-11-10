@@ -20,6 +20,7 @@
 //! | `description` | its excerpt without markup, cut to 160 characters, as HTML text (D-003) |
 //! | `backlinks` | `{title, url, excerpt}` of each link to it, by the linking note's order |
 //! | `garden_map` | whether to show the garden map (front matter `hide_garden_map` off) |
+//! | `lang` | its front matter `lang` as written (`[italian]`), absent without one |
 //! | `toc`, `cover` | as a page's, at their defaults: the frame reads them |
 //! | `hide_website_junk` | as a page's, with the category menu hidden, as the site's defaults hid it for notes |
 //!
@@ -38,7 +39,7 @@ use folia_core::content::markdown::{
     LinkResolver, description, excerpt_html, to_html, wiki_link_targets,
 };
 use folia_core::content::{
-    Diagnostic, LastCommits, SiteClock, SourceDoc, cover, hide_website_junk, modified,
+    Diagnostic, LastCommits, SiteClock, SourceDoc, cover, hide_website_junk, lang, modified,
 };
 use folia_core::publish::{Artifact, EntrySummary, FeedItem, ModeOutput, PageSpec};
 use serde::Serialize;
@@ -50,7 +51,7 @@ use super::{GRAPH_URL, Note, WikiLinks, file_route, read_notes};
 pub const NOTE_TEMPLATE: &str = "garden_post.html";
 
 /// The front matter keys the note template can show.
-const KEYS: [&str; 4] = ["title", "date", "hide_garden_map", "published"];
+const KEYS: [&str; 5] = ["title", "date", "hide_garden_map", "published", "lang"];
 
 /// How long a graph label may be before it is cut, and how much of it is kept, in characters.
 const LABEL_LENGTH: usize = 25;
@@ -269,7 +270,7 @@ fn build_note(
     };
     let modified = modified(doc, commits, Some(date), clock)?;
 
-    let context = json!({
+    let mut context = json!({
         "url": note.route.url(),
         "title": note.title,
         "layout": "garden_post",
@@ -285,6 +286,9 @@ fn build_note(
         "cover": cover(doc)?.to_json(),
         "hide_website_junk": frame(doc),
     });
+    if let Some(lang) = lang(doc) {
+        context["lang"] = lang;
+    }
     let page = PageSpec {
         route: note.route.clone(),
         template: NOTE_TEMPLATE.to_owned(),

@@ -17,6 +17,9 @@
 - `folia build --at <TIME>` builds as of an RFC 3339 timestamp instead of now, so that a build is
   reproducible ([#50](https://github.com/ggirelli/folia-web/issues/50);
   [guide](docs/guide/building.md#building-as-of-a-moment)).
+- The front matter `lang` of a post, garden note, micro entry or page reaches templates as
+  `page.lang`, as written (`[italian]` or `italian`), or absent without one
+  ([#56](https://github.com/ggirelli/folia-web/issues/56)).
 - `folia serve` stamps each rebuild with the local time of day (`[14:03:22] Changed: …`).
 - A release workflow that builds the Linux x86_64 binary from a tag
   ([releasing](docs/development/releasing.md#the-release-workflow)).

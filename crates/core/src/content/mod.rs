@@ -20,7 +20,7 @@ pub use front_matter::{FrontMatter, FrontMatterError, has_front_matter, split_fr
 pub use git::{GitError, LastCommits};
 pub use modified::{Modified, ModifiedFrom, modified};
 pub use presentation::{
-    Cover, Toc, TocPlacement, cover, hide_website_junk, interactions, syndications,
+    Cover, Toc, TocPlacement, cover, hide_website_junk, interactions, lang, syndications,
     table_of_contents,
 };
 pub use route::{OutputKind, Route, RouteError, encode_path};
