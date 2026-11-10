@@ -20,7 +20,6 @@ fn note(path: &str, front: &str) -> SourceDoc {
 
 fn with_body(path: &str, front: &str, body: &str) -> SourceDoc {
     SourceDoc {
-        file_time: None,
         id: DocId::new(path),
         mode: Mode::Garden,
         front: FrontMatter::parse(front).unwrap(),

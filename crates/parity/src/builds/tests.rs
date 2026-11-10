@@ -245,7 +245,6 @@ fn a_kept_build_records_that_it_is_not_a_preview() {
     assert!(kept.record.preview.is_normal());
     let json: serde_json::Value =
         serde_json::from_str(&read(&kept.dir.join("build.json"))).unwrap();
-    assert_eq!(json["preview"]["drafts"], false);
     assert_eq!(json["preview"]["future"], false);
     assert_eq!(json["preview"]["unpublished"], false);
 }

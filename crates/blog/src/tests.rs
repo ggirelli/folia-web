@@ -8,7 +8,6 @@ fn clock() -> SiteClock {
 
 fn post(path: &str, front: &str) -> SourceDoc {
     SourceDoc {
-        file_time: None,
         id: DocId::new(path),
         mode: Mode::Blog,
         front: FrontMatter::parse(front).unwrap(),
@@ -58,7 +57,7 @@ fn future_posts_are_kept_when_the_clock_allows_them() {
     let docs = [
         post("_posts/2026/2026-10-25-today.md", ""),
         post("_posts/2026/2026-10-26-tomorrow.md", ""),
-        post("_posts/2021/2021-01-01-draft.md", "published: false"),
+        post("_posts/2021/2021-01-01-hidden.md", "published: false"),
     ];
     let outputs = routes(&docs, &clock().with_future(true)).unwrap();
     assert_eq!(
@@ -78,64 +77,6 @@ fn an_unpublished_post_is_kept_when_unpublished_is_allowed() {
     assert_eq!(urls(&outputs, None), ["/blog/2021/01/01/hidden"]);
     let both = clock().with_future(true).with_unpublished(true);
     assert_eq!(urls(&routes(&docs, &both).unwrap(), None).len(), 2);
-}
-
-fn draft(path: &str, front: &str, modified: Option<&str>) -> SourceDoc {
-    SourceDoc {
-        file_time: modified.map(|time| time.parse().unwrap()),
-        ..post(path, front)
-    }
-}
-
-#[test]
-fn a_draft_is_dated_by_its_modification_time() {
-    // 23:30 UTC is already the next day in Stockholm; the date is the civil one in the site zone.
-    let docs = [draft(
-        "_drafts/2020-01-01-an idea.md",
-        "title: An idea",
-        Some("2030-03-04T23:30:00Z"),
-    )];
-    let outputs = routes(&docs, &clock()).unwrap();
-    assert_eq!(
-        urls(&outputs, None),
-        ["/blog/2030/03/05/2020-01-01-an-idea"]
-    );
-
-    let posts = read_posts(&docs, &clock()).unwrap();
-    assert_eq!(posts[0].date, Date::new(2030, 3, 5).unwrap());
-    assert_eq!(posts[0].published, "2030-03-04T23:30:00Z".parse().unwrap());
-    assert_eq!(posts[0].title, "An idea");
-
-    let problems = routes(&[draft("_drafts/x.md", "", None)], &clock()).unwrap_err();
-    assert!(
-        problems[0]
-            .message
-            .contains("cannot read the modification time"),
-        "{}",
-        problems[0]
-    );
-    let dated = routes(
-        &[draft(
-            "_drafts/x.md",
-            "date: 2026-01-01",
-            Some("2026-01-01T00:00:00Z"),
-        )],
-        &clock(),
-    );
-    assert!(dated.is_err());
-}
-
-#[test]
-fn a_draft_with_published_false_is_left_out() {
-    let docs = [draft(
-        "_drafts/idea.md",
-        "published: false",
-        Some("2026-01-01T00:00:00Z"),
-    )];
-    assert_eq!(
-        urls(&routes(&docs, &clock()).unwrap(), None),
-        Vec::<String>::new()
-    );
 }
 
 #[test]
@@ -301,7 +242,6 @@ const SAMPLE_POST: &str = "_posts/2021/2021-08-08-sample-post.md";
 
 fn sample_post() -> SourceDoc {
     SourceDoc {
-        file_time: None,
         body: "Intro.\n\n### One *a*\n\n#### Two\n\n### Three\n".into(),
         ..post(
             SAMPLE_POST,
@@ -620,20 +560,4 @@ fn a_post_s_lang_is_its_text_or_its_list_s_texts_joined() {
         refused[0].contains("lang should be text or a list of texts"),
         "{refused:?}"
     );
-}
-
-#[test]
-fn a_draft_with_published_false_is_kept_when_unpublished_is_allowed() {
-    let docs = [draft(
-        "_drafts/idea.md",
-        "published: false",
-        Some("2020-03-04T10:00:00Z"),
-    )];
-    // Drafts are read, but `published: false` still leaves the draft out.
-    assert_eq!(
-        urls(&routes(&docs, &clock()).unwrap(), None),
-        [] as [&str; 0]
-    );
-    let outputs = routes(&docs, &clock().with_unpublished(true)).unwrap();
-    assert_eq!(urls(&outputs, None), ["/blog/2020/03/04/idea"]);
 }

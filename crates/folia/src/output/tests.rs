@@ -325,19 +325,16 @@ fn written_as(scratch: &Scratch, writer: Writer) -> PathBuf {
 }
 
 const FUTURE: Preview = Preview {
-    drafts: false,
     future: true,
     unpublished: false,
 };
 
 const BOTH: Preview = Preview {
-    drafts: true,
     future: true,
-    unpublished: false,
+    unpublished: true,
 };
 
 const UNPUBLISHED: Preview = Preview {
-    drafts: false,
     future: false,
     unpublished: true,
 };
@@ -361,21 +358,17 @@ fn a_preview_build_is_recorded_in_the_destination_record() {
     let scratch = Scratch::new("preview-record");
     written_with(&scratch, Writer::Build, BOTH).unwrap();
     let record = record_of(&scratch);
-    assert!(
-        record.lines().any(|line| line == "/folia drafts"),
-        "{record}"
-    );
-    assert!(
-        record.lines().any(|line| line == "/folia future"),
-        "{record}"
-    );
+    for mark in ["/folia future", "/folia unpublished"] {
+        assert!(record.lines().any(|line| line == mark), "{record}");
+    }
     assert_eq!(recorded_preview(&record), BOTH);
 
     written_with(&scratch, Writer::Build, BOTH).unwrap();
     written_with(&scratch, Writer::Serve, Preview::default()).unwrap();
     let record = record_of(&scratch);
     assert_eq!(recorded_preview(&record), Preview::default());
-    assert!(!record.contains("/folia drafts"), "{record}");
+    assert!(!record.contains("/folia future"), "{record}");
+    assert!(!record.contains("/folia unpublished"), "{record}");
 }
 
 #[test]
@@ -432,7 +425,7 @@ fn a_build_does_not_replace_a_preview_build_with_a_normal_one() {
     assert!(
         problem
             .message
-            .contains("it holds a preview build (drafts, future)"),
+            .contains("it holds a preview build (future, unpublished)"),
         "{problem}"
     );
     assert!(problem.message.contains("nothing was changed"), "{problem}");

@@ -20,13 +20,11 @@ pub enum DateError {
     Form(String),
 }
 
-/// What a preview build adds to the normal one: drafts, documents dated after the build, and
-/// documents whose front matter says `published: false`. A site built with any is for looking at,
+/// What a preview build adds to the normal one: documents dated after the build, and documents
+/// whose front matter says `published: false`. A site built with any is for looking at,
 /// not for publishing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
 pub struct Preview {
-    /// Also read the posts in `_drafts`.
-    pub drafts: bool,
     /// Also build documents dated after the build.
     pub future: bool,
     /// Also build documents whose front matter says `published: false`.
@@ -37,20 +35,16 @@ impl Preview {
     /// Whether this is the normal build, with neither added.
     #[must_use]
     pub fn is_normal(self) -> bool {
-        !self.drafts && !self.future && !self.unpublished
+        !self.future && !self.unpublished
     }
 
-    /// The names of what is added, such as `drafts, future`; `None` for the normal build.
+    /// The names of what is added, such as `future, unpublished`; `None` for the normal build.
     #[must_use]
     pub fn label(self) -> Option<String> {
-        let names: Vec<&str> = [
-            (self.drafts, "drafts"),
-            (self.future, "future"),
-            (self.unpublished, "unpublished"),
-        ]
-        .into_iter()
-        .filter_map(|(on, name)| on.then_some(name))
-        .collect();
+        let names: Vec<&str> = [(self.future, "future"), (self.unpublished, "unpublished")]
+            .into_iter()
+            .filter_map(|(on, name)| on.then_some(name))
+            .collect();
         (!names.is_empty()).then(|| names.join(", "))
     }
 }
@@ -107,12 +101,6 @@ impl SiteClock {
     #[must_use]
     pub fn is_future(&self, moment: Timestamp) -> bool {
         !self.future_allowed && moment.as_second() > self.now.as_second()
-    }
-
-    /// The civil date of a moment, in the site's time zone.
-    #[must_use]
-    pub fn date_of(&self, moment: Timestamp) -> Date {
-        moment.to_zoned(self.zone.clone()).date()
     }
 
     /// The moment of the build.
@@ -216,20 +204,13 @@ mod tests {
     }
 
     #[test]
-    fn date_of_gives_the_civil_date_in_the_site_zone() {
-        let moment: Timestamp = "2026-10-25T23:30:00Z".parse().unwrap();
-        assert_eq!(clock().date_of(moment), Date::new(2026, 10, 26).unwrap());
-    }
-
-    #[test]
     fn a_preview_names_what_it_adds() {
         assert_eq!(Preview::default().label(), None);
         let all = Preview {
-            drafts: true,
             future: true,
             unpublished: true,
         };
-        assert_eq!(all.label().as_deref(), Some("drafts, future, unpublished"));
+        assert_eq!(all.label().as_deref(), Some("future, unpublished"));
         assert!(!all.is_normal());
         let one = Preview {
             unpublished: true,

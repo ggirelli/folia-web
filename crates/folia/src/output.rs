@@ -16,9 +16,9 @@
 //!   its place, and the old one (which the record vouched for) removed. Between the two renames
 //!   the destination is briefly absent, but it is never partial; if the second rename fails, the
 //!   old one is put back. Last, the record is rewritten.
-//! - **A preview build never mixes with a normal one.** A build with `--drafts`, `--future` or
-//!   `--unpublished` is not for publishing, so its record says so, with lines no top-level entry
-//!   can have (`/folia drafts`, `/folia future`, `/folia unpublished`); `folia build` refuses to replace a destination whose
+//! - **A preview build never mixes with a normal one.** A build with `--future` or `--unpublished`
+//!   is not for publishing, so its record says so, with lines no top-level entry can have
+//!   (`/folia future`, `/folia unpublished`); `folia build` refuses to replace a destination whose
 //!   record differs from it in being a preview, in either direction, so that a preview is never
 //!   deployed by mistake and a published site is never lost to a preview. `folia serve` may
 //!   change a destination either way.
@@ -136,16 +136,14 @@ const RECORD_HEADER: &str = "folia-output 1";
 /// with a `/`.
 const SERVE_MARK: &str = "/folia serve";
 
-/// The record's lines that say a preview build wrote the destination, with drafts, future or
-/// unpublished documents: like [`SERVE_MARK`], no top-level entry is named with a `/`.
-const DRAFTS_MARK: &str = "/folia drafts";
+/// The record's lines that say a preview build wrote the destination, with future or unpublished
+/// documents: like [`SERVE_MARK`], no top-level entry is named with a `/`.
 const FUTURE_MARK: &str = "/folia future";
 const UNPUBLISHED_MARK: &str = "/folia unpublished";
 
 /// What the record's text says the destination's build added to the normal one.
 fn recorded_preview(text: &str) -> Preview {
     Preview {
-        drafts: text.lines().any(|line| line == DRAFTS_MARK),
         future: text.lines().any(|line| line == FUTURE_MARK),
         unpublished: text.lines().any(|line| line == UNPUBLISHED_MARK),
     }
@@ -256,7 +254,6 @@ fn record_text(
         text.push('\n');
     }
     for (on, mark) in [
-        (preview.drafts, DRAFTS_MARK),
         (preview.future, FUTURE_MARK),
         (preview.unpublished, UNPUBLISHED_MARK),
     ] {

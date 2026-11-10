@@ -78,7 +78,7 @@ fn files_are_documents_pages_or_static_by_place_and_front_matter() {
             ("CNAME", "ggirelli.info\n"),
         ],
     );
-    let found = discover(&site.0, &config(&[]), false).unwrap();
+    let found = discover(&site.0, &config(&[])).unwrap();
     assert_eq!(
         ids(&found.documents, Mode::Blog),
         ["_posts/2021/2021-08-08-sample-post.md"]
@@ -115,7 +115,7 @@ fn hidden_names_are_left_out_unless_included() {
             (".htaccess", "x"),
         ],
     );
-    let found = discover(&site.0, &config(&[]), false).unwrap();
+    let found = discover(&site.0, &config(&[])).unwrap();
     assert_eq!(found.documents, []);
     let statics: Vec<_> = found.statics.iter().map(DocId::as_str).collect();
     assert_eq!(statics, [".htaccess"]);
@@ -137,7 +137,6 @@ fn exclude_patterns_match_paths_and_whole_directories() {
     let found = discover(
         &site.0,
         &config(&["/vendor", "LICENSE*", "/assets/json/notes_graph.json"]),
-        false,
     )
     .unwrap();
     let statics: Vec<_> = found.statics.iter().map(DocId::as_str).collect();
@@ -148,7 +147,7 @@ fn exclude_patterns_match_paths_and_whole_directories() {
 #[test]
 fn a_star_stays_within_one_segment() {
     let site = Site::new("star", &[("docs/a.md", "x"), ("docs/deep/b.md", "x")]);
-    let found = discover(&site.0, &config(&["docs/*.md"]), false).unwrap();
+    let found = discover(&site.0, &config(&["docs/*.md"])).unwrap();
     let statics: Vec<_> = found.statics.iter().map(DocId::as_str).collect();
     assert_eq!(statics, ["docs/deep/b.md"]);
 }
@@ -156,98 +155,7 @@ fn a_star_stays_within_one_segment() {
 #[test]
 fn a_garden_file_without_front_matter_is_reported() {
     let site = Site::new("garden-static", &[("_digital_garden/img/map.png", "png")]);
-    let problems = discover(&site.0, &config(&[]), false).unwrap_err();
+    let problems = discover(&site.0, &config(&[])).unwrap_err();
     assert_eq!(problems.len(), 1);
     assert!(problems[0].message.contains("not published yet"));
-}
-
-#[test]
-fn drafts_are_documents_of_the_blog_only_when_asked() {
-    let site = Site::new(
-        "drafts",
-        &[
-            ("_drafts/idea.md", "words"),
-            ("_drafts/series/2026-01-01-part.md", FRONT),
-            ("_posts/2021/2021-08-08-sample-post.md", FRONT),
-        ],
-    );
-    let without = discover(&site.0, &config(&[]), false).unwrap();
-    assert_eq!(
-        ids(&without.documents, Mode::Blog),
-        ["_posts/2021/2021-08-08-sample-post.md"]
-    );
-    assert!(
-        without
-            .excluded
-            .contains(&("_drafts".into(), "a hidden name"))
-    );
-
-    let with = discover(&site.0, &config(&[]), true).unwrap();
-    assert_eq!(
-        ids(&with.documents, Mode::Blog),
-        [
-            "_drafts/idea.md",
-            "_drafts/series/2026-01-01-part.md",
-            "_posts/2021/2021-08-08-sample-post.md"
-        ]
-    );
-    assert_eq!(ids(&with.documents, Mode::Pages), Vec::<&str>::new());
-}
-
-#[test]
-fn other_files_inside_drafts_are_not_documents() {
-    let site = Site::new(
-        "drafts-other",
-        &[
-            ("_drafts/idea.md", FRONT),
-            ("_drafts/sketch.png", "not markdown"),
-            ("_drafts/series/notes.txt", "words"),
-        ],
-    );
-    let found = discover(&site.0, &config(&[]), true).unwrap();
-    assert_eq!(ids(&found.documents, Mode::Blog), ["_drafts/idea.md"]);
-    assert_eq!(found.statics.len(), 0);
-    assert!(found.excluded.contains(&(
-        "_drafts/sketch.png".into(),
-        "not a Markdown file, so not a draft"
-    )));
-    assert!(found.excluded.contains(&(
-        "_drafts/series/notes.txt".into(),
-        "not a Markdown file, so not a draft"
-    )));
-}
-
-#[test]
-fn a_drafts_directory_below_the_root_is_not_read() {
-    let site = Site::new("drafts-below", &[("notes/_drafts/idea.md", FRONT)]);
-    let found = discover(&site.0, &config(&[]), true).unwrap();
-    assert_eq!(found.documents, []);
-    assert!(
-        found
-            .excluded
-            .contains(&("notes/_drafts".into(), "a hidden name"))
-    );
-}
-
-#[test]
-fn excluded_names_inside_drafts_stay_excluded() {
-    let site = Site::new(
-        "drafts-excluded",
-        &[
-            ("_drafts/idea.md", "words"),
-            ("_drafts/.hidden.md", "words"),
-            ("_drafts/_private/idea.md", "words"),
-            ("_drafts/skip.md", "words"),
-        ],
-    );
-    let found = discover(&site.0, &config(&["_drafts/skip.md"]), true).unwrap();
-    assert_eq!(ids(&found.documents, Mode::Blog), ["_drafts/idea.md"]);
-    let excluded: Vec<_> = found.excluded.iter().map(|(p, _)| p.as_str()).collect();
-    assert_eq!(
-        excluded,
-        ["_drafts/.hidden.md", "_drafts/_private", "_drafts/skip.md"]
-    );
-
-    let all = discover(&site.0, &config(&["_drafts"]), true).unwrap();
-    assert_eq!(all.documents, []);
 }

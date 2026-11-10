@@ -17,8 +17,6 @@
 mod listing;
 mod post;
 
-use std::path::Path;
-
 use folia_core::content::{
     Diagnostic, DocId, FrontMatterError, Route, SiteClock, SlugMode, SourceDoc, dated_file_name,
     slugify, titleize_slug,
@@ -119,22 +117,16 @@ fn read_posts(docs: &[SourceDoc], clock: &SiteClock) -> Result<Vec<Post>, Vec<Di
 /// Reads a post, or `None` when it is not published at this build.
 fn read_post(doc: &SourceDoc, clock: &SiteClock) -> Result<Option<Post>, Diagnostic> {
     let problem = |message: &dyn std::fmt::Display| Diagnostic::in_doc(&doc.id, message);
-    let (date, file_slug, published) = if doc.is_draft() {
-        draft_dating(doc, clock)?
-    } else {
-        let (date, slug) = dated_file_name(doc.id.file_name())
-            .map_err(|e| problem(&e))?
-            .ok_or_else(|| problem(&"a post's file name must start with its date (YYYY-MM-DD-)"))?;
-        (date, slug, clock.midnight(date).map_err(|e| problem(&e))?)
-    };
+    let (date, file_slug) = dated_file_name(doc.id.file_name())
+        .map_err(|e| problem(&e))?
+        .ok_or_else(|| problem(&"a post's file name must start with its date (YYYY-MM-DD-)"))?;
     if doc.front.get("date").is_some() {
         return Err(problem(
             &"a front matter date on a post is not supported yet; the file name dates it",
         ));
     }
-    if (!doc.front.published() && !clock.unpublished_allowed())
-        || (!doc.is_draft() && clock.is_future(published))
-    {
+    let published = clock.midnight(date).map_err(|e| problem(&e))?;
+    if (!doc.front.published() && !clock.unpublished_allowed()) || clock.is_future(published) {
         return Ok(None);
     }
 
@@ -172,25 +164,6 @@ fn read_post(doc: &SourceDoc, clock: &SiteClock) -> Result<Option<Post>, Diagnos
         hidden: doc.front.truthy("hidden"),
         featured: doc.front.json("featured") == Some(serde_json::Value::Bool(true)),
     }))
-}
-
-/// The date, slug and published moment of a draft: it is dated by the file's modification time,
-/// named by the file's stem (a date in the name is not read), and never in the future.
-fn draft_dating(
-    doc: &SourceDoc,
-    clock: &SiteClock,
-) -> Result<(Date, String, Timestamp), Diagnostic> {
-    let modified = doc.file_time.ok_or_else(|| {
-        Diagnostic::in_doc(
-            &doc.id,
-            "cannot read the modification time that dates a draft",
-        )
-    })?;
-    let name = doc.id.file_name();
-    let slug = Path::new(name)
-        .file_stem()
-        .map_or(name, |stem| stem.to_str().unwrap_or(name));
-    Ok((clock.date_of(modified), slug.to_owned(), modified))
 }
 
 /// Jekyll's categories: the `categories` list (a string is split on whitespace), then the

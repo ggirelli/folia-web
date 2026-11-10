@@ -20,7 +20,6 @@ fn site(docs: &[Doc]) -> Site {
     for doc in docs {
         let id = DocId::new(doc.path);
         documents.entry(doc.mode).or_default().push(SourceDoc {
-            file_time: None,
             id: id.clone(),
             mode: doc.mode,
             front: FrontMatter::parse("").unwrap(),

@@ -232,7 +232,6 @@ mod tests {
 
     fn doc(front: &str, body: &str) -> SourceDoc {
         SourceDoc {
-            file_time: None,
             id: DocId::new("_posts/2021/2021-08-08-a.md"),
             mode: Mode::Blog,
             front: FrontMatter::parse(front).unwrap(),

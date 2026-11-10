@@ -8,7 +8,7 @@
 //! |-|-|
 //! | `site/` | Folia's output, whole; absent if the build failed |
 //! | `sha256.txt` | one line per file of `site/`, `<sha256>  ./<path>`, sorted by path bytewise (the A0 reference's format) |
-//! | `build.json` | the inputs and the result ([`Record`]), including that it is not a preview build (`preview`: no drafts, no future documents) |
+//! | `build.json` | the inputs and the result ([`Record`]), including that it is not a preview build (`preview`: no future or unpublished documents) |
 //! | `build.log` | the summary, then each warning or problem, one per line |
 //!
 //! Nothing is ever deleted or overwritten: an existing destination, or one inside the site, is

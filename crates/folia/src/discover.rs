@@ -8,10 +8,6 @@
 //! - `exclude` patterns remove paths, and everything below a matching directory.
 //! - Below a mode root, every file is a document of that mode. Below the blog root, only files
 //!   named with a date (`2021-08-08-title.md`) are posts; Jekyll ignores the others.
-//! - With drafts asked for, the `_drafts` directory at the site's root (unless `exclude` names
-//!   it) is read too: every Markdown file (`.md` or `.markdown`) below it, by the same rules for
-//!   hidden and excluded names, is a post of the blog, whatever its name. Other files there are
-//!   left out.
 //! - Anywhere else, a file with front matter is a page, and any other file is static.
 //!
 //! Jekyll applies the hidden-name rule below the micro and garden roots to the top directory and
@@ -20,9 +16,7 @@
 use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
 
-use folia_core::content::{
-    DRAFTS_ROOT, Diagnostic, DocId, Mode, dated_file_name, has_front_matter,
-};
+use folia_core::content::{Diagnostic, DocId, Mode, dated_file_name, has_front_matter};
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 
 use crate::config::Config;
@@ -38,15 +32,14 @@ pub struct Discovery {
     pub excluded: Vec<(String, &'static str)>,
 }
 
-/// Finds the documents and static files of the site at `root`, and, when `drafts` is set, the
-/// drafts in its `_drafts` directory.
+/// Finds the documents and static files of the site at `root`.
 ///
 /// # Errors
 ///
 /// Returns every problem found: unreadable directories or file names that are not UTF-8,
 /// invalid `exclude` or `include` patterns, and files without front matter in the micro or
 /// garden root, which Folia does not publish yet.
-pub fn discover(root: &Path, config: &Config, drafts: bool) -> Result<Discovery, Vec<Diagnostic>> {
+pub fn discover(root: &Path, config: &Config) -> Result<Discovery, Vec<Diagnostic>> {
     let mut walker = Walker {
         root,
         roots: [
@@ -56,7 +49,6 @@ pub fn discover(root: &Path, config: &Config, drafts: bool) -> Result<Discovery,
         ],
         include: glob_set(&config.include).map_err(|e| vec![e])?,
         exclude: glob_set(&config.exclude).map_err(|e| vec![e])?,
-        drafts,
         found: Discovery::default(),
         problems: Vec::new(),
     };
@@ -73,8 +65,6 @@ struct Walker<'a> {
     roots: [(Mode, &'a String); 3],
     include: GlobSet,
     exclude: GlobSet,
-    /// Whether to read the `_drafts` directory.
-    drafts: bool,
     found: Discovery,
     problems: Vec<Diagnostic>,
 }
@@ -86,8 +76,6 @@ impl Walker<'_> {
             let path = join(dir, &name);
             if let Some(mode) = self.mode_root(&path) {
                 self.walk_mode_root(mode, &path, &path);
-            } else if self.is_drafts_root(dir, &path, is_dir) {
-                self.walk_drafts(&path);
             } else if let Some(reason) = self.excluded(&path, &name) {
                 self.found.excluded.push((path, reason));
             } else if is_dir {
@@ -122,34 +110,6 @@ impl Walker<'_> {
                 self.problems.push(Diagnostic::site(format!(
                     "{path}: files without front matter in the {mode_root} root are not published yet"
                 )));
-            }
-        }
-    }
-
-    /// Whether `path` is the drafts directory to read: asked for, at the site's root, and not
-    /// excluded by the configuration.
-    fn is_drafts_root(&self, dir: &str, path: &str, is_dir: bool) -> bool {
-        self.drafts
-            && is_dir
-            && dir.is_empty()
-            && path == DRAFTS_ROOT
-            && !self.exclude.is_match(path)
-    }
-
-    /// Walks the drafts directory, where every Markdown file is a post of the blog, dated or not.
-    fn walk_drafts(&mut self, dir: &str) {
-        for (name, is_dir) in self.entries(dir) {
-            let path = join(dir, &name);
-            if let Some(reason) = self.excluded(&path, &name) {
-                self.found.excluded.push((path, reason));
-            } else if is_dir {
-                self.walk_drafts(&path);
-            } else if is_markdown(&name) {
-                self.found.documents.push((Mode::Blog, DocId::new(path)));
-            } else {
-                self.found
-                    .excluded
-                    .push((path, "not a Markdown file, so not a draft"));
             }
         }
     }
@@ -226,12 +186,6 @@ impl Walker<'_> {
             }
         }
     }
-}
-
-fn is_markdown(name: &str) -> bool {
-    Path::new(name)
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown"))
 }
 
 fn join(dir: &str, name: &str) -> String {

@@ -70,7 +70,7 @@ pub fn plan_for(
         .map_err(|e| vec![Diagnostic::site(e)])?
         .with_future(preview.future)
         .with_unpublished(preview.unpublished);
-    let discovery = discover(root, config, preview.drafts)?;
+    let discovery = discover(root, config)?;
 
     let mut docs: BTreeMap<Mode, Vec<SourceDoc>> = BTreeMap::new();
     let mut problems = Vec::new();

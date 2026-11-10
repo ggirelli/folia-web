@@ -8,7 +8,6 @@ fn clock() -> SiteClock {
 
 fn doc(path: &str, mode: Mode, front: &str, body: &str) -> SourceDoc {
     SourceDoc {
-        file_time: None,
         id: DocId::new(path),
         mode,
         front: FrontMatter::parse(front).unwrap(),

@@ -39,10 +39,6 @@ enum Command {
         /// Where to write the site: a directory outside it, absent, empty or written by Folia
         #[arg(long)]
         dest: PathBuf,
-        /// Also build the posts in the `_drafts` directory, dated by their modification time. The
-        /// output is a preview, not for publishing
-        #[arg(long)]
-        drafts: bool,
         /// Also build documents dated after now. The output is a preview, not for publishing
         #[arg(long)]
         future: bool,
@@ -77,10 +73,6 @@ enum Command {
         /// The port to listen on; 0 picks a free one
         #[arg(long, default_value_t = 4000)]
         port: u16,
-        /// Also build the posts in the `_drafts` directory, dated by their modification time. The
-        /// output is a preview, not for publishing
-        #[arg(long)]
-        drafts: bool,
         /// Also build documents dated after now. The output is a preview, not for publishing
         #[arg(long)]
         future: bool,
@@ -97,7 +89,6 @@ fn main() -> ExitCode {
             site,
             config,
             dest,
-            drafts,
             future,
             unpublished,
         } => build_site(
@@ -105,7 +96,6 @@ fn main() -> ExitCode {
             config,
             &dest,
             Preview {
-                drafts,
                 future,
                 unpublished,
             },
@@ -116,7 +106,6 @@ fn main() -> ExitCode {
             dest,
             host,
             port,
-            drafts,
             future,
             unpublished,
         } => {
@@ -126,7 +115,6 @@ fn main() -> ExitCode {
                 dest,
                 address: SocketAddr::new(host, port),
                 preview: Preview {
-                    drafts,
                     future,
                     unpublished,
                 },

@@ -25,5 +25,5 @@ pub use presentation::{
 };
 pub use route::{OutputKind, Route, RouteError, encode_path};
 pub use slug::{SlugMode, slugify};
-pub use source::{DRAFTS_ROOT, DocId, Mode, SourceDoc, SourceError};
+pub use source::{DocId, Mode, SourceDoc, SourceError};
 pub use title::{file_title, titleize_slug};
