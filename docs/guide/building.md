@@ -13,9 +13,10 @@ folia build --site ../my-site --dest ../my-site-out
 | `--dest` | required | Where to write the site |
 
 `folia --version` prints the version, and `folia build --help` the options. Its
-other command is [`folia serve`](#previewing-while-you-write). There is no `--drafts` or
-`--future` yet ([#47](https://github.com/ggirelli/folia-web/issues/47)). A post dated after the
-build, or with `published: false`, is not built.
+other command is [`folia serve`](#previewing-while-you-write). Both take `--drafts` and
+`--future`, which build drafts and scheduled posts for a preview
+([below](#previewing-drafts-and-scheduled-posts)). A post dated after the build, or with
+`published: false`, is not built.
 
 While it builds, Folia prints **warnings** (a broken wiki-link) and `skipped:` lines for any
 document it does not support yet, each with the reason, then `Built N pages, …`.
@@ -45,7 +46,46 @@ touches the destination**. It deletes nothing it did not write:
   files, a moved copy or any other directory are refused, with nothing changed;
 - a leftover `.<name>.folia-new` or `.<name>.folia-old` is refused, never deleted.
 
+A preview build (see below) is recorded as one, and `folia build` never replaces a normal build
+with a preview, nor a preview with a normal build: it refuses, and nothing is changed. Build the
+preview into another directory, or remove the old one yourself. `folia serve` is not bound by this
+rule and may switch a destination either way.
+
 To build into a directory that holds something else, empty it yourself.
+
+## Previewing drafts and scheduled posts
+
+Two flags build content that a normal build leaves out, so that you can look at it before it is
+published. Both default to off, and a build without them is unchanged. They are command-line
+flags on `folia build` and `folia serve`, not configuration keys.
+
+```sh
+folia build --site ../my-site --dest ../my-site-preview --drafts --future
+```
+
+- **`--drafts`** also builds the posts in `_drafts/` at the site's root, including those in its
+  subdirectories. Only Markdown files (`.md`, `.markdown`) are read, as posts: other files
+  in `_drafts/` are left out, a `_drafts` directory elsewhere in the site is not read, and the
+  configuration's `exclude` still applies. A draft's date is the modification time of its
+  file, as a civil date in the site's time zone. Its slug is the file name without its extension,
+  so a date at the start of the name stays in the slug (`2026-01-01-idea.md` is
+  `2026-01-01-idea`) and does not date the draft; a `slug` in its front matter replaces it. A
+  `date` in a draft's front matter is an error, as it is for any post.
+- **`--future`** also builds the posts, garden notes and micro entries dated after the build.
+- **`published: false`** documents are left out even with `--drafts`. There is no flag for them.
+- A modification time is not reproducible: a fresh checkout resets it, and editing a draft
+  changes its date and so its URL. Drafts therefore exist only with the flag.
+
+A build with either flag is a **preview build**, and Folia says so in three places:
+
+- the summary line ends with `PREVIEW BUILD (drafts, future): not for publishing.`, naming the
+  flags that were set;
+- a `warning:` line on stderr says the same;
+- the record of the destination, `.<name>.folia-output`, gets a `/folia drafts` and/or a
+  `/folia future` line, which is how `folia build` recognizes the directory later (see
+  [the destination](#the-destination)).
+
+Keep a preview out of production: deploy only what a normal `folia build` wrote.
 
 ## Stylesheets
 

@@ -85,6 +85,20 @@ matter always wins. Wiki-links find a note by the title Jekyll gave it, so they 
 title makes a page's `title` an empty string, not undefined: a template that tests it sees it
 false.
 
+### Drafts
+
+Drafts and future-dated content are built only with `--drafts` and `--future`, and such a build is
+a preview (see [previewing drafts and scheduled posts](guide/building.md#previewing-drafts-and-scheduled-posts)).
+Jekyll's flags differ from Folia's in these ways:
+
+- `--drafts` reads only the `_drafts` directory at the site's root, and only its Markdown files
+  (`.md`, `.markdown`), as posts. A `_drafts` directory anywhere else is not read.
+- A draft's date is its file's modification time. A checkout resets modification times, and
+  editing a draft changes its date and URL, so a draft's output is not reproducible.
+- There is no `--unpublished`: `published: false` documents are left out even with the flags.
+- A date at the start of a draft's file name is not read: it stays in the slug, which is the file
+  name without its extension (unless the front matter sets `slug`).
+
 ## Source-content issues Folia reproduces
 
 - **Bare-domain references.** Reference-style link definitions written without a scheme
@@ -104,6 +118,8 @@ false.
   commit: build again by changing a file.
 - The served site's URL is the local address, so its output differs from production's. Deploy
   what `folia build` writes.
+- `folia serve` takes `--drafts` and `--future` like `folia build`. It may switch its destination
+  between a normal and a preview build, which `folia build` refuses to do.
 
 ## Not covered by parity checks
 

@@ -119,6 +119,19 @@ Only for building part of a site (parity work): the documents to build, each of 
 |-|-|-|
 | `pages`, `posts`, `notes`, `micro` | list of source paths | The documents of each mode to build |
 
+## Command-line flags
+
+These are flags, not configuration keys: a `drafts` or `future` key in `folia.toml` is an unknown
+key, and an error. Both default to off.
+
+| Flag | Commands | What |
+|-|-|-|
+| `--drafts` | `build`, `serve` | Also build the posts in `_drafts/` at the site's root, dated by their modification time |
+| `--future` | `build`, `serve` | Also build posts, garden notes and micro entries dated after the build |
+
+A build with either flag is a preview, not for publishing. See
+[previewing drafts and scheduled posts](guide/building.md#previewing-drafts-and-scheduled-posts).
+
 ## Environment
 
 | Variable | What |
