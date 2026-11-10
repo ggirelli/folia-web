@@ -48,20 +48,23 @@ Each mode crate depends on `folia-core` only, never on another mode.
   never into the files. Its destination's record says `folia serve` wrote it
   (`output::claim_for_serve`), so that serve never replaces what `folia build` wrote, and
   recovers its own interrupted builds.
-- **Preview flags.** `build` and `serve` take `--drafts` and `--future` (`main.rs`), which
-  travel as a `Preview` (`folia_core::content`). `discover` reads `_drafts` only with drafts, and
-  `blog` dates a draft by its modification time. A preview build's summary line and warning are
-  printed by `main.rs`, and `output` writes its `/folia drafts` and `/folia future` lines into
-  the record, which `folia build` checks before it replaces a destination.
+- **Preview flags.** `build` and `serve` take `--drafts`, `--future` and `--unpublished`
+  (`main.rs`), which travel as a `Preview` (`folia_core::content`). `discover` reads `_drafts` only
+  with drafts, and `blog` dates a draft by its modification time. `--future` and `--unpublished`
+  reach the modes through the `SiteClock` (`with_future`, `with_unpublished`), which the modes
+  already receive; the sass check in `build.rs` reads it too. A preview build's summary line and
+  warning are printed by `main.rs`, and `output` writes its `/folia drafts`, `/folia future` and
+  `/folia unpublished` lines into the record, which `folia build` checks before it replaces a
+  destination.
 - **`crates/parity`**: the dev-only parity tool (`just routes`, `just markdown`, `just pages`, `just
   determinism`), and the content lint (`just liquid`). It reads baselines as black boxes and calls
   only Folia's public API. `markdown` holds the Markdown check: `dom` (html5ever parsing and
   normalization), `liquid` (the template filters excerpts go through), `ledger` and `report`.
   `builds` builds the site at an explicit time into a new directory it keeps, with the output's
   manifest and a record of the inputs. It always builds without the preview flags, and its
-  `build.json` records them as `preview` (`drafts` and `future`, both false), so that a preview
-  build is never taken for a baseline's equivalent. `document` compares whole HTML documents, and
-  trees of them, by their own rules. `pages` builds the site through it and compares what Folia
+  `build.json` records them as `preview` (`drafts`, `future` and `unpublished`, all false), so that
+  a preview build is never taken for a baseline's equivalent. `document` compares whole HTML documents,
+  and trees of them, by their own rules. `pages` builds the site through it and compares what Folia
   writes with Jekyll's files, `pages::entries` the documents' dates, tables of contents and code
   blocks, and `pages::garden` the note graph and the broken-link warnings. `coverage` classifies
   every row of the baseline's manifest from what Folia plans and writes, the checks' verdict on each

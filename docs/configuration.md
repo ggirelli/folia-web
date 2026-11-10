@@ -128,6 +128,7 @@ key, and an error. Both default to off.
 |-|-|-|
 | `--drafts` | `build`, `serve` | Also build the posts in `_drafts/` at the site's root, dated by their modification time |
 | `--future` | `build`, `serve` | Also build posts, garden notes and micro entries dated after the build |
+| `--unpublished` | `build`, `serve` | Also build documents whose front matter says `published: false` |
 
 A build with either flag is a preview, not for publishing. See
 [previewing drafts and scheduled posts](guide/building.md#previewing-drafts-and-scheduled-posts).

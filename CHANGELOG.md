@@ -10,8 +10,9 @@
   sitemap and search), a guide to migrating from Jekyll, and the parity tools reduced to a reference
   for that exercise. The design plans were removed from the docs; they remain in the git history.
 - `folia build` and `folia serve` take `--drafts` (the posts in `_drafts/`, dated by their
-  modification time) and `--future` (documents dated after the build). Both are preview builds,
-  not for publishing, and `folia build` refuses to replace a normal build with one, or the reverse
+  modification time), `--future` (documents dated after the build) and `--unpublished` (documents
+  whose front matter says `published: false`). Each makes a preview build, not for
+  publishing, and `folia build` refuses to replace a normal build with one, or the reverse
   ([#47](https://github.com/ggirelli/folia-web/issues/47);
   [guide](docs/guide/building.md#previewing-drafts-and-scheduled-posts)).
 - A release workflow that builds the Linux x86_64 binary from a tag

@@ -13,9 +13,9 @@ folia build --site ../my-site --dest ../my-site-out
 | `--dest` | required | Where to write the site |
 
 `folia --version` prints the version, and `folia build --help` the options. Its
-other command is [`folia serve`](#previewing-while-you-write). Both take `--drafts` and
-`--future`, which build drafts and scheduled posts for a preview
-([below](#previewing-drafts-and-scheduled-posts)). A post dated after the build, or with
+other command is [`folia serve`](#previewing-while-you-write). Both take `--drafts`,
+`--future` and `--unpublished`, which build drafts, scheduled posts and unpublished documents for a
+preview ([below](#previewing-drafts-and-scheduled-posts)). A post dated after the build, or with
 `published: false`, is not built.
 
 While it builds, Folia prints **warnings** (a broken wiki-link) and `skipped:` lines for any
@@ -55,12 +55,12 @@ To build into a directory that holds something else, empty it yourself.
 
 ## Previewing drafts and scheduled posts
 
-Two flags build content that a normal build leaves out, so that you can look at it before it is
-published. Both default to off, and a build without them is unchanged. They are command-line
+Three flags build content that a normal build leaves out, so that you can look at it before it is
+published. They default to off, and a build without them is unchanged. They are command-line
 flags on `folia build` and `folia serve`, not configuration keys.
 
 ```sh
-folia build --site ../my-site --dest ../my-site-preview --drafts --future
+folia build --site ../my-site --dest ../my-site-preview --drafts --future --unpublished
 ```
 
 - **`--drafts`** also builds the posts in `_drafts/` at the site's root, including those in its
@@ -72,17 +72,20 @@ folia build --site ../my-site --dest ../my-site-preview --drafts --future
   `2026-01-01-idea`) and does not date the draft; a `slug` in its front matter replaces it. A
   `date` in a draft's front matter is an error, as it is for any post.
 - **`--future`** also builds the posts, garden notes and micro entries dated after the build.
-- **`published: false`** documents are left out even with `--drafts`. There is no flag for them.
+- **`--unpublished`** also builds the documents whose front matter says `published: false`: posts,
+  garden notes, micro entries and pages (and stylesheets). It is independent of the other two:
+  `--drafts` alone still leaves out a draft with `published: false`, and a future-dated one needs
+  `--future` as well.
 - A modification time is not reproducible: a fresh checkout resets it, and editing a draft
   changes its date and so its URL. Drafts therefore exist only with the flag.
 
-A build with either flag is a **preview build**, and Folia says so in three places:
+A build with any of them is a **preview build**, and Folia says so in three places:
 
-- the summary line ends with `PREVIEW BUILD (drafts, future): not for publishing.`, naming the
-  flags that were set;
+- the summary line ends with `PREVIEW BUILD (drafts, future, unpublished): not for publishing.`,
+  naming the flags that were set;
 - a `warning:` line on stderr says the same;
-- the record of the destination, `.<name>.folia-output`, gets a `/folia drafts` and/or a
-  `/folia future` line, which is how `folia build` recognizes the directory later (see
+- the record of the destination, `.<name>.folia-output`, gets a `/folia drafts`, `/folia future`
+  and/or `/folia unpublished` line, which is how `folia build` recognizes the directory later (see
   [the destination](#the-destination)).
 
 Keep a preview out of production: deploy only what a normal `folia build` wrote.
