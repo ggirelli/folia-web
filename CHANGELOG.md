@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A page's front matter may say `noindex: true`; its template sees it as `page.noindex` (`false`
+  by default) and can write a robots tag. Before, the key was refused and the page skipped
+  ([#62](https://github.com/ggirelli/folia-web/issues/62)).
 - Redirect stubs can take the site's background and colour scheme from `[redirects]`, so that an
   old URL does not flash a white page on a dark site
   ([#59](https://github.com/ggirelli/folia-web/issues/59);

@@ -46,7 +46,7 @@ page), `page.modified`, `page.description` and `page.author`. The rest depends o
 | post | `categories` and `tags` (each `{name, anchor}`), `previous` and `next` (`{url, title}`), `toc`, `cover`, `syndications`, `footer`, `narrow_post`, `hide_website_junk`, `interactions` |
 | garden note | `backlinks` (`{title, url, excerpt}`), `garden_map`, `toc`, `cover` |
 | micro entry | the posts' keys with the kind's defaults; `page.like`, `page.bookmark`, `page.rsvp` and `page.event` hold the kind's own data |
-| page | `hide_title`, `title_icon`, `toc`, `cover`, `corner_backlink`, `error_type`, `additional_body_class`, `hide_website_junk` |
+| page | `hide_title`, `noindex`, `title_icon`, `toc`, `cover`, `corner_backlink`, `error_type`, `additional_body_class`, `hide_website_junk` |
 | blog index | `items` (post cards, newest first, each `{url, title, cover_path, box_position, summary, author, date}`), `featured` (page 1 only) and `paginator` (`page`, `total_pages`, `previous_page_path`, `next_page_path`) |
 | categories and tags page | `groups`: each `{name, anchor, count, items, feed}` (`feed` is none for a category), by name; `items` are post cards |
 | micro listing | `items`: the entries, newest first, each with `kind`, `url`, `title`, `date` and `summary` |

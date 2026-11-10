@@ -21,6 +21,7 @@
 //! | `title` | its front matter `title` |
 //! | `layout` | its front matter `layout`, or none: the page is then written as its content alone (`NO_LAYOUT_TEMPLATE`), as Jekyll writes it |
 //! | `hide_title` | whether its front matter `hide_title` hides its title, `false` by default |
+//! | `noindex` | whether its front matter `noindex` keeps it out of search engines, `false` by default: the template writes the robots tag |
 //! | `modified` | its last commit's time in the site's time zone (`2026-01-04T13:36:24+01:00`), or none |
 //! | `toc` | its table of contents, `{placement, title, entries}`, or none (`folia_core`'s `Toc`) |
 //! | `cover` | its cover, `{path, position, show, unsplash}` (`folia_core`'s `Cover`) |
@@ -42,7 +43,7 @@
 //!
 //! | Front matter | Outcome |
 //! |-|-|
-//! | `layout` (or none), `author`, `additional_body_class`, `title`, `hide_title`, `title_icon`, `corner_backlink`, `error-type`, `permalink`, `redirect_from`, `published`, `hide_website_junk` | built |
+//! | `layout` (or none), `author`, `additional_body_class`, `title`, `hide_title`, `noindex`, `title_icon`, `corner_backlink`, `error-type`, `permalink`, `redirect_from`, `published`, `hide_website_junk` | built |
 //! | an HTML page's body, without Liquid | built: written as it is, as Jekyll converts only Markdown |
 //! | a page another mode claims (`claimed`: its source and template) | built with that template, its body not rendered: the template lists what the other mode built, which the builder adds |
 //! | `show_author: true` | built: an author box shows whenever a page has an author |
@@ -65,13 +66,14 @@ use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
 /// The front matter keys a page may have, besides the switches.
-const KEYS: [&str; 15] = [
+const KEYS: [&str; 16] = [
     "layout",
     "lang",
     "author",
     "additional_body_class",
     "title",
     "hide_title",
+    "noindex",
     "title_icon",
     "corner_backlink",
     "error-type",
@@ -209,11 +211,8 @@ fn build_page(
     let error_type = doc.front.string("error-type").map_err(|e| problem(&e))?;
     let cover = cover(doc)?;
     unshown(&cover, toc.as_ref()).map_err(|message| problem(&message))?;
-    let hide_title = match doc.front.json("hide_title") {
-        None => false,
-        Some(Value::Bool(hide)) => hide,
-        Some(_) => return Err(problem(&"hide_title should be true or false")),
-    };
+    let hide_title = flag(doc, "hide_title").map_err(|message| problem(&message))?;
+    let noindex = flag(doc, "noindex").map_err(|message| problem(&message))?;
     let title_icon = doc.front.string("title_icon").map_err(|e| problem(&e))?;
     let author = doc.front.string("author").map_err(|e| problem(&e))?;
     let body_class = doc
@@ -233,6 +232,7 @@ fn build_page(
         "narrow_post": false,
         "error_type": error_type,
         "hide_title": hide_title,
+        "noindex": noindex,
         "title_icon": title_icon,
         "corner_backlink": corner_backlink,
         "date": null,
@@ -311,6 +311,15 @@ fn unknown_or_unbuilt(doc: &SourceDoc) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// `doc`'s front matter `key`, `true` or `false`, and `false` without one.
+fn flag(doc: &SourceDoc, key: &str) -> Result<bool, String> {
+    match doc.front.json(key) {
+        None => Ok(false),
+        Some(Value::Bool(on)) => Ok(on),
+        Some(_) => Err(format!("{key} should be true or false")),
+    }
 }
 
 /// The link back a page shows in its corner: its front matter `corner_backlink`, each key over
@@ -619,6 +628,7 @@ mod tests {
                 "narrow_post": false,
                 "error_type": null,
                 "hide_title": false,
+                "noindex": false,
                 "title_icon": null,
                 "corner_backlink": {"show": false, "url": "/", "icon_class": "fas fa-angle-double-left"},
                 "date": null, "description": null, "author": null, "additional_body_class": null, "categories": [], "tags": [],
@@ -657,6 +667,16 @@ mod tests {
         assert_eq!(output.pages[0].template, NO_LAYOUT_TEMPLATE);
         assert_eq!(output.pages[0].context["layout"], Value::Null);
         assert_eq!(output.pages[0].context["hide_title"], true);
+    }
+
+    #[test]
+    fn a_page_with_noindex_tells_its_template_to_keep_it_out_of_search_engines() {
+        let doc = page(
+            "pages/404.md",
+            "layout: page\ntitle: Not found\nnoindex: true",
+        );
+        let output = build(&[doc], &LastCommits::default(), &clock(), &BTreeMap::new()).unwrap();
+        assert_eq!(output.pages[0].context["noindex"], true);
     }
 
     #[test]
@@ -796,6 +816,7 @@ mod tests {
                 "corner_backlink: the key label is not built yet",
             ),
             ("hide_title: maybe", "hide_title should be true or false"),
+            ("noindex: maybe", "noindex should be true or false"),
             ("comments: true", "comments: true is not built yet"),
             ("narrow_post: maybe", "narrow_post should be true or false"),
             ("narrow-post: maybe", "narrow-post should be true or false"),
