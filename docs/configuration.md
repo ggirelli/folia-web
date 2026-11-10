@@ -219,7 +219,7 @@ tags = { source = "blog/tags.html", template = "blog_tags.html" }
 
 [feeds]
 lang = "en"
-generator = { name = "Folia", uri = "https://github.com/ggirelli/folia-web", version = "0.1.0" }
+generator = { name = "Folia", uri = "https://github.com/ggirelli/folia-web", version = "0.2.0" }
 limit = 10
 combined = { source = "feed.xml", collections = ["posts", "digital_garden", "micro"] }
 

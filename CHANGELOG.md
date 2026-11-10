@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.0
+
+A local preview server that rewrites only what changed, preview builds, reproducible builds as of a
+moment, redirect stubs in the site's colours, and the first release binary. See the
+[release notes](docs/release-notes/v0.2.0.md).
+
 - A page's front matter may say `noindex: true`; its template sees it as `page.noindex` (`false`
   by default) and can write a robots tag. Before, the key was refused and the page skipped
   ([#62](https://github.com/ggirelli/folia-web/issues/62)).
