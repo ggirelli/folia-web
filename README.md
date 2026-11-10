@@ -34,6 +34,8 @@ The documentation is published at <https://ggirelli.github.io/folia-web/>.
 - [Writing content](docs/guide/content.md), [templates](docs/guide/templates.md),
   [building and deploying](docs/guide/building.md) and the
   [configuration reference](docs/configuration.md).
+- [Building and deploying](docs/guide/building.md#previewing-while-you-write): `folia serve`
+  builds a site, serves it locally and rebuilds it, reloading the browser, when a file changes.
 - [Migrating from Jekyll](docs/migrating/index.md): how to compare a Folia build with a Jekyll one.
 - [Known limitations](docs/known-limitations.md): how Folia's output differs from Jekyll's.
 - [Development](docs/development.md) and [manual testing](docs/development/manual-testing.md): how

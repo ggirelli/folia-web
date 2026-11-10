@@ -12,11 +12,10 @@ folia build --site ../my-site --dest ../my-site-out
 | `--config` | `<site>/_folia/folia.toml` | The configuration ([reference](../configuration.md)) |
 | `--dest` | required | Where to write the site |
 
-`folia --version` prints the version, and `folia build --help` the options. Folia has one
-command: there is no `serve` and no watch mode yet
-([#46](https://github.com/ggirelli/folia-web/issues/46)), and no `--drafts` or `--future`
-([#47](https://github.com/ggirelli/folia-web/issues/47)). A post dated after the build, or with
-`published: false`, is not built.
+`folia --version` prints the version, and `folia build --help` the options. Its
+other command is [`folia serve`](#previewing-while-you-write). There is no `--drafts` or
+`--future` yet ([#47](https://github.com/ggirelli/folia-web/issues/47)). A post dated after the
+build, or with `published: false`, is not built.
 
 While it builds, Folia prints **warnings** (a broken wiki-link) and `skipped:` lines for any
 document it does not support yet, each with the reason, then `Built N pages, …`.
@@ -62,12 +61,58 @@ A page's last-modified date (the `<lastmod>` of the sitemap, `page.modified`) co
 commit. In a CI checkout, fetch the full history (`fetch-depth: 0` in GitHub Actions): a shallow
 clone gives every file the same date.
 
-## Serving locally
+## Previewing while you write
+
+```sh
+folia serve --site ../my-site
+```
+
+Folia builds the site, serves it at <http://127.0.0.1:4000/> and builds it again whenever a file
+of the site changes. A page open in the browser reloads when the new build is ready. Stop it with
+Ctrl+C.
+
+| Option | Default | What |
+|-|-|-|
+| `--site` | `.` | The site |
+| `--config` | `<site>/_folia/folia.toml` | The configuration, read again on every build |
+| `--dest` | `folia/serve/<site name>-<hash>` in your cache directory | Where to build the site |
+| `--host` | `127.0.0.1` | The address to listen on. Any but a loopback address may let other machines see the site; for `0.0.0.0` or `::`, the site's URL uses the loopback address |
+| `--port` | `4000` | The port; `0` picks a free one, and the address is printed |
+
+- **Every change builds the whole site**, with the configuration read again and `site.url` set to
+  the local address, so that links stay on the local server. The output therefore differs from
+  production's in the URL: `folia build` is still what you deploy.
+- **A failed build keeps the last good one.** The build is written as `folia build` writes it, whole
+  or not at all. The problems are printed in the terminal and shown over the open pages, which
+  clear when a build succeeds.
+- **The destination** defaults to `folia/serve/<site name>-<hash>` in your cache directory
+  (`$XDG_CACHE_HOME`, or `~/.cache`; `~/Library/Caches` on macOS), and is kept between runs.
+  `--dest` follows the rules of [the destination](#the-destination), checked before anything is
+  served, with two differences. `folia serve` refuses a destination `folia build` wrote, which you
+  may be about to deploy: its record says which command wrote it. And in a destination
+  `folia serve` wrote, it recovers what a stopped serve left beside it (`.<name>.folia-new`,
+  `.<name>.folia-old`) instead of refusing it. `folia build` may still replace what `folia serve`
+  wrote. The destination itself may not be a symbolic link.
+- **What is watched**: the whole site, and the configuration's directory if it is outside the site.
+  A change to what the build skips starts no build: the destination and the `.folia-*` files
+  beside it, names starting with `.` (`.git`, editors' swap files) unless `include` names them,
+  paths `exclude` names (except the templates, the Sass directory and the search fragment, which
+  the build reads anyway), and editors' backup files (`name~`, `#name#`, Vim's `4913`). Changes
+  are gathered: a build starts after 200 ms without one, and at most 2 s after the first.
+- **URLs** map to files as a typical host does: `/about` is `about.html`, `/blog/` is
+  `blog/index.html`, and a missing page shows the site's `404.html`.
+- **Live reload** works by a script added to the HTML as it is served; the files on disk do not
+  have it. The page listens to server-sent events at `/__folia/events`.
+
+The [limitations of `folia serve`](../known-limitations.md#folia-serve) are listed there.
+
+## Serving a finished build
 
 The output is plain files, but its links are root-relative (`/about`), so opening the files
 directly shows an unstyled site with broken links. Serve the directory with a static server that
 maps clean URLs the way your host does: the repository's `scripts/serve.py DIR PORT` does, using
-only Python's standard library.
+only Python's standard library
+(`just serve DIR`). To preview while you write, use `folia serve` instead.
 
 ## Deploying
 

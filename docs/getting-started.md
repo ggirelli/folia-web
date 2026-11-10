@@ -66,8 +66,14 @@ python3 scripts/serve.py /tmp/folia-example 8000       # then open http://127.0.
 ```
 
 `scripts/serve.py` is a small static server (standard library only) that maps clean URLs the way
-a typical host does. Any static server that does the same works. Folia has no `serve` command or
-watch mode yet ([#46](https://github.com/ggirelli/folia-web/issues/46)): rebuild and refresh.
+a typical host does. Any static server that does the same works.
+
+To build and serve in one step, and build again when a file changes, use
+[`folia serve`](guide/building.md#previewing-while-you-write):
+
+```sh
+folia serve --site examples/minimal-site              # then open http://127.0.0.1:4000/
+```
 
 ## Start your own site
 

@@ -42,6 +42,12 @@ Each mode crate depends on `folia-core` only, never on another mode.
   cannot build yet. `render` renders pages with MiniJinja from the site's templates
   (`_folia/templates` in the site), `redirects` serializes `/redirects.json` as
   `jekyll-redirect-from` writes it, and `output` writes the destination whole or not at all.
+  `serve` is `folia serve`: it builds the whole site again on every change `watch` reports, with
+  the site's URL set to the server's, and serves it (`http`), mapping URLs to files as the host
+  does (`files`); `reload` is the live reload, whose script goes into pages as they are served,
+  never into the files. Its destination's record says `folia serve` wrote it
+  (`output::claim_for_serve`), so that serve never replaces what `folia build` wrote, and
+  recovers its own interrupted builds.
 - **`crates/parity`**: the dev-only parity tool (`just routes`, `just markdown`, `just pages`, `just
   determinism`), and the content lint (`just liquid`). It reads baselines as black boxes and calls
   only Folia's public API. `markdown` holds the Markdown check: `dom` (html5ever parsing and

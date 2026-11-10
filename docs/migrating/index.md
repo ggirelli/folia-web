@@ -22,8 +22,9 @@ for every output, whether it is identical, differs for a reason you accept, or i
    includes written in Liquid become MiniJinja templates, which is most of the work. Build
    until it passes: `folia build --site . --dest ../out`. Every problem is named by page and
    template.
-3. **Look at it.** [Serve the output](../guide/building.md#serving-locally) next to Jekyll's
-   (`bundle exec jekyll serve`, on another port) and click through both: layout, links,
+3. **Look at it.** [Serve the site](../guide/building.md#previewing-while-you-write) with
+   `folia serve` (or [a finished build](../guide/building.md#serving-a-finished-build)) next to
+   Jekyll's (`bundle exec jekyll serve`, on another port) and click through both: layout, links,
    images, small screens, dark mode, anything that animates. Most differences you will care about
    are visible here.
 4. **Record a baseline and let the tools compare** (needs a clone of this repository; see the
