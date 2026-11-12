@@ -1,5 +1,7 @@
 # Folia
 
+![Folia: a little more joy in publishing](assets/folia-banner.png)
+
 **A little more joy in publishing.**
 
 Folia is a fast static site generator written in Rust. It reads a git repository of Markdown,
