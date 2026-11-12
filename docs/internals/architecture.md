@@ -141,7 +141,7 @@ lists (`limit`, 10). Each mode gives a `FeedItem` per entry it builds; a feed li
 those whose pages were rendered, serialized as `jekyll-feed` 0.17 wrote them, without a template.
 Its `<updated>` is its latest item's, never the build time. Notes name the
 configuration's `[garden]` `author`, as micro entries name `[micro]`'s, and their summaries show
-wiki-links resolved (D-003). A tag's feed is `/blog/tag/:tag.xml` for every tag that can be a
+wiki-links resolved. A tag's feed is `/blog/tag/:tag.xml` for every tag that can be a
 file name; one with a space is written with it (`stem cells.xml`) and linked percent-encoded
 (`stem%20cells.xml`; the group's `feed`, `null` for a category, which has none). The **combined
 feed** is a page of the site (`[feeds.combined]`: its `source`, such as `feed.xml`, and the

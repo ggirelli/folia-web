@@ -29,7 +29,7 @@ pages:
   lists (`{:.class}`), wiki-links in garden notes and raw HTML work as they do under kramdown's
   GFM parser. Footnotes and definition lists are not supported.
 - Fenced code blocks are highlighted by [syntect](https://github.com/trishume/syntect), with class
-  names matching Rouge's, so a Jekyll site's code stylesheet keeps working. A few percent of
+  names matching Rouge's, so a Jekyll site's code stylesheet keeps working. Some
   blocks get slightly different token classes than Rouge gave.
 - **Liquid is not run.** `{{ ... }}` and `{% ... %}` in a document are shown as written. Move any
   Liquid out of the content before switching; see [Migrating from Jekyll](migrating.md).

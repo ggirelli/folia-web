@@ -33,7 +33,7 @@ needed to use Folia.
     the [parity tools reference](parity-reference.md)). Nothing else may live in
     `jekyll/`, because Jekyll loads every Ruby file there.
 - `codemods/check_d001.py`: checks that the only output change of the Liquid rewrite of the
-    Liquid in the site's Markdown is D-001.
+    Liquid in the site's Markdown is the one expected change.
 - `check_dump.rb`: checks that a dump accounts for every built file and that no date fell
     back to a file mtime.
 - `same_entries.py`: compares the sitemap or the Lunr index entry by entry.

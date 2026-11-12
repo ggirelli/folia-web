@@ -29,7 +29,7 @@ writes what Jekyll wrote.
 These commands were run, in order, in a new `ubuntu:24.04` container as a non-root user on
 2026-11-08. The guide's [automated checks](#automated-checks) and
 [example site](#the-example-site) then passed in a fresh clone: `just check` exited 0 (about a
-minute after the toolchain was installed), the example site built (18 pages) and `just serve`
+minute after the toolchain was installed), the example site built and `just serve`
 served its pages, feeds, sitemap and search script, and answered 404 for a missing page.
 
 **What was tested:** the clone was of the branch `feat/known-links-register` at `450c125`, which
@@ -278,7 +278,7 @@ baseline holds. A baseline is never overwritten: a new commit of the site is a n
 just build /tmp/site-out        # the whole site, with FOLIA_CONFIG
 just routes <label>           # every output path, against the baseline ; with
                               # FOLIA_LEDGER, an approved `folia-only` entry allows an output Jekyll never wrote
-just markdown <label>         # every Markdown body, with the ledger's D-001 to D-003 
+just markdown <label>         # every Markdown body, with the ledger's accepted differences
 just liquid                   # no Liquid left in the site's Markdown
 just pages <label> [out]      # every file Folia writes, against Jekyll's
 just determinism [out]        # two builds, byte for byte, and the recorded reference

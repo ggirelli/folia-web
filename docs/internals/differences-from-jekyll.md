@@ -12,8 +12,8 @@ most were accepted by the maintainer on purpose, and a documented difference is 
 difference: the comparison report counts them apart from the identical outputs (see
 [coverage classes](parity-reference.md#coverage-classes)).
 
-This page describes behaviour only. The reference site's content, its evidence and the
-maintainer's decision records are private and kept outside this repository.
+This page describes behaviour only. A site's content, its evidence and its owner's decision
+records are private and kept outside this repository.
 
 ## What Folia refuses
 
@@ -27,13 +27,11 @@ maintainer's decision records are private and kept outside this repository.
 
 ### Garden notes: whitespace in two meta values
 
-Six garden notes (the four `dg/book-club/...-books_list` pages, `dg/book-club/book-quotes` and
-`dg/coding/python`) have a known difference, which the maintainer accepted on 2026-11-08 as
-decision D-004. It covers two attributes only, `meta[name=description]@content` and
-`meta[property=og:title]@content`, and only whitespace in them: Jekyll's value is Folia's wrapped
-in two newlines on each side, because its head template's `{% capture %}` blocks keep the newlines
-around their tags. Nothing else on those pages differs, and the decision accepts no other
-difference, on these pages or any other.
+Some garden notes can differ from Jekyll's output in two attributes only,
+`meta[name=description]@content` and `meta[property=og:title]@content`, and only in whitespace:
+Jekyll's value can be Folia's wrapped in newlines, because its head template's `{% capture %}`
+blocks keep the newlines around their tags. Nothing else on those pages differs. A site accepts
+this difference in its ledger, and the acceptance covers no other difference.
 
 ### Category and tag listings
 
@@ -113,8 +111,7 @@ directory with a dated file name and `published: false`
 - **Bare-domain references.** Reference-style link definitions written without a scheme
   (`[Name]: github.com`) are relative URLs, and Jekyll rendered them as such. Folia does the same,
   so the link check reports them as internal links that resolve to nothing. They are a defect in
-  the site's Markdown, to be fixed there; Folia does not guess a scheme. Three exist in the
-  reference site.
+  the site's Markdown, to be fixed there; Folia does not guess a scheme.
 - **Broken wiki-links** are shown as broken and warned about, once each. A site lists the warnings
   it expects.
 
