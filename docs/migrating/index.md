@@ -2,7 +2,7 @@
 
 Folia was written to replace one Jekyll site, and this page is the exercise that was done for it,
 for anyone who wants to do the same. **None of it is needed to use Folia**: a site that starts on
-Folia needs only the [guide](../getting-started.md).
+Folia needs only the [guide](../getting-started/first-site.md).
 
 Read [Known limitations](../known-limitations.md) first. Folia is not a drop-in Jekyll
 replacement: it builds four kinds of content, in the way one site uses them, and it refuses
