@@ -74,8 +74,11 @@ fn gather(node: &Node, src: &str, out: &mut Vec<Heading>) {
             id: attr("id").unwrap_or_default(),
             html: render::inline_html(node, src),
             classes: attr("class")
-                .map(|classes| classes.split_whitespace().map(str::to_owned).collect())
-                .unwrap_or_default(),
+                .as_deref()
+                .into_iter()
+                .flat_map(str::split_whitespace)
+                .map(str::to_owned)
+                .collect(),
         });
         return;
     }
