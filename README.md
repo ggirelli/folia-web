@@ -64,10 +64,12 @@ folia build --site folia-web/examples/minimal-site --dest /tmp/folia-example
 The documentation is at <https://ggirelli.github.io/folia-web/>, and in [docs/](docs/index.md):
 
 - [Install](docs/getting-started/install.md) and [Your first site](docs/getting-started/first-site.md)
-- [Writing content](docs/guide/content.md), [templates](docs/guide/templates.md) and
-  [building and deploying](docs/guide/building.md)
-- [Configuration reference](docs/configuration.md)
-- [Migrating from Jekyll](docs/migrating/index.md) and [known limitations](docs/known-limitations.md)
+- [Build and deploy](docs/getting-started/build-and-deploy.md), and the guides to
+  [writing content](docs/guide/content.md) and [templates](docs/guide/templates.md)
+- The reference: [command line](docs/reference/cli.md),
+  [configuration](docs/reference/configuration.md)
+- [Migrating from Jekyll](docs/guide/migrating.md) and
+  [differences from Jekyll](docs/internals/differences-from-jekyll.md)
 - [About Folia](docs/about.md)
 
 ## Status and contributing

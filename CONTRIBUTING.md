@@ -1,7 +1,7 @@
 # Contributing to Folia
 
-Folia is the static-site generator behind [ggirelli.info](https://ggirelli.info). It is built for
-that one site, and it is [fully vibe coded](DISCLAIMER.md).
+Folia is a static-site generator for blogs, microblogs and digital gardens, and it is
+[fully vibe coded](DISCLAIMER.md).
 
 ## Getting started
 
@@ -10,7 +10,7 @@ You need [just](https://just.systems), a Rust toolchain with `cargo-deny`,
 markdownlint); that is all `just check` needs. Ruby with Bundler (for StandardRB and the Jekyll
 reference builds) is needed only for `just check-parity` and the Ruby recipes. The parity recipes
 also need a checkout of the reference Jekyll site (`FOLIA_SITE`) and its owner's private inputs (see
-[A site's private inputs](docs/development.md#a-sites-private-inputs)).
+[A site's private inputs](docs/internals/parity-governance.md#a-sites-private-inputs)).
 The linters are pinned in the justfile and fetched on first use; nothing needs installing globally.
 
 ```sh
@@ -20,7 +20,7 @@ just check-parity    # the parity-only checks (need Ruby)
 just docs     # preview the docs
 ```
 
-[Manual testing](docs/development/manual-testing.md) shows how to build the public example site and
+[Manual testing](docs/contributing/manual-testing.md) shows how to build the public example site and
 check it in a browser, with no private inputs.
 
 ## Making a change
@@ -31,9 +31,10 @@ check it in a browser, with no private inputs.
    the parity scripts or the Ruby files. CI runs the same recipes on every pull request, and `main`
    only takes changes that pass them.
 3. Add or update tests and checks for what you changed.
-4. Update the docs that describe it: the guide in [docs/](docs/) (what a user does) or
-   [docs/development.md](docs/development.md) (how it is built), and [README.md](README.md) for
-   the overview.
+4. Update the docs that describe it: the guide in [docs/](docs/) (what a user does),
+   [docs/internals/architecture.md](docs/internals/architecture.md) (how it is built) or
+   [docs/contributing/](docs/contributing/development-setup.md) (how to work on it), and
+   [README.md](README.md) for the overview.
 
 ## Style
 

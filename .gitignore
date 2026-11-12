@@ -14,7 +14,7 @@
 /.bundle
 
 # A site's parity inputs and evidence belong to its owner, outside this repository
-# (docs/development.md); these keep the reference site's from being added again.
+# (docs/internals/parity-governance.md); these keep the reference site's from being added again.
 /parity/evidence/
 /parity/toolchain/
 /parity/filopoe.toml

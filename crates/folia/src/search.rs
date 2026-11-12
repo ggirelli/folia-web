@@ -140,7 +140,7 @@ fn text(html: &str) -> String {
 /// Each run of line breaks (`\n`, `\r\n`), with the spaces around it, as one space. The site's
 /// Liquid (`strip_newlines`) deleted the breaks, so the last word of a hard-wrapped line and the
 /// first of the next were indexed as one (`two` and `garden` as `twogarden`), as were the items
-/// of a list; this is an intentional improvement over Jekyll (`docs/known-limitations.md`). A
+/// of a list; this is an intentional improvement over Jekyll (`docs/internals/differences-from-jekyll.md`). A
 /// break that follows a space, as between two paragraphs with nothing after it, gives the text
 /// Jekyll's chain gave.
 fn line_breaks_to_spaces(text: &str) -> String {

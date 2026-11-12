@@ -23,44 +23,15 @@ is a complete, small set to start from.
 A page that needs a template that does not exist, or whose template fails to render, **fails the
 build** and names the page and the template. Nothing is skipped silently.
 
-## What a template sees
+## What a template can use
 
-Three names, always:
-
-| Name | What |
-|-|-|
-| `page` | The page being rendered: its URL, title, date and so on (below) |
-| `content` | The page's body as HTML. Write it as `{{ content \| safe }}` |
-| `site` | The site: `site.url`, `site.title`, `site.description` (from `[site]`), `site.year` (the build's), `site.authors.<key>` (from `[authors]`) and `site.categories` (`name`, `anchor`, `count` for each) |
-
-**An undefined value is an error**, never an empty string: a misspelt `{{ page.titel }}` stops the
-build and says where. Test a value that may be absent with `{% if page.author %}`.
-
-### `page`, by kind
-
-Every kind has `page.url`, `page.title`, `page.layout`, `page.date` (an ISO time, or none for a
-page), `page.modified`, `page.description` and `page.author`. The rest depends on the kind:
-
-| Kind | Also |
-|-|-|
-| post | `categories` and `tags` (each `{name, anchor}`), `previous` and `next` (`{url, title}`), `toc`, `cover`, `syndications`, `footer`, `narrow_post`, `hide_website_junk`, `interactions` |
-| garden note | `backlinks` (`{title, url, excerpt}`), `garden_map`, `toc`, `cover` |
-| micro entry | the posts' keys with the kind's defaults; `page.like`, `page.bookmark`, `page.rsvp` and `page.event` hold the kind's own data |
-| page | `hide_title`, `noindex`, `title_icon`, `toc`, `cover`, `corner_backlink`, `error_type`, `additional_body_class`, `hide_website_junk` |
-| blog index | `items` (post cards, newest first, each `{url, title, cover_path, box_position, summary, author, date}`), `featured` (page 1 only) and `paginator` (`page`, `total_pages`, `previous_page_path`, `next_page_path`) |
-| categories and tags page | `groups`: each `{name, anchor, count, items, feed}` (`feed` is none for a category), by name; `items` are post cards |
-| micro listing | `items`: the entries, newest first, each with `kind`, `url`, `title`, `date` and `summary` |
-
-The exact contents of each are in the
-[example templates](https://github.com/ggirelli/folia-web/tree/main/examples/minimal-site/_folia/templates),
-which use almost all of them, and in the doc comments of the modes' crates (`crates/blog`,
-`crates/garden`, `crates/micro`, `crates/pages`).
-
-### Filters
-
-Besides MiniJinja's own, `date(format)` writes a time in a `strftime` format: for example
-`{{ page.date | date("%d %b %Y") }}`. The title filters (`head_title`, `heading_title`,
-`title_markup`) are for the author's site; read their source before using them.
+Every template sees `page` (the page being rendered), `content` (its body as HTML, written
+`{{ content | safe }}`) and `site` (the site's title, URL, authors and categories). **An undefined
+value is an error**, never an empty string: a misspelt `{{ page.titel }}` stops the build and says
+where. Test a value that may be absent with `{% if page.author %}`. The full list of what each
+kind of page offers, and the filters, are in the
+[template context reference](../reference/template-context.md); the example templates use almost
+all of them.
 
 ## Blocks and the search index
 

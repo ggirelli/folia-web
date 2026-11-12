@@ -45,21 +45,28 @@ nav:
   - Getting started:
       - Install: getting-started/install.md
       - Your first site: getting-started/first-site.md
-  - Guide:
+      - Build and deploy: getting-started/build-and-deploy.md
+  - Guides:
       - Writing content: guide/content.md
       - Templates: guide/templates.md
-      - Building and deploying: guide/building.md
+      - Preview while you write: guide/preview.md
+      - Drafts and scheduling: guide/drafts.md
       - Feeds, sitemap and search: guide/feeds-sitemap-search.md
-      - Configuration reference: configuration.md
-  - Migrating from Jekyll:
-      - Migrating from Jekyll: migrating/index.md
-      - Parity tools reference: migrating/parity-reference.md
-  - Known limitations: known-limitations.md
+      - Migrating from Jekyll: guide/migrating.md
+  - Reference:
+      - Command line: reference/cli.md
+      - Configuration: reference/configuration.md
+      - Template context: reference/template-context.md
+  - Internals:
+      - Architecture: internals/architecture.md
+      - Differences from Jekyll and known limitations: internals/differences-from-jekyll.md
+      - Parity tools reference: internals/parity-reference.md
+      - Parity governance: internals/parity-governance.md
+  - Contributing:
+      - Development setup: contributing/development-setup.md
+      - Manual testing: contributing/manual-testing.md
+      - Releasing: contributing/releasing.md
   - About: about.md
-  - Development:
-      - Development: development.md
-      - Manual testing: development/manual-testing.md
-      - Releasing: development/releasing.md
   - Release notes:
       - Folia 0.2.0: release-notes/v0.2.0.md
       - Folia 0.1.0: release-notes/v0.1.0.md

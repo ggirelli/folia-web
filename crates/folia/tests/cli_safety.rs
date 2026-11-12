@@ -199,7 +199,7 @@ fn version_prints_the_package_version_and_exits_zero() {
     }
 }
 
-/// The exit status is a contract (docs/guide/building.md, "Exit status"): 0 built, 1 the build
+/// The exit status is a contract (docs/reference/cli.md, "Exit status"): 0 built, 1 the build
 /// failed, 2 usage or configuration error.
 #[test]
 fn the_exit_status_is_0_for_a_build_1_for_a_failed_build_and_2_for_usage_and_configuration() {

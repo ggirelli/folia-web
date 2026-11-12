@@ -9,8 +9,8 @@ A page's `redirect_from` makes a stub page at each old URL that redirects to the
 of them are listed in `/redirects.json`. The stub's target uses the configuration's `[site] url`.
 
 A stub refreshes to its target at once, and names it as its canonical URL. On a dark site, give the
-stubs the site's colours with [`[redirects]`](../configuration.md#redirects), so that following an
-old URL does not flash a white page:
+stubs the site's colours with [`[redirects]`](../reference/configuration.md#redirects), so that
+following an old URL does not flash a white page:
 
 ```toml
 [redirects]
@@ -20,7 +20,7 @@ color-scheme = "dark"
 
 ## Atom feeds
 
-Written only when the configuration has [`[feeds]`](../configuration.md#feeds):
+Written only when the configuration has [`[feeds]`](../reference/configuration.md#feeds):
 
 | Feed | URL |
 |-|-|
@@ -42,7 +42,7 @@ page with no source, such as a category archive, has none. A static file's is it
 
 ## Search
 
-Written only when the configuration has [`[search]`](../configuration.md#search). Folia writes
+Written only when the configuration has [`[search]`](../reference/configuration.md#search). Folia writes
 `documents`, the array of records that the [lunr](https://lunrjs.com) search needs
 (`{id, url, title, body}`), followed by your own script, the `fragment` file, as it is. So the
 search UI and the lunr setup are yours; Folia supplies the data.

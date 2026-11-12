@@ -2,11 +2,12 @@
 
 Folia was written to replace one Jekyll site, and this page is the exercise that was done for it,
 for anyone who wants to do the same. **None of it is needed to use Folia**: a site that starts on
-Folia needs only the [guide](../getting-started/first-site.md).
+Folia needs only [Your first site](../getting-started/first-site.md).
 
-Read [Known limitations](../known-limitations.md) first. Folia is not a drop-in Jekyll
-replacement: it builds four kinds of content, in the way one site uses them, and it refuses
-what it does not support (an unknown front matter key, Liquid in an HTML page) instead of guessing.
+Read [Differences from Jekyll and known limitations](../internals/differences-from-jekyll.md)
+first. Folia is not a drop-in Jekyll replacement: it builds four collections of content, in the way
+one site uses them, and it refuses what it does not support (an unknown front matter key, Liquid in
+an HTML page) instead of guessing.
 **Matching Jekyll's output byte for byte is not the goal, and is not required**: the goal is to know,
 for every output, whether it is identical, differs for a reason you accept, or is a defect.
 
@@ -14,21 +15,21 @@ for every output, whether it is identical, differs for a reason you accept, or i
 
 1. **Check that Folia can build your content.** Does the site use only what it supports? Posts
    dated by file name, garden notes with a title and a date, micro entries in the four kinds,
-   pages with the front matter [listed here](../guide/content.md)? Anything else is refused,
+   pages with the front matter [listed here](content.md)? Anything else is refused,
    naming the file. Move **Liquid out of your Markdown** (`{{` and `{%` are shown as written);
    `just liquid` finds what is left.
 2. **Write Folia's side of the site** in `_folia/`: `folia.toml` (start from the
-   [reference](../configuration.md)) and the [templates](../guide/templates.md). Layouts and
+   [reference](../reference/configuration.md)) and the [templates](templates.md). Layouts and
    includes written in Liquid become MiniJinja templates, which is most of the work. Build
    until it passes: `folia build --site . --dest ../out`. Every problem is named by page and
    template.
-3. **Look at it.** [Serve the site](../guide/building.md#previewing-while-you-write) with
-   `folia serve` (or [a finished build](../guide/building.md#serving-a-finished-build)) next to
-   Jekyll's (`bundle exec jekyll serve`, on another port) and click through both: layout, links,
+3. **Look at it.** [Serve the site](preview.md) with
+   `folia serve` (or [a finished build](../getting-started/build-and-deploy.md#check-the-result))
+   next to Jekyll's (`bundle exec jekyll serve`, on another port) and click through both: layout, links,
    images, small screens, dark mode, anything that animates. Most differences you will care about
    are visible here.
 4. **Record a baseline and let the tools compare** (needs a clone of this repository; see the
-   [parity tools reference](parity-reference.md)):
+   [parity tools reference](../internals/parity-reference.md)):
    1. `just baseline my-label` records a production Jekyll build, with Jekyll's own intermediate
       results, of one commit of your site.
    2. `just routes`, `just markdown` and `just pages` compare every output Folia writes with
@@ -48,7 +49,7 @@ for every output, whether it is identical, differs for a reason you accept, or i
 Folia does not read `_drafts`. Move each draft into the posts directory with a dated file name
 (`_posts/2026/2026-11-10-idea.md`) and add `published: false` to its front matter. Preview it with
 `folia serve --unpublished`; remove the line when the post is ready. See the
-[known limitations](../known-limitations.md#drafts).
+[differences from Jekyll](../internals/differences-from-jekyll.md#drafts).
 
 ## Reading the result
 
@@ -58,7 +59,8 @@ Folia does not read `_drafts`. Move each draft into the posts directory with a d
 - **Exact parity:** every output is identical to Jekyll's.
 
 A migration needs the first. The second is rarely true and is not a requirement: Folia's own
-[known limitations](../known-limitations.md) lists differences that are on purpose (a feed's
+[list of differences](../internals/differences-from-jekyll.md) has differences that are on purpose
+(a feed's
 `<updated>` is its newest item's date, for example). Treat "zero failed assertions" as "nothing
 failed unexplained", and "documented difference" as "still a difference you decided to accept".
 

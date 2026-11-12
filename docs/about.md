@@ -8,7 +8,7 @@ holds the full story: where it comes from, how it is made, and what that means f
 
 My site had grown a blog, short notes, likes and bookmarks, and a digital garden, and Jekyll built
 them with a stack of plugins and a build I waited for. I wanted three things: builds fast enough
-to stay out of the way, one coherent workflow for every kind of content, and a site that is plain
+to stay out of the way, one coherent workflow for every collection of content, and a site that is plain
 files I own. Folia is that, built around the content I actually publish. It is not a faster
 Jekyll: it has its own configuration, its own templates, and a fixed set of collections.
 
@@ -37,4 +37,4 @@ history shows the whole process, and the plans are kept in it.
 
 The same text is in
 [DISCLAIMER.md](https://github.com/ggirelli/folia-web/blob/main/DISCLAIMER.md) in the repository.
-To see how the code is organized, read [development](development.md).
+To see how the code is organized, read [Architecture](internals/architecture.md).

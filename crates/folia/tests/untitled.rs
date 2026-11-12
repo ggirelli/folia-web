@@ -1,5 +1,5 @@
 //! Documents without a title, as Jekyll 4.4.1 titles them (checked against a Jekyll build of the
-//! same file names: see `docs/known-limitations.md`): a page has an empty title; a post, a garden
+//! same file names: see `docs/internals/differences-from-jekyll.md`): a page has an empty title; a post, a garden
 //! note and a micro entry are titled from their file name.
 //!
 //! ```sh

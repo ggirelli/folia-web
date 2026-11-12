@@ -30,25 +30,27 @@ is a folder of static files you can host anywhere.
 1. [Install](getting-started/install.md) Folia.
 2. Build [your first site](getting-started/first-site.md): copy the example, edit it live, build
    it.
-3. Learn to write [content](guide/content.md) and shape it with [templates](guide/templates.md).
-4. [Build and deploy](guide/building.md) the site, and look up keys in the
-   [configuration reference](configuration.md).
+3. [Build and deploy](getting-started/build-and-deploy.md) it.
+4. Learn to write [content](guide/content.md) and shape it with [templates](guide/templates.md),
+   and look up keys in the [configuration reference](reference/configuration.md).
 
 ## Elsewhere in the docs
 
 | If you want to | Read |
 |-|-|
+| preview a site while you write, or schedule a post | [Preview while you write](guide/preview.md), [Drafts and scheduling](guide/drafts.md) |
 | know what the feeds, sitemap and search script do | [Feeds, sitemap and search](guide/feeds-sitemap-search.md) |
-| move an existing Jekyll site over | [Migrating from Jekyll](migrating/index.md) |
-| know what Folia does not do | [Known limitations](known-limitations.md) |
+| look up a command, a configuration key or what a template sees | [Reference](reference/cli.md) |
+| move an existing Jekyll site over | [Migrating from Jekyll](guide/migrating.md) |
+| know what Folia does differently from Jekyll, and what it does not do | [Differences from Jekyll and known limitations](internals/differences-from-jekyll.md) |
 | know where it comes from and how it is made | [About Folia](about.md) |
-| work on Folia itself | [Development](development.md) |
+| work on Folia itself | [Architecture](internals/architecture.md), [Development setup](contributing/development-setup.md) |
 
 ## Status
 
 Folia is pre-1.0: see the [release notes](release-notes/v0.2.0.md). Its output equals Jekyll's for
 most of the author's site and differs, on purpose or by a known limitation, for the rest, so read
-[Known limitations](known-limitations.md) before replacing a Jekyll site.
+[Differences from Jekyll](internals/differences-from-jekyll.md) before replacing a Jekyll site.
 
 ## Support
 

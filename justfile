@@ -11,7 +11,7 @@ bundle := "BUNDLE_PATH=vendor/bundle bundle"
 # The reference Jekyll site, and where baselines go (outside both repositories)
 site := env("FOLIA_SITE", "../filopoe")
 baselines := env("FOLIA_BASELINES", "../folia-baselines")
-# The site's own inputs, which its owner keeps outside this repository (docs/development.md):
+# The site's own inputs, which its owner keeps outside this repository (docs/internals/parity-governance.md):
 # Folia's configuration for the site, its deviation ledger and expected warnings, and the tree
 # hash of the templates the pages check expects in the site's _folia/templates (the
 # `templates.tree_sha256` of a build's build.json). A recipe that needs one refuses to run without
@@ -38,7 +38,7 @@ default:
 # Refuse to go on when the site input `name` (`value`) is not set
 [private]
 require name value:
-    @[ -n {{quote(value)}} ] || { echo "{{name}} is not set: the site's inputs are kept outside Folia's repository (docs/development.md)" >&2; exit 2; }
+    @[ -n {{quote(value)}} ] || { echo "{{name}} is not set: the site's inputs are kept outside Folia's repository (docs/internals/parity-governance.md)" >&2; exit 2; }
 
 # Run every check that needs Rust, uv and Node (not Ruby: see `check-parity`)
 [group('checks')]

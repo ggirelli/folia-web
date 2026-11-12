@@ -1,22 +1,24 @@
 # Writing content
 
-A site has four kinds of content. Which kind a file is depends on where it lives: the directories
-are named in the configuration's [`[roots]`](../configuration.md#roots-required), and **every other
-file with front matter is a page**. A file with no front matter is a static file, copied as it is.
+A site has four collections of content: a blog, a microblog, a digital garden (the "garden" from
+here on) and pages. Which collection a file belongs to depends on where it lives: the directories
+are named in the configuration's [`[roots]`](../reference/configuration.md#roots-required), and
+**every other file with front matter is a page**. A file with no front matter is a static file,
+copied as it is.
 
 Every document is Markdown (or, for pages, HTML) with a YAML front matter block between two `---`
 lines. The examples below come from the
 [example site](https://github.com/ggirelli/folia-web/tree/main/examples/minimal-site).
 
 !!! warning "Folia refuses what it does not know"
-    A front matter key a document's kind does not support is an **error that names the key**, not
+    A front matter key its collection does not support is an **error that names the key**, not
     something ignored, so a misspelling (`narow_post`) never silently changes a page. The tables
-    below list the keys each kind supports. A value Folia cannot show is refused too.
+    below list the keys each collection supports. A value Folia cannot show is refused too.
 
 !!! note "URL prefixes are fixed"
     Posts are published under `/blog/`, garden notes under `/dg/`, and micro entries under
-    `/micro/`, `/likes/`, `/bookmarks/` and `/rsvps/`. They come from the sites Folia was written
-    for, and are not configurable yet. Pages choose their own URLs.
+    `/micro/`, `/likes/`, `/bookmarks/` and `/rsvps/`. These prefixes are fixed, not configurable.
+    Pages choose their own URLs.
 
 ## Markdown
 
@@ -30,13 +32,13 @@ pages:
   names matching Rouge's, so a Jekyll site's code stylesheet keeps working. A few percent of
   blocks get slightly different token classes than Rouge gave.
 - **Liquid is not run.** `{{ ... }}` and `{% ... %}` in a document are shown as written. Move any
-  Liquid out of the content before switching; see [Migrating from Jekyll](../migrating/index.md).
+  Liquid out of the content before switching; see [Migrating from Jekyll](migrating.md).
 
 ## Posts
 
 Files in the `blog` root, named `YYYY-MM-DD-slug.md`. **The file name dates the post**: a `date`
 key in the front matter is refused. A post dated after the build is left out, as is one with
-`published: false`.
+`published: false` (see [Drafts and scheduling](drafts.md)).
 
 ```markdown
 ---
@@ -88,12 +90,12 @@ A garden note links to others by title: see [[A leaf note]], or [[A leaf note|wi
   the build **warns** (it does not fail).
 - Each note's page gets its **backlinks**, and the build writes a graph of all links to
   `assets/json/notes_graph.json`.
-- Supported keys: `title`, `date`, `hide_garden_map`.
+- Supported keys: `title`, `date`, `hide_garden_map`, `published` and `lang`.
 
 ## Microblog entries
 
-Files in the `micro` root, in a folder named for their kind. The kind decides the template, the
-URL and the category:
+Files in the `micro` root, in a folder named for their kind (a note, a like, a bookmark or an
+RSVP). The kind decides the template, the URL and the category:
 
 | Folder | Template | URL | Extra front matter |
 |-|-|-|-|
@@ -103,7 +105,7 @@ URL and the category:
 | `rsvps/` | `rsvp.html` | `/rsvps/NAME` | `rsvp: "yes"`, `event: {date, time, name, organizer, url}` |
 
 Files are named `YYYY-MM-DD-name.md`, and the date of the file name is the entry's date. Common
-keys: `title`, `published`, `permalink`, `redirect_from`, `syndications`, `narrow_post`.
+keys: `title`, `published`, `permalink`, `redirect_from`, `syndications`, `narrow_post`, `lang`.
 
 ## Pages
 
@@ -137,4 +139,4 @@ An HTML page with Liquid in it is refused ("not built yet"); an HTML page withou
 
 Everything else (images, scripts, fonts, a `CNAME`) is copied to the same path. Add paths that
 begin with a dot to the configuration's `include`, and keep files out with `exclude`. Sass files
-(`.scss` with front matter) are compiled; see [Building](building.md#stylesheets).
+(`.scss` with front matter) are compiled; see [Build and deploy](../getting-started/build-and-deploy.md#stylesheets).

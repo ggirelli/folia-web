@@ -6,7 +6,7 @@ Folia is one program, `folia`. This page gets it onto your machine; the next one
 ## What you need
 
 - **Linux x86_64** is the supported platform. macOS is not guaranteed, and Windows is not
-  supported (use WSL); see [platforms](../development.md#platforms).
+  supported (use WSL); see [platforms](../contributing/development-setup.md#platforms).
 - **git.** Folia reads each file's last-modified date from the site's git history, so a site is a
   git repository, and a file's date is the date of its last commit. A site outside a git
   repository fails to build.
@@ -30,7 +30,7 @@ folia --version                    # folia X.Y.Z
 
 The release is also attested: verify the file with `gh attestation verify FILE --repo
 ggirelli/folia-web`. Not every release has a binary yet (the
-[release workflow](../development/releasing.md) is new): if yours has none, build from source.
+[release workflow](../contributing/releasing.md) is new): if yours has none, build from source.
 
 ## With cargo
 
@@ -51,8 +51,8 @@ cargo build --release --locked -p folia      # target/release/folia
 ```
 
 The clone also has the example site you will use next, in `examples/minimal-site`. To work on
-Folia itself, see [development](../development.md) and
-[manual testing](../development/manual-testing.md), which lists every tool and installs them on a
+Folia itself, see [development setup](../contributing/development-setup.md) and
+[manual testing](../contributing/manual-testing.md), which lists every tool and installs them on a
 fresh Ubuntu.
 
 Next: [Your first site](first-site.md).

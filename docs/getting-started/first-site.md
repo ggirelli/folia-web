@@ -8,8 +8,8 @@ page update, add a garden note and build the result. It takes a few minutes, and
 
 The repository has a small, complete site in
 [`examples/minimal-site`](https://github.com/ggirelli/folia-web/tree/main/examples/minimal-site):
-a blog, microblog entries, a digital garden and a few pages. Copy it to start your own, and make
-it a git repository, because Folia reads dates from git:
+a blog, microblog entries, a digital garden and a few pages: the four collections. Copy it to start
+your own, and make it a git repository, because Folia reads dates from git:
 
 ```sh
 git clone https://github.com/ggirelli/folia-web.git
@@ -56,7 +56,7 @@ until you fix it.
 
 ## Add a garden note
 
-The garden, Folia's digital garden, lives in `_garden/`, and its notes link to each other by
+The garden lives in `_garden/`, and its notes link to each other by
 title. Make `_garden/topic/new.md`:
 
 ```markdown
@@ -113,6 +113,6 @@ configuration's `[roots]`. From here:
 
 - [Writing content](../guide/content.md): the files and their front matter.
 - [Templates](../guide/templates.md): what each template can use.
-- [Configuration reference](../configuration.md): every key of `folia.toml`.
-- [Building and deploying](../guide/building.md): the commands, their exit status and the
-  destination.
+- [Configuration reference](../reference/configuration.md): every key of `folia.toml`.
+- [Build and deploy](build-and-deploy.md): the destination, Sass and a CI recipe, then the
+  [command-line reference](../reference/cli.md) for the exit status.

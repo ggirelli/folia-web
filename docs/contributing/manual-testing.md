@@ -65,9 +65,9 @@ Environment variables:
 
 - `FOLIA_SASS`: the Dart Sass program, when it is not `sass` on `PATH`.
 - `FOLIA_SITE`, `FOLIA_CONFIG` and the other `FOLIA_*` variables name a real site's private inputs
-  (see [a site's private inputs](../development.md#a-sites-private-inputs)). Nothing in this
-  guide needs them before [real-site parity](#real-site-parity-optional); a recipe that needs one
-  refuses to run without it.
+  (see [a site's private inputs](../internals/parity-governance.md#a-sites-private-inputs)).
+  Nothing in this guide needs them before [real-site parity](#real-site-parity-optional); a recipe
+  that needs one refuses to run without it.
 
 ## Automated checks
 
@@ -90,7 +90,7 @@ Or one at a time:
 | `just check-parity` (`just lint-rb`, `just baseline-negative`, `just accept-negative`) | StandardRB, and the baseline and acceptance scripts refuse what they must, on throwaway repositories |
 | `just docs-build` | this documentation, with MkDocs in strict mode |
 
-CI runs the same recipes in the jobs [Checks](../development.md#checks) lists, so a branch that
+CI runs the same recipes in the jobs [Checks](development-setup.md#checks) lists, so a branch that
 passes `just check` (and `just check-parity`) passes CI.
 
 Fixture tests build throwaway sites in the temporary directory, each its own git repository, and
@@ -125,8 +125,8 @@ is a small public site with every kind of content Folia builds. Its configuratio
 ### Build it
 
 Build into a directory outside the site that is absent, empty, or one a previous Folia build
-wrote (see [the destination](../guide/building.md#the-destination)). A failed build exits non-zero
-and leaves the destination as it was:
+wrote (see [the destination](../getting-started/build-and-deploy.md#the-destination)). A failed
+build exits non-zero and leaves the destination as it was:
 
 ```sh
 just build-example /tmp/folia-example
@@ -269,7 +269,7 @@ just baseline-verify <label>                   # build twice, and without the du
 just compare <a> <b>                           # compare two baselines
 ```
 
-The [parity tools reference](../migrating/parity-reference.md) explains each step and what a
+The [parity tools reference](../internals/parity-reference.md) explains each step and what a
 baseline holds. A baseline is never overwritten: a new commit of the site is a new label.
 
 ### Build and compare
@@ -291,7 +291,7 @@ directory, which it prints):
 | File | What it says |
 |-|-|
 | `dom-report.md`, `dom-report.json` | every whole-document difference, and the ledger's verdict on it |
-| `coverage.md`, `coverage.json` | every output of the baseline and its class, the verdicts *clean build* and *exact parity*, and the Folia-only outputs ([coverage classes](../migrating/parity-reference.md#coverage-classes)) |
+| `coverage.md`, `coverage.json` | every output of the baseline and its class, the verdicts *clean build* and *exact parity*, and the Folia-only outputs ([coverage classes](../internals/parity-reference.md#coverage-classes)) |
 | `warnings.json` | each warning Folia gave, and the expected-warnings entry that matches it |
 | `links.json` | internal links that resolve to nothing |
 | `build.json`, `sha256.txt` | the build's record (site and Folia commits, configuration and templates hashes) and manifest |
@@ -327,7 +327,7 @@ recorded the same way.
   on the outputs it lists, bound to the hashes of the baseline's file and of the Folia file that
   was reviewed. A difference no entry explains fails the run. An entry whose output changed is
   **stale**: it fails too, and the owner must review the new output before its hashes are updated.
-  Only the owner approves an entry ([owner approvals](../development.md#owner-approvals-in-the-ledger)).
+  Only the owner approves an entry ([owner approvals](../internals/parity-governance.md#owner-approvals-in-the-ledger)).
 - **Expected warnings** (`FOLIA_EXPECTED_WARNINGS`): each entry matches one warning Folia gives,
   with the decision that makes it expected. A warning no entry matches fails the run, and so does an
   entry no warning matches: remove an entry once its warning is fixed.

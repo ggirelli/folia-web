@@ -1,5 +1,5 @@
 //! Builds the public example site, `examples/minimal-site`, which the manual testing guide
-//! (`docs/development/manual-testing.md`) builds by hand, and checks every mode, listing and
+//! (`docs/contributing/manual-testing.md`) builds by hand, and checks every mode, listing and
 //! generated file it has is written.
 //!
 //! ```sh
