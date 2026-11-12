@@ -24,7 +24,7 @@ fn item(collection: &str, kind: Option<&str>, url: &str, published: &str) -> Fee
         content_html: format!("<p>Body of {url}</p>\n"),
         excerpt_html: String::new(),
         author: None,
-        categories: kind.map(|kind| vec![kind.to_owned()]).unwrap_or_default(),
+        categories: kind.map_or_default(|kind| vec![kind.to_owned()]),
         tags: Vec::new(),
         lang: None,
         search_text: None,

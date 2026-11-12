@@ -553,9 +553,7 @@ fn fingerprint(page: &[Node]) -> Fingerprint {
 
 /// The text of the first element `wanted` picks, or nothing.
 fn text_of(page: &[Node], wanted: &dyn Fn(&Node) -> bool) -> String {
-    find(page, wanted)
-        .map(|node| dom::text(children(node)))
-        .unwrap_or_default()
+    find(page, wanted).map_or_default(|node| dom::text(children(node)))
 }
 
 /// Every element, in document order.

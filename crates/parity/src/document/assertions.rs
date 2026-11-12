@@ -282,8 +282,7 @@ fn attr<'a>(node: &'a Node, name: &str) -> Option<&'a str> {
 fn tokens<'a>(attrs: &'a std::collections::BTreeMap<String, String>, name: &str) -> Vec<&'a str> {
     attrs
         .get(name)
-        .map(|value| value.split_whitespace().collect())
-        .unwrap_or_default()
+        .map_or_default(|value| value.split_whitespace().collect())
 }
 
 fn has_token(attrs: &std::collections::BTreeMap<String, String>, name: &str, token: &str) -> bool {
@@ -455,7 +454,7 @@ fn root_card(nodes: &[Node]) -> Option<(String, String)> {
                 return None;
             };
             let url = attr(property_with(children, "u-url", "u-uid")?, "href")?.to_owned();
-            let name = property(children, "p-name").map(text).unwrap_or_default();
+            let name = property(children, "p-name").map_or_default(text);
             Some((url, name))
         })
 }
