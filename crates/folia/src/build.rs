@@ -13,11 +13,11 @@
 //!    fails, or whose `author` is not one of the configuration's, fails the build, whatever the
 //!    configuration: it is never skipped, and every such problem is reported.
 //! 5. Add a redirect stub for each `redirect_from` URL of a page rendered, the files the modes
-//!    generated (the note graph), the sitemap (module `sitemap`), the feeds the modes planned
+//!    generated (the note graph), the sitemap (module `sitemap`), `robots.txt`, the feeds the modes planned
 //!    when the configuration has `[feeds]` (module `feed`), and copy every static file.
 //! 6. Write it all to the destination (`output`).
 //!
-//! Every other planned output is not built yet; [`Built::not_built`] counts them. Nothing is
+//! Any planned output nothing builds is not built yet; [`Built::not_built`] counts them. Nothing is
 //! written unless every step succeeds; warnings, such as a broken wiki-link, do not stop the
 //! build, and are returned in [`Built::warnings`].
 
@@ -241,8 +241,8 @@ struct Generated<'a> {
 }
 
 impl Generated<'_> {
-    /// Adds to `outputs` the stylesheets, the serialized files (sitemap, `redirects.json`,
-    /// feeds), then the search script, which reads them; a file built twice is a problem.
+    /// Adds to `outputs` the stylesheets, the serialized files (sitemap, `robots.txt`,
+    /// `redirects.json`, feeds), then the search script, which reads them; a file built twice is a problem.
     fn write(
         &self,
         built: &mut Built,
@@ -473,6 +473,8 @@ fn serialized(
             redirects_json(&config.site.url, site)
         } else if generator == "sitemap" {
             sitemap::xml(&config.site.url, urls, clock)
+        } else if generator == "robots" {
+            robots_txt(&config.site.url)
         } else {
             let feeds = config.feeds.as_ref()?;
             feed::xml(
@@ -487,6 +489,12 @@ fn serialized(
         Some((planned.route.clone(), text))
     });
     generated.chain(combined).collect()
+}
+
+/// The default `robots.txt`: every crawler may fetch everything, and the sitemap is where to
+/// start. Preview builds get the same text: they carry no not-for-indexing mark of their own.
+fn robots_txt(site_url: &str) -> String {
+    format!("User-agent: *\nAllow: /\nSitemap: {site_url}/sitemap.xml\n")
 }
 
 /// The template block search indexes a listing by, if the site names one.

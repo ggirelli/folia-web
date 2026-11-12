@@ -72,8 +72,9 @@ shared ones. Each collection crate depends on `folia-core` only, never on anothe
    every static file.
 6. **Write** it all to the destination, whole or not at all (`output`).
 
-Every URL the plan reserves and no step produced is counted as not built yet: today that is
-`/robots.txt` alone (see the [command-line reference](../reference/cli.md#what-it-prints)).
+Every URL the plan reserves and no step produced is counted as not built yet; today there is none,
+and the summary line says so only when there is one (see the
+[command-line reference](../reference/cli.md#what-it-prints)).
 Warnings, such as a broken wiki-link, do not stop a build.
 
 ## Design decisions

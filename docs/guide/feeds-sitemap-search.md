@@ -40,6 +40,21 @@ category feeds. The `generator` table decides what the feeds say generated them.
 `.htm`, `.html`, `.xhtml` and `.pdf` static files. A page's `<lastmod>` is its last modification; a
 page with no source, such as a category archive, has none. A static file's is its last git commit.
 
+## robots.txt
+
+Folia writes a default `/robots.txt` that lets every crawler fetch everything and points to the
+sitemap, using the configuration's `[site] url`:
+
+```text
+User-agent: *
+Allow: /
+Sitemap: https://example.org/sitemap.xml
+```
+
+To write your own, put a `robots.txt` at the root of the site. A file of the site takes the URL,
+so it is copied as it is and Folia writes no default. A [preview build](drafts.md#preview-builds)
+gets the same default; keep it off the public web by where you put it.
+
 ## Search
 
 Written only when the configuration has [`[search]`](../reference/configuration.md#search). Folia writes

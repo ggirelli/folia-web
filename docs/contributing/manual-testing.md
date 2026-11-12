@@ -139,7 +139,7 @@ It prints one warning, which is expected: the example has a broken wiki-link on 
 
 ```text
 warning: _garden/topic/index.md: the wiki-link [[Missing note]] names no note, so it is shown as broken
-Built 18 pages, 1 redirect stubs, 15 generated files and 2 static files into /tmp/folia-example; 1 planned outputs are not built yet.
+Built 18 pages, 1 redirect stubs, 16 generated files and 2 static files into /tmp/folia-example.
 ```
 
 Folia also says which documents it skipped, and why (`skipped: <source>: <reason>`): a document

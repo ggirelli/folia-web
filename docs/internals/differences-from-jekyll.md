@@ -61,6 +61,11 @@ where Jekyll listed collections, then pages by file name, then generated pages. 
 `<lastmod>` is the same as Jekyll's; a static file's is its last commit, where Jekyll used the
 file's modification time, which changes with every checkout.
 
+### robots.txt
+
+Folia writes a default `robots.txt` when the site has none; Jekyll wrote none, so a site that
+shipped its own keeps it, and one that had none gains the default.
+
 ### Search
 
 - Micro entries are indexed; Jekyll's index omitted them.

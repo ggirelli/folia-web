@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Folia writes a default `/robots.txt` (every crawler allowed, with the sitemap's URL) unless the
+  site has its own, which is copied as before. The build summary no longer says that a planned
+  output is not built yet when none is
+  ([guide](docs/guide/feeds-sitemap-search.md#robotstxt)).
+
 ## 0.2.0
 
 A local preview server that rewrites only what changed, preview builds, reproducible builds as of a

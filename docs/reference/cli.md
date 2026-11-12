@@ -33,18 +33,15 @@ While it builds, Folia prints **warnings** (a broken wiki-link) and `skipped:` l
 document it does not support yet, each with the reason. Then comes the summary on stdout:
 
 ```text
-Built 18 pages, 1 redirect stubs, 15 generated files and 2 static files into /tmp/out; 1 planned outputs are not built yet.
+Built 18 pages, 1 redirect stubs, 16 generated files and 2 static files into /tmp/out.
 ```
 
 The counts are what Folia wrote: pages rendered from your content, a stub for each `redirect_from`
-URL, files it generated itself (feeds, sitemap, search data, the garden's graph) and files copied
-as they are.
+URL, files it generated itself (feeds, sitemap, `robots.txt`, search data, the garden's graph) and
+files copied as they are.
 
-**"N planned outputs are not built yet"** counts the URLs Folia plans for every site but has no
-generator for. Today that is one, `/robots.txt`: Folia reserves the URL and never writes the file
-itself, so the summary counts it. Put a `robots.txt` in the site and it is copied as a static file,
-the count drops to 0, and nothing else changes. A site without one works fine. In the example site,
-the `1` is this.
+When Folia plans an output it has no generator for, the summary ends with "; N planned outputs
+are not built yet" (it counts them). A normal build has none, so the line does not print.
 
 A preview build adds `PREVIEW BUILD (...): not for publishing.` to the summary, and a `warning:`
 line says the same.
