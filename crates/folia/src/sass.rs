@@ -145,8 +145,7 @@ impl Sass {
             .map_err(|e| e.to_string())?;
         let out_dir = absolute(&root.join(id))?
             .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_default();
+            .map_or_default(Path::to_path_buf);
         let source = std::fs::canonicalize(&source).map_err(|e| e.to_string())?;
         Ok(Compiled {
             css: css.strip_suffix('\n').unwrap_or(&css).to_owned(),
@@ -183,8 +182,7 @@ fn jekyll_map(map: &str, main: &Path, out_dir: &Path, css_name: &str) -> Result<
                 file_url_path(url).ok_or_else(|| format!("a source is not a file: {url}"))?;
             Ok(if path == main {
                 main.file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default()
+                    .map_or_default(|n| n.to_string_lossy().into_owned())
             } else {
                 relative(&path, out_dir)
             })

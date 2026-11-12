@@ -9,8 +9,8 @@ A page's `redirect_from` makes a stub page at each old URL that redirects to the
 of them are listed in `/redirects.json`. The stub's target uses the configuration's `[site] url`.
 
 A stub refreshes to its target at once, and names it as its canonical URL. On a dark site, give the
-stubs the site's colours with [`[redirects]`](../configuration.md#redirects), so that following an
-old URL does not flash a white page:
+stubs the site's colours with [`[redirects]`](../reference/configuration.md#redirects), so that
+following an old URL does not flash a white page:
 
 ```toml
 [redirects]
@@ -20,7 +20,7 @@ color-scheme = "dark"
 
 ## Atom feeds
 
-Written only when the configuration has [`[feeds]`](../configuration.md#feeds):
+Written only when the configuration has [`[feeds]`](../reference/configuration.md#feeds):
 
 | Feed | URL |
 |-|-|
@@ -40,9 +40,24 @@ category feeds. The `generator` table decides what the feeds say generated them.
 `.htm`, `.html`, `.xhtml` and `.pdf` static files. A page's `<lastmod>` is its last modification; a
 page with no source, such as a category archive, has none. A static file's is its last git commit.
 
+## robots.txt
+
+Folia writes a default `/robots.txt` that lets every crawler fetch everything and points to the
+sitemap, using the configuration's `[site] url`:
+
+```text
+User-agent: *
+Allow: /
+Sitemap: https://example.org/sitemap.xml
+```
+
+To write your own, put a `robots.txt` at the root of the site. A file of the site takes the URL,
+so it is copied as it is and Folia writes no default. A [preview build](drafts.md#preview-builds)
+gets the same default; keep it off the public web by where you put it.
+
 ## Search
 
-Written only when the configuration has [`[search]`](../configuration.md#search). Folia writes
+Written only when the configuration has [`[search]`](../reference/configuration.md#search). Folia writes
 `documents`, the array of records that the [lunr](https://lunrjs.com) search needs
 (`{id, url, title, body}`), followed by your own script, the `fragment` file, as it is. So the
 search UI and the lunr setup are yours; Folia supplies the data.

@@ -69,8 +69,7 @@ fn json_string(text: &str) -> String {
 fn documents(site: &Site, mode: Mode) -> Vec<&DocId> {
     site.documents
         .get(&mode)
-        .map(|docs| docs.iter().map(|doc| &doc.id).collect())
-        .unwrap_or_default()
+        .map_or_default(|docs| docs.iter().map(|doc| &doc.id).collect())
 }
 
 fn file_name(id: &DocId) -> &str {

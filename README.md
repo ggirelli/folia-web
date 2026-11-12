@@ -1,50 +1,86 @@
 <h1 align="center">
-  <img src="assets/brand/folia-banner.png" alt="Folia: a publishing engine for your digital garden">
+  <img src="assets/brand/folia-banner.png" alt="Folia: a little more joy in publishing">
 </h1>
 
-Folia is the Rust static-site generator behind [ggirelli.info](https://ggirelli.info),
-written to replace Jekyll. It publishes four kinds of content:
+**A little more joy in publishing.**
 
-- **Blog:** articles, archives, pagination, tags, and categories.
-- **Microblog:** notes, likes, bookmarks, and RSVPs.
-- **Digital garden:** notes connected by wiki-links, with backlinks and a
-  note graph.
-- **Pages:** individually authored pages with explicit URLs.
-
-Folia is built for one website. It is not meant as a general-purpose
-alternative to Jekyll, Hugo, or Zola, although the code is public.
+Folia is a fast static site generator written in Rust. It turns a git repository of Markdown,
+templates and one configuration file into a site you can host anywhere.
 
 > [!IMPORTANT]
->
-> - **Fully vibe coded:** an AI assistant (Claude) writes all of its code, tests, scripts and docs.
->   Read the [disclaimer](DISCLAIMER.md) before relying on it.
-> - **Free and open source** under the [MIT license](LICENSE), provided as is, **without warranty**.
+> Folia is fully vibe coded: an AI assistant (Claude) writes all of its code, tests, scripts and
+> docs, and the maintainer directs and reviews the work. It is tested, not audited, so expect rough
+> edges, and it is provided as is, without warranty, under the [MIT license](LICENSE). It was
+> started for one website, and you are welcome to use it for yours. The full story is in the
+> [disclaimer](DISCLAIMER.md) and [About Folia](docs/about.md).
 
-## Status
+## Why Folia
 
-Folia 0.2.0 is a pre-1.0 release: it builds the whole reference site, its checks pass and it
-refuses to overwrite files it did not write. **A clean build is not exact parity**: some outputs
-differ from Jekyll's on purpose or are known to differ ([known limitations](docs/known-limitations.md)),
-and Folia does not claim to replace a Jekyll site on its own. See the
-[release notes](docs/release-notes/v0.2.0.md).
+I started Folia to replace Jekyll on my own site, [ggirelli.info](https://ggirelli.info), and kept
+the parts I wanted: a build that is quick enough to stay out of the way, one coherent workflow from
+a Markdown file to a published page, and a site that is plain files in a git repository that you
+own. It is not a drop-in Jekyll replacement, and it is not trying to be everything. It is aimed at
+people who write a blog, short notes and a digital garden and want one tool for all three.
 
-The documentation is published at <https://ggirelli.github.io/folia-web/>.
+## Highlights
 
-- [Getting started](docs/getting-started.md): install Folia and build the example site.
-- [Writing content](docs/guide/content.md), [templates](docs/guide/templates.md),
-  [building and deploying](docs/guide/building.md) and the
-  [configuration reference](docs/configuration.md).
-- [Building and deploying](docs/guide/building.md#previewing-while-you-write): `folia serve`
-  builds a site, serves it locally and rebuilds it, reloading the browser, when a file changes.
-- [Migrating from Jekyll](docs/migrating/index.md): how to compare a Folia build with a Jekyll one.
-- [Known limitations](docs/known-limitations.md): how Folia's output differs from Jekyll's.
-- [Development](docs/development.md) and [manual testing](docs/development/manual-testing.md): how
-  the repository is organized, and how to check it.
+- **Fast feedback.** `folia serve` builds your site, serves it and rebuilds when a file changes,
+  writing only the files that changed and reloading the browser.
+- **Markdown content.** Posts, notes and pages are Markdown files with front matter, with syntax
+  highlighting and a table of contents when you ask for one.
+- **Four collections.** Folia has a blog, a microblog (notes, likes, bookmarks and RSVPs), a
+  digital garden with wiki-links and backlinks, and pages with URLs you choose.
+- **Templates you control.** Pages are rendered by MiniJinja templates (Jinja-style syntax) that
+  you own and edit.
+- **The usual outputs.** Atom feeds, a sitemap, search data, redirects, a 404 page and Sass
+  compilation, all written for you. Drafts and scheduled posts stay out of a build until you ask.
 
-## Support
+![A garden note and its backlinks, built from the example site](assets/screenshots/garden-note.png)
 
-Folia is free and maintained for the author's own site. If it is useful to you, you can support its upkeep:
-[GitHub Sponsors](https://github.com/sponsors/ggirelli) or [Ko-fi](https://ko-fi.com/ggirelli).
-Sponsoring buys no support, features or warranty (see the [disclaimer](DISCLAIMER.md)).
+## Quick start
 
-Contributions follow [CONTRIBUTING.md](CONTRIBUTING.md).
+You need git, because Folia reads each file's last-modified date from its history, and Dart Sass
+1.100.0 only if your site has Sass stylesheets. To install Folia, download the Linux x86_64
+tarball from the [releases page](https://github.com/ggirelli/folia-web/releases) (not every
+release has one yet), or build it with a Rust toolchain:
+
+```sh
+cargo install --git https://github.com/ggirelli/folia-web folia --locked
+```
+
+Then try the example site, which has one of everything:
+
+```sh
+git clone https://github.com/ggirelli/folia-web.git
+folia serve --site folia-web/examples/minimal-site     # open http://127.0.0.1:4000/
+folia build --site folia-web/examples/minimal-site --dest /tmp/folia-example
+```
+
+[Install](docs/getting-started/install.md) has the other ways to install, and
+[Your first site](docs/getting-started/first-site.md) makes a site of your own.
+
+## Documentation
+
+The documentation is at <https://ggirelli.github.io/folia-web/>, and in [docs/](docs/index.md):
+
+- [Install](docs/getting-started/install.md) and [Your first site](docs/getting-started/first-site.md)
+- [Build and deploy](docs/getting-started/build-and-deploy.md), and the guides to
+  [writing content](docs/guide/content.md) and [templates](docs/guide/templates.md)
+- The reference: [command line](docs/reference/cli.md),
+  [configuration](docs/reference/configuration.md)
+- [Migrating from Jekyll](docs/guide/migrating.md) and
+  [differences from Jekyll](docs/internals/differences-from-jekyll.md)
+- [About Folia](docs/about.md)
+
+## Status and contributing
+
+Folia is pre-1.0 (see the [release notes](docs/release-notes/v0.2.0.md)). The build, `folia serve`,
+the four collections and their outputs are what it was made for and are covered by its checks. The
+URL prefixes of the collections (`/blog`, `/dg`, `/micro`) are fixed, there are no plugins or
+user-defined collections, and some output differs from Jekyll's on purpose or by a known limitation.
+Linux x86_64 is the supported platform.
+
+Bug reports and ideas are welcome as [GitHub issues](https://github.com/ggirelli/folia-web/issues).
+Changes follow [CONTRIBUTING.md](CONTRIBUTING.md). If Folia is useful to you, you can support its
+upkeep through [GitHub Sponsors](https://github.com/sponsors/ggirelli) or
+[Ko-fi](https://ko-fi.com/ggirelli); that buys no support, features or warranty.

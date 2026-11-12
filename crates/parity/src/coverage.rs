@@ -352,14 +352,13 @@ fn outputs_of(value: &toml::Value) -> Vec<String> {
     value
         .get("outputs")
         .and_then(toml::Value::as_array)
-        .map(|outputs| {
+        .map_or_default(|outputs| {
             outputs
                 .iter()
                 .filter_map(toml::Value::as_str)
                 .map(str::to_owned)
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 fn is_date(value: &str) -> bool {
@@ -676,23 +675,19 @@ fn classify_row(
     entries: Option<&Vec<&Entry>>,
 ) -> RowReport {
     let written = folia.written.contains(&row.output);
-    let verdicts: Vec<Verdict> = checks
-        .0
-        .get(&row.output)
-        .map(|checks| {
-            checks
-                .iter()
-                .map(|(check, passed)| Verdict {
-                    check,
-                    passed: *passed,
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    let verdicts: Vec<Verdict> = checks.0.get(&row.output).map_or_default(|checks| {
+        checks
+            .iter()
+            .map(|(check, passed)| Verdict {
+                check,
+                passed: *passed,
+            })
+            .collect()
+    });
     let mut problems = Vec::new();
     let mut approval = None;
     let mut entry_id = None;
-    let class = match entries.map(Vec::as_slice).unwrap_or_default() {
+    let class = match entries.map_or_default(Vec::as_slice) {
         [] if written => {
             let failed: Vec<&str> = verdicts
                 .iter()

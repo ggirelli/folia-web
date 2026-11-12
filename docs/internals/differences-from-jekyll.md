@@ -1,29 +1,37 @@
-# Known limitations and compatibility decisions
+# Differences from Jekyll and known limitations
 
-What Folia does differently from Jekyll, and what it does not do yet. Read it before treating a
-difference as a bug, or a green run of the parity tools as proof that the output is Jekyll's.
+Folia is not a drop-in replacement for Jekyll. This page lists, in plain terms, where its output
+differs from Jekyll's, what it refuses to do, and what it does not do yet. Read it before treating
+a difference as a bug, and before moving a Jekyll site over ([how to](../guide/migrating.md)).
 
-**A clean build is not exact parity.** Zero failed assertions, zero unclassified rows and a
-successful build say that Folia wrote every output and that nothing failed unexplained. They do
-not say the output equals Jekyll's. Every difference below is documented and most were approved,
-and a documented difference is still a difference: the real-site coverage report counts them
-apart from the identical rows (see [coverage classes](migrating/parity-reference.md#coverage-classes)).
+**A clean build is not the same as identical output.** The comparison tools (see the
+[parity tools reference](parity-reference.md)) can report zero failed checks and zero
+unexplained differences, which says that Folia wrote every output and that nothing failed
+unexplained. It does not say the output equals Jekyll's. Every difference below is documented and
+most were accepted by the maintainer on purpose, and a documented difference is still a
+difference: the comparison report counts them apart from the identical outputs (see
+[coverage classes](parity-reference.md#coverage-classes)).
 
-This page describes behaviour only. The reference site's content, its evidence and the owner's
-decision records are private and kept outside this repository.
+This page describes behaviour only. A site's content, its evidence and its owner's decision
+records are private and kept outside this repository.
 
-## Differences from Jekyll
+## What Folia refuses
+
+- **Unknown front matter.** Jekyll ignores a key it does not use; Folia stops and names the key,
+  except one documented exception (see [Writing content](../guide/content.md)).
+- **Liquid.** Folia does not run it, in content or in templates (which are MiniJinja). An HTML page
+  with Liquid in it is refused as "not built yet".
+- **`_drafts`.** See [Drafts](#drafts) below.
+
+## Differences in what Folia writes
 
 ### Garden notes: whitespace in two meta values
 
-Six garden notes (the four `dg/book-club/…-books_list` pages, `dg/book-club/book-quotes` and
-`dg/coding/python`) are covered by the ledger's decision D-004, which the project owner extended to
-them on 2026-11-08. It excuses two attributes only, `meta[name=description]@content` and
-`meta[property=og:title]@content`, and only whitespace in them: Jekyll's value is Folia's wrapped in
-two newlines on each side, because its head template's `{% capture %}` blocks keep the newlines
-around their tags. Nothing else on those pages differs, and the approval accepts no other
-difference, on these pages or any other. They are *accepted differences*, not identical output: a
-clean build is still not exact parity.
+Some garden notes can differ from Jekyll's output in two attributes only,
+`meta[name=description]@content` and `meta[property=og:title]@content`, and only in whitespace:
+Jekyll's value can be Folia's wrapped in newlines, because its head template's `{% capture %}`
+blocks keep the newlines around their tags. Nothing else on those pages differs. A site accepts
+this difference in its ledger, and the acceptance covers no other difference.
 
 ### Category and tag listings
 
@@ -53,6 +61,11 @@ where Jekyll listed collections, then pages by file name, then generated pages. 
 `<lastmod>` is the same as Jekyll's; a static file's is its last commit, where Jekyll used the
 file's modification time, which changes with every checkout.
 
+### robots.txt
+
+Folia writes a default `robots.txt` when the site has none; Jekyll wrote none, so a site that
+shipped its own keeps it, and one that had none gains the default.
+
 ### Search
 
 - Micro entries are indexed; Jekyll's index omitted them.
@@ -71,8 +84,8 @@ file's modification time, which changes with every checkout.
 ### Folia-only outputs
 
 Folia writes a tag feed for a tag whose name has a space, where `jekyll-feed` wrote none (it
-names tag feeds for letters, digits and `_` only). It has no Jekyll baseline, so nothing compares
-it; the coverage report lists it as Folia-only.
+names tag feeds for letters, digits and `_` only). It has no Jekyll counterpart, so nothing
+compares it; the comparison report lists it as Folia-only.
 
 ### Documents without a title
 
@@ -90,25 +103,22 @@ false.
 Folia does not read a `_drafts` directory and has no `--drafts` flag; Jekyll has both. A draft is a
 document with `published: false`, built only with `--unpublished`, and scheduled content is built
 only with `--future`. Such a build is a preview (see
-[previewing drafts and scheduled posts](guide/building.md#previewing-drafts-and-scheduled-posts)).
+[Drafts and scheduling](../guide/drafts.md#preview-builds)).
 
 Jekyll dates a draft by its file's modification time. A checkout resets modification times, and
 editing a draft changes its date and URL, so a draft's output is not reproducible. Folia dates
 every post by its file name. Instead of a `_drafts` directory, put the draft in the posts
 directory with a dated file name and `published: false`
-([migrating](migrating/index.md#sites-with-a-_drafts-directory)).
+([migrating](../guide/migrating.md#sites-with-a-_drafts-directory)).
 
-## Source-content issues Folia reproduces
+## Problems in the source that Folia reproduces
 
 - **Bare-domain references.** Reference-style link definitions written without a scheme
   (`[Name]: github.com`) are relative URLs, and Jekyll rendered them as such. Folia does the same,
-  so the link check reports them as internal links that resolve to nothing. They are a defect in the
-  site's Markdown, to be fixed there; Folia does not guess a scheme. Three exist in the reference
-  site.
+  so the link check reports them as internal links that resolve to nothing. They are a defect in
+  the site's Markdown, to be fixed there; Folia does not guess a scheme.
 - **Broken wiki-links** are shown as broken and warned about, once each. A site lists the warnings
   it expects.
-- **Unknown front matter** is refused, except the one documented exception (see
-  [Writing content](guide/content.md)); Jekyll ignored it silently.
 
 ## `folia serve`
 
@@ -121,12 +131,21 @@ directory with a dated file name and `published: false`
 - `folia serve` takes `--future` and `--unpublished` like `folia build`. It may switch
   its destination between a normal and a preview build, which `folia build` refuses to do.
 
-## Not covered by parity checks
+See [Preview while you write](../guide/preview.md).
+
+## Not covered by the comparison tools
 
 - Stylesheets need Dart Sass exactly 1.100.0.
 - Syntax highlighting uses syntect, not Rouge. Token classes agree with Jekyll's on about 98% of
   blocks; the rest differ in class names or span splits.
 - Only Markdown and HTML pages are built from `pages/`; other page types are skipped, each named
   with the reason.
-- The parity tooling compares a build with one recorded Jekyll baseline. A site that changed since
-  the baseline needs a new baseline first.
+- The comparison tools check a build against one recorded Jekyll baseline. A site that changed
+  since the baseline needs a new baseline first.
+
+## Not supported
+
+Folia has no plugin system, hooks, shortcodes, data files or user-defined collections, and the
+URL prefixes (`/blog/`, `/dg/`, `/micro/`, `/likes/`, `/bookmarks/`, `/rsvps/`) are fixed. The
+three collections in `[roots]` are all required. Footnotes, math and definition lists are not
+supported in Markdown.

@@ -537,7 +537,7 @@ impl Side {
     ///
     /// Fails when a file cannot be read.
     pub fn of(label: &str, root: &Path) -> Result<Self, String> {
-        let parent = root.parent().map(Path::to_owned).unwrap_or_default();
+        let parent = root.parent().map_or_default(Path::to_owned);
         let is_site = root.file_name().is_some_and(|name| name == "site");
         let record = ["build.json", "BASELINE.json"]
             .iter()
@@ -570,8 +570,7 @@ fn hash_file(file: &Path) -> Result<crate::builds::Hashed, String> {
     Ok(crate::builds::Hashed {
         path: file
             .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_default(),
+            .map_or_default(|name| name.to_string_lossy().into_owned()),
         sha256: hex(&Sha256::digest(&bytes)),
     })
 }
@@ -928,8 +927,7 @@ pub fn run(expected: &Path, actual: &Path, report_dir: Option<&Path>) -> Result<
             vec![FileReport {
                 path: actual
                     .file_name()
-                    .map(|name| name.to_string_lossy().into_owned())
-                    .unwrap_or_default(),
+                    .map_or_default(|name| name.to_string_lossy().into_owned()),
                 status: Status::Compared,
                 expected_sha256: Some(hex(&Sha256::digest(a.as_bytes()))),
                 actual_sha256: Some(hex(&Sha256::digest(b.as_bytes()))),

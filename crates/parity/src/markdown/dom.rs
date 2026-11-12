@@ -518,8 +518,7 @@ fn find_pre(handle: &Handle, lang: Option<&str>, out: &mut Vec<CodeBlock>) {
             .borrow()
             .iter()
             .find(|a| &*a.name.local == "class")
-            .map(|a| a.value.to_string())
-            .unwrap_or_default();
+            .map_or_default(|a| a.value.to_string());
         if let Some(found) = classes
             .split_whitespace()
             .find_map(|class| class.strip_prefix("language-"))

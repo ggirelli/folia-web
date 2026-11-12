@@ -1,4 +1,4 @@
-//! The configuration reference (`docs/configuration.md`) names only keys Folia reads: its full
+//! The configuration reference (`docs/reference/configuration.md`) names only keys Folia reads: its full
 //! example is parsed by Folia's own configuration reader, which refuses unknown keys, and the
 //! reference mentions every key of a configuration that sets all of them.
 //!
@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use folia::config::Config;
 
 fn reference() -> String {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/configuration.md");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/reference/configuration.md");
     std::fs::read_to_string(path).unwrap()
 }
 

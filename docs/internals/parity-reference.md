@@ -1,6 +1,6 @@
 # Parity tools reference
 
-The tools behind [Migrating from Jekyll](index.md): they build your Jekyll site as a recorded
+The tools behind [Migrating from Jekyll](../guide/migrating.md): they build your Jekyll site as a recorded
 **baseline**, build the same commit with Folia, and compare what each wrote. They live in the
 repository (`crates/parity`, `scripts/`, the `just` recipes) and need a clone; they are not part
 of the `folia` binary. They are for the **one-off exercise of switching a site**, and nothing
@@ -8,7 +8,7 @@ about them is needed to build a Folia site.
 
 ## What you need
 
-- A clone of this repository, and the tools in [manual testing](../development/manual-testing.md#prerequisites)
+- A clone of this repository, and the tools in [manual testing](../contributing/manual-testing.md#prerequisites)
   (Rust, `just`, Ruby with Bundler, Python 3, git; Dart Sass if the site has stylesheets).
 - Your Jekyll site as a git checkout, with its gems installed (`bundle install`), and **no
   uncommitted changes** other than the paths listed in `parity/site-exclusions.txt` (`_folia/`,
@@ -27,7 +27,7 @@ about them is needed to build a Folia site.
 
 Keep these, the baselines and every report in a directory of their own, outside both repositories.
 They hold your site's data: never commit them. [Manual
-testing](../development/manual-testing.md#real-site-parity-optional) suggests a layout.
+testing](../contributing/manual-testing.md#real-site-parity-optional) suggests a layout.
 
 ## A baseline
 

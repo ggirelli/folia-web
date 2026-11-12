@@ -35,7 +35,7 @@ jobs:
       - run: just doc
 
   # The same tests on macOS, to learn whether Folia builds and passes there (it is developed and
-  # deployed on Linux; Windows is not supported, see docs/development.md). Not part of branch
+  # deployed on Linux; Windows is not supported, see docs/contributing/development-setup.md). Not part of branch
   # protection: a failure here is a finding, not a blocker, until it has been green for a while.
   rust-macos:
     if: ${{ !github.event.pull_request.draft }}

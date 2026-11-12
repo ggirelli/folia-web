@@ -18,11 +18,11 @@ Paths are relative to the site root. Names are kebab-case (`time-zone`, `display
 | `include` | list of paths | `[]` | Paths published although their name would hide them (`.htaccess`) |
 | `exclude` | list of globs | `[]` | Paths that are not part of the site. `*` stays within one path segment; a pattern matching a directory excludes all of it |
 | `templates-dir` | string | `_folia/templates` | The directory of the MiniJinja templates |
-| `slice` | table | none | Build only the documents it names (see below). Without it the whole site is built |
+| `slice` | table | none | Parity work only: see [`[slice]`](#slice-parity-work-only), at the end of this page |
 
 ## `[roots]` (required)
 
-The directory of each mode's documents. Every other file with front matter is a page.
+The directory of each collection's documents. Every other file with front matter is a page.
 
 | Key | Type | What |
 |-|-|-|
@@ -123,35 +123,14 @@ refused.
 | `style` | `expanded` or `compressed` | `expanded` | The output style |
 
 Stylesheets are compiled only by a build of the whole site, with **Dart Sass exactly 1.100.0**
-(`sass` on `PATH`, or `FOLIA_SASS`); a site without Sass stylesheets does not need it.
+(`sass` on `PATH`, or `FOLIA_SASS`); a site without Sass stylesheets does not need it. See
+[Stylesheets](../getting-started/build-and-deploy.md#stylesheets).
 
-## `[slice]`
+## Flags and environment
 
-Only for building part of a site (parity work): the documents to build, each of which must build.
-
-| Key | Type | What |
-|-|-|-|
-| `pages`, `posts`, `notes`, `micro` | list of source paths | The documents of each mode to build |
-
-## Command-line flags
-
-These are flags, not configuration keys: a `future`, `unpublished` or `at` key in `folia.toml` is an
-unknown key, and an error. `--future` and `--unpublished` default to off, and `--at` to now.
-
-| Flag | Commands | What |
-|-|-|-|
-| `--future` | `build`, `serve` | Also build posts, garden notes and micro entries dated after the build |
-| `--unpublished` | `build`, `serve` | Also build documents whose front matter says `published: false` |
-| `--at <TIME>` | `build` | Build as of an RFC 3339 timestamp, such as `2026-01-01T00:00:00Z`, instead of now |
-
-A build with `--future` or `--unpublished` is a preview, not for publishing. See
-[previewing drafts and scheduled posts](guide/building.md#previewing-drafts-and-scheduled-posts).
-
-## Environment
-
-| Variable | What |
-|-|-|
-| `FOLIA_SASS` | The Dart Sass program, when it is not `sass` on `PATH` |
+The command-line flags (`--future`, `--unpublished`, `--at`) and `FOLIA_SASS` are not configuration
+keys: a `future`, `unpublished` or `at` key in `folia.toml` is an unknown key, and an error. They
+are in the [command-line reference](cli.md).
 
 ## Full example
 
@@ -232,9 +211,20 @@ content-block = "body"
 dir = "_sass"
 style = "compressed"
 
+# Parity work only: build just these documents
 [slice]
 pages = ["about.md"]
 posts = ["_posts/2026-01-10-hello-folia.md"]
 notes = ["_garden/topic/index.md"]
 micro = ["_micro/notes/2026-01-12-a-note.md"]
 ```
+
+## `[slice]` (parity work only)
+
+You do not need this to build a site. `[slice]` builds only the documents it names, each of which
+must build, and exists for comparing part of a site with Jekyll's build (see the
+[parity tools reference](../internals/parity-reference.md)). Without it, the whole site is built.
+
+| Key | Type | What |
+|-|-|-|
+| `pages`, `posts`, `notes`, `micro` | list of source paths | The documents of each collection to build |

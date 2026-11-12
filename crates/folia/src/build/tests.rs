@@ -932,3 +932,49 @@ fn a_broken_template_keeps_the_previous_output_untouched() {
     assert_eq!(fixture.read("about.html"), before);
     assert!(fixture.dest().join("now.html").exists());
 }
+
+#[test]
+fn a_site_without_a_robots_txt_gets_one_that_allows_everything_and_names_the_sitemap() {
+    let fixture = Fixture::with(
+        "robots",
+        &[
+            ("base.html", BASE),
+            ("page.html", PAGE),
+            ("post.html", POST_STUB),
+        ],
+        &[],
+    );
+    let built = fixture.build_with(&whole_site()).unwrap();
+    assert!(
+        built
+            .artifacts
+            .contains(&Route::file("/robots.txt").unwrap())
+    );
+    assert_eq!(
+        fixture.read("robots.txt"),
+        "User-agent: *\nAllow: /\nSitemap: https://ggirelli.info/sitemap.xml\n"
+    );
+}
+
+#[test]
+fn a_robots_txt_of_the_site_is_copied_and_not_replaced() {
+    let fixture = Fixture::with(
+        "own-robots",
+        &[
+            ("base.html", BASE),
+            ("page.html", PAGE),
+            ("post.html", POST_STUB),
+        ],
+        &[("robots.txt", "User-agent: *\nDisallow: /private/\n")],
+    );
+    let built = fixture.build_with(&whole_site()).unwrap();
+    assert_eq!(
+        fixture.read("robots.txt"),
+        "User-agent: *\nDisallow: /private/\n"
+    );
+    assert!(
+        !built
+            .artifacts
+            .contains(&Route::file("/robots.txt").unwrap())
+    );
+}

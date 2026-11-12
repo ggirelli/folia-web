@@ -181,14 +181,18 @@ fn build_site(
                      `folia build` will not replace it with a normal build"
                 );
             }
+            let not_built = match built.not_built {
+                0 => String::new(),
+                n => format!("; {n} planned outputs are not built yet"),
+            };
             println!(
-                "Built {} pages, {} redirect stubs, {} generated files and {} static files into {}; {} planned outputs are not built yet.{}",
+                "Built {} pages, {} redirect stubs, {} generated files and {} static files into {}{}.{}",
                 built.pages.len(),
                 built.stubs.len(),
                 built.artifacts.len(),
                 built.statics,
                 dest.display(),
-                built.not_built,
+                not_built,
                 notice.unwrap_or_default()
             );
             ExitCode::SUCCESS
